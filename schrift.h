@@ -35,13 +35,10 @@ void sft_freefont(SFT_Font *font);
 
 SFT *sft_create(void);
 void sft_destroy(SFT *sft);
-void sft_clear(SFT *sft);
-void sft_setstyle(SFT *sft, struct SFT_Style style);
-double sft_linegap(SFT *sft);
-void *sft_image(SFT *sft, int bounds[4]);
-
-void sft_boundstring(SFT *sft, double x, double y, const char *str, int bounds[4]);
-void sft_drawstring(SFT *sft, double x, double y, const char *str);
+int sft_setstyle(SFT *sft, struct SFT_Style style);
+int sft_linegap(SFT *sft, double *gap);
+void sft_move(SFT *sft, double x, double y);
+void *sft_char(SFT *sft, const char *ch, int bounds[4]);
 
 #endif
 

@@ -65,10 +65,16 @@ main(int argc, char *argv[])
 
 	if ((font = sft_loadfile(filename)) == NULL)
 		die("Can't load font file.");
+	style.font = font;
 	if ((sft = sft_create()) == NULL)
 		die("Can't create schrift context.");
-	style.font = font;
-	sft_setstyle(sft, style);
+	if (sft_setstyle(sft, style) < 0)
+		die("Can't set text style.");
+
+	double linegap;
+	if (sft_linegap(sft, &linegap) < 0)
+		die("Can't look up line gap.");
+	printf("line gap: %f\n", linegap);
 
 	sft_destroy(sft);
 	sft_freefont(font);

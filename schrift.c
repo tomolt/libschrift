@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 
 #include "schrift.h"
 
@@ -23,6 +24,8 @@ struct SFT
 {
 	SFT_Font *font;
 	double xScale, yScale;
+	double x, y;
+	long glyph;
 };
 
 static inline uint8_t
@@ -62,14 +65,16 @@ compare_tables(const void *a, const void *b)
 	return memcmp(a, b, 4);
 }
 
-static size_t
+static ssize_t
 gettable(SFT_Font *font, char tag[4])
 {
+	/* TODO bound check here */
 	uint16_t numTables = getu16(font, 4);
+	/* TODO bound check here */
 	void *match = bsearch(tag, font->memory + 12, numTables, 16, compare_tables);
-	if (match == NULL) return 0;
-	size_t matchOffset = font->memory - (uint8_t *) match;
-	return getu32(font, matchOffset + 4);
+	if (match == NULL) return -1;
+	ssize_t matchOffset = (uint8_t *) match - font->memory;
+	return getu32(font, matchOffset + 8);
 }
 
 static int
@@ -137,9 +142,19 @@ sft_destroy(SFT *sft)
 	free(sft);
 }
 
-void
+static int16_t
+units_per_em(SFT *sft)
+{
+	ssize_t head = gettable(sft->font, "head");
+	if (head < 0) return -1;
+	/* TODO bound check here */
+	return getu16(sft->font, head + 18);
+}
+
+int
 sft_setstyle(SFT *sft, struct SFT_Style style)
 {
+	sft->font = style.font;
 	double sizeInPixels = 0.0;
 	switch (style.units) {
 	case 'd':
@@ -150,11 +165,45 @@ sft_setstyle(SFT *sft, struct SFT_Style style)
 		sizeInPixels = style.size;
 		break;
 	}
-	const long unitsPerEm = 1000; /* FIXME */
+	int16_t unitsPerEm;
+	if ((unitsPerEm = units_per_em(sft)) < 0) return -1;
 	double unitsToPixels = sizeInPixels / unitsPerEm;
 	double ratio = style.hdpi / style.vdpi;
-	sft->font = style.font;
 	sft->xScale = unitsToPixels * ratio;
 	sft->yScale = unitsToPixels;
+	return 0;
+}
+
+int
+sft_linegap(SFT *sft, double *gap)
+{
+	ssize_t hhea = gettable(sft->font, "hhea");
+	if (hhea < 0) return -1;
+	/* TODO bound check here */
+	*gap = geti16(sft->font, hhea + 8) * sft->yScale;
+	return 0;
+}
+
+void
+sft_move(SFT *sft, double x, double y)
+{
+	sft->x = x;
+	sft->y = y;
+	sft->glyph = 0;
+}
+
+void *
+sft_char(SFT *sft, const char *ch, int bounds[4])
+{
+	(void) sft;
+	(void) ch;
+	(void) bounds;
+	/* Translate codepoint to glyph id. */
+	/* Look up offset into glyf table. */
+	/* Compute glyph bounds. */
+	/* Draw glyph outlines into buffer. */
+	/* Render grayscale image from buffer. */
+	/* Advance into position for the next char. */
+	return NULL;
 }
 

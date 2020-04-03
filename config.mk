@@ -1,0 +1,15 @@
+# Customize below to fit your system
+
+# compiler and linker
+CC = cc
+LD = cc
+AR = ar
+
+# flags
+CPPFLAGS = -I./
+CFLAGS = -g -std=c99 -pedantic -Wall -Wextra
+LDFLAGS = -g
+
+# installation paths
+PREFIX = /usr/local
+

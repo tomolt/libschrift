@@ -7,7 +7,9 @@
 
 #include "arg.h"
 
-extern int sft_transcribe(SFT *sft, int charCode);
+#include <sys/types.h>
+extern long sft_transcribe(SFT_Font *font, int charCode);
+extern ssize_t sft_outline_offset(SFT_Font *font, long glyph);
 
 char *argv0;
 
@@ -75,6 +77,8 @@ main(int argc, char *argv[])
 	if (sft_setstyle(sft, style) < 0)
 		die("Can't set text style.");
 
+	printf("font size: %lu\n", *(size_t *)((char *)font + sizeof(void *)));
+
 	double linegap;
 	if (sft_linegap(sft, &linegap) < 0)
 		die("Can't look up line gap.");
@@ -83,9 +87,12 @@ main(int argc, char *argv[])
 	const char *str = "Hello, World!";
 	for (const char *c = str; *c; ++c) {
 		long glyph;
-		if ((glyph = sft_transcribe(sft, *c)) < 0)
+		ssize_t loca;
+		if ((glyph = sft_transcribe(font, *c)) < 0)
 			die("Can't transcribe character.");
-		printf("'%c' -> %lu\n", *c, glyph);
+		if ((loca = sft_outline_offset(font, glyph)) < 0)
+			die("Can't determine offset of glyph outline.");
+		printf("'%c' -> %lu -> %lu\n", *c, glyph, loca);
 	}
 
 	sft_destroy(sft);

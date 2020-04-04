@@ -166,18 +166,17 @@ sft_destroy(SFT *sft)
 }
 
 static int16_t
-units_per_em(SFT *sft)
+units_per_em(SFT_Font *font)
 {
-	ssize_t head = gettable(sft->font, "head");
+	ssize_t head = gettable(font, "head");
 	if (head < 0) return -1;
-	if (sft->font->size < (size_t) head + 54) return -1;
-	return getu16(sft->font, head + 18);
+	if (font->size < (size_t) head + 54) return -1;
+	return getu16(font, head + 18);
 }
 
 int
 sft_setstyle(SFT *sft, struct SFT_Style style)
 {
-	sft->font = style.font;
 	double sizeInPixels = 0.0;
 	switch (style.units) {
 	case 'd':
@@ -189,9 +188,10 @@ sft_setstyle(SFT *sft, struct SFT_Style style)
 		break;
 	}
 	int16_t unitsPerEm;
-	if ((unitsPerEm = units_per_em(sft)) < 0) return -1;
+	if ((unitsPerEm = units_per_em(style.font)) < 0) return -1;
 	double unitsToPixels = sizeInPixels / unitsPerEm;
 	double ratio = style.hdpi / style.vdpi;
+	sft->font = style.font;
 	sft->xScale = unitsToPixels * ratio;
 	sft->yScale = unitsToPixels;
 	return 0;
@@ -223,29 +223,29 @@ compare_segments(const void *a, const void *b)
 }
 
 static long
-cmap_fmt4(SFT *sft, size_t table, int charCode)
+cmap_fmt4(SFT_Font *font, size_t table, int charCode)
 {
 	/* TODO Guard against too big charCode. */
 
-	if (sft->font->size < table + 8) return -1;
-	uint16_t segCountX2 = getu16(sft->font, table);
+	if (font->size < table + 8) return -1;
+	uint16_t segCountX2 = getu16(font, table);
 	if ((segCountX2 & 1) || !segCountX2) return -1;
 
 	size_t endCodes = table + 8;
 	size_t startCodes = endCodes + segCountX2 + 2;
 	size_t idDeltas = startCodes + segCountX2;
 	size_t idRangeOffsets = idDeltas + segCountX2;
-	if (sft->font->size < idRangeOffsets + segCountX2) return -1;
+	if (font->size < idRangeOffsets + segCountX2) return -1;
 
 	uint8_t key[2] = { charCode >> 8, charCode };
 	uintptr_t segIdxX2 = (uintptr_t) csearch(key,
-		sft->font->memory + endCodes,
+		font->memory + endCodes,
 		segCountX2 / 2, 2, compare_segments);
-	segIdxX2 -= (uintptr_t) sft->font->memory + endCodes;
+	segIdxX2 -= (uintptr_t) font->memory + endCodes;
 
-	uint16_t startCode = getu16(sft->font, startCodes + segIdxX2);
-	int16_t  idDelta = geti16(sft->font, idDeltas + segIdxX2);
-	uint16_t idRangeOffset = getu16(sft->font, idRangeOffsets + segIdxX2);
+	uint16_t startCode = getu16(font, startCodes + segIdxX2);
+	int16_t  idDelta = geti16(font, idDeltas + segIdxX2);
+	uint16_t idRangeOffset = getu16(font, idRangeOffsets + segIdxX2);
 
 	if (startCode > charCode) {
 		return 0;
@@ -255,37 +255,38 @@ cmap_fmt4(SFT *sft, size_t table, int charCode)
 	}
 
 	size_t idOffset = idRangeOffsets + segIdxX2 + idRangeOffset + 2 * (charCode - startCode);
-	if (sft->font->size < idOffset + 2) return -1;
+	if (font->size < idOffset + 2) return -1;
 
-	uint16_t id = getu16(sft->font, idOffset);
+	uint16_t id = getu16(font, idOffset);
 
 	return id ? (id + idDelta) & 0xFFFF : 0L;
 }
 
-long sft_transcribe(SFT *sft, int charCode)
+long
+sft_transcribe(SFT_Font *font, int charCode)
 {
-	ssize_t cmap = gettable(sft->font, "cmap");
+	ssize_t cmap = gettable(font, "cmap");
 	if (cmap < 0) return -1;
 
-	if (sft->font->size < (size_t) cmap + 4) return -1;
-	uint16_t numEntries = getu16(sft->font, cmap + 2);
+	if (font->size < (size_t) cmap + 4) return -1;
+	uint16_t numEntries = getu16(font, cmap + 2);
 	
-	if (sft->font->size < (size_t) cmap + 4 + numEntries * 8) return -1;
+	if (font->size < (size_t) cmap + 4 + numEntries * 8) return -1;
 	for (unsigned int i = 0; i < numEntries; ++i) {
 		size_t entry = cmap + 4 + i * 8;
 		
-		uint16_t platformId = getu16(sft->font, entry);
-		uint16_t encodingId = getu16(sft->font, entry + 2);
+		uint16_t platformId = getu16(font, entry);
+		uint16_t encodingId = getu16(font, entry + 2);
 		int type = platformId * 0100 + encodingId;
 		
 		if (type == 0003 || type == 0301) {
 			
-			size_t table = cmap + getu32(sft->font, entry + 4);
-			if (sft->font->size < table + 6) return 1;
+			size_t table = cmap + getu32(font, entry + 4);
+			if (font->size < table + 6) return 1;
 
-			switch (getu16(sft->font, table)) {
+			switch (getu16(font, table)) {
 			case 4:
-				return cmap_fmt4(sft, table + 6, charCode);
+				return cmap_fmt4(font, table + 6, charCode);
 			default:
 				return -1;
 			}
@@ -293,6 +294,30 @@ long sft_transcribe(SFT *sft, int charCode)
 	}
 
 	return -1;
+}
+
+static int16_t
+loca_format(SFT_Font *font)
+{
+	ssize_t head = gettable(font, "head");
+	if (head < 0) return -1;
+	if (font->size < (size_t) head + 54) return -1;
+	return geti16(font, head + 50);
+}
+
+ssize_t
+sft_outline_offset(SFT_Font *font, long glyph)
+{
+	ssize_t loca = gettable(font, "loca");
+	if (loca < 0) return -1;
+	switch (loca_format(font)) {
+	case 0:
+		return (ssize_t) 2 * getu16(font, loca + 2 * glyph);
+	case 1:
+		return getu32(font, loca + 4 * glyph);
+	default:
+		return -1;
+	}
 }
 
 void *

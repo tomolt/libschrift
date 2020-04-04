@@ -68,9 +68,9 @@ compare_tables(const void *a, const void *b)
 static ssize_t
 gettable(SFT_Font *font, char tag[4])
 {
-	/* TODO bound check here */
+	if (font->size < 12) return -1;
 	uint16_t numTables = getu16(font, 4);
-	/* TODO bound check here */
+	if (font->size < 12 + (size_t) numTables * 16) return -1;
 	void *match = bsearch(tag, font->memory + 12, numTables, 16, compare_tables);
 	if (match == NULL) return -1;
 	ssize_t matchOffset = (uint8_t *) match - font->memory;
@@ -147,7 +147,7 @@ units_per_em(SFT *sft)
 {
 	ssize_t head = gettable(sft->font, "head");
 	if (head < 0) return -1;
-	/* TODO bound check here */
+	if (sft->font->size < (size_t) head + 54) return -1;
 	return getu16(sft->font, head + 18);
 }
 
@@ -179,7 +179,7 @@ sft_linegap(SFT *sft, double *gap)
 {
 	ssize_t hhea = gettable(sft->font, "hhea");
 	if (hhea < 0) return -1;
-	/* TODO bound check here */
+	if (sft->font->size < (size_t) hhea + 36) return -1;
 	*gap = geti16(sft->font, hhea + 8) * sft->yScale;
 	return 0;
 }

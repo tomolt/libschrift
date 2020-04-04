@@ -38,7 +38,7 @@ void sft_destroy(SFT *sft);
 int sft_setstyle(SFT *sft, struct SFT_Style style);
 int sft_linegap(SFT *sft, double *gap);
 void sft_move(SFT *sft, double x, double y);
-void *sft_char(SFT *sft, const char *ch, int bounds[4]);
+void *sft_char(SFT *sft, const char *ch, int len, int bounds[4]);
 
 #endif
 

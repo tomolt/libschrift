@@ -5,6 +5,8 @@
 
 #include "arg.h"
 
+extern int sft_transcribe(SFT *sft, int charCode);
+
 char *argv0;
 
 static void
@@ -75,6 +77,14 @@ main(int argc, char *argv[])
 	if (sft_linegap(sft, &linegap) < 0)
 		die("Can't look up line gap.");
 	printf("line gap: %f\n", linegap);
+
+	const char *str = "Hello, World!";
+	for (const char *c = str; *c; ++c) {
+		long glyph;
+		if ((glyph = sft_transcribe(sft, *c)) < 0)
+			die("Can't transcribe character.");
+		printf("'%c' -> %lu\n", *c, glyph);
+	}
 
 	sft_destroy(sft);
 	sft_freefont(font);

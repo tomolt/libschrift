@@ -296,6 +296,41 @@ sft_transcribe(SFT_Font *font, int charCode)
 	return -1;
 }
 
+static int
+num_long_hmtx(SFT_Font *font)
+{
+	ssize_t hhea = gettable(font, "hhea");
+	if (hhea < 0) return -1;
+	if (font->size < (size_t) hhea + 36) return -1;
+	return getu16(font, hhea + 34);
+}
+
+int
+sft_hor_metrics(SFT *sft, long glyph, double *advanceWidth, double *leftSideBearing)
+{
+	int numLong = num_long_hmtx(sft->font);
+	if (numLong < 0) return -1;
+	ssize_t hmtx = gettable(sft->font, "hmtx");
+	if (hmtx < 0) return -1;
+	if (glyph < numLong) {
+		/* glyph is inside long metrics segment. */
+		size_t offset = hmtx + 4 * glyph;
+		if (sft->font->size < offset + 4) return -1;
+		*advanceWidth = getu16(sft->font, offset) * sft->xScale;
+		*leftSideBearing = geti16(sft->font, offset + 2) * sft->xScale;
+		return 0;
+	} else {
+		/* glyph is inside short metrics segment. */
+		size_t shmtx = hmtx + 4 * numLong;
+		size_t offset = shmtx + 2 + (glyph - numLong);
+		if (sft->font->size < offset + 2) return -1;
+		if (shmtx < 4) return -1;
+		*advanceWidth = getu16(sft->font, shmtx - 4) * sft->xScale;
+		*leftSideBearing = geti16(sft->font, offset) * sft->xScale;
+		return 0;
+	}
+}
+
 static int16_t
 loca_format(SFT_Font *font)
 {

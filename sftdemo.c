@@ -10,6 +10,7 @@
 #include <sys/types.h>
 extern long sft_transcribe(SFT_Font *font, int charCode);
 extern ssize_t sft_outline_offset(SFT_Font *font, long glyph);
+extern int sft_hor_metrics(SFT *sft, long glyph, double *advanceWidth, double *leftSideBearing);
 
 char *argv0;
 
@@ -88,11 +89,14 @@ main(int argc, char *argv[])
 	for (const char *c = str; *c; ++c) {
 		long glyph;
 		ssize_t loca;
+		double aw, lsb;
 		if ((glyph = sft_transcribe(font, *c)) < 0)
 			die("Can't transcribe character.");
 		if ((loca = sft_outline_offset(font, glyph)) < 0)
 			die("Can't determine offset of glyph outline.");
-		printf("'%c' -> %lu -> %lu\n", *c, glyph, loca);
+		if (sft_hor_metrics(sft, glyph, &aw, &lsb) < 0)
+			die("Can't read horizontal metrics of glyph.");
+		printf("'%c' -> %lu -> %lu | %f, %f\n", *c, glyph, loca, aw, lsb);
 	}
 
 	sft_destroy(sft);

@@ -4,6 +4,7 @@
 CC = cc
 LD = cc
 AR = ar
+RANLIB = ranlib
 
 # flags
 CPPFLAGS = -I./

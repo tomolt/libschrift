@@ -9,9 +9,12 @@ include config.mk
 all: libschrift.a sftdemo
 
 libschrift.a: schrift.o
-	$(AR) rcs $@ $^
+	$(AR) rc $@ $^$>
+	$(RANLIB) $@
+
 sftdemo: sftdemo.o libschrift.a
 	$(LD) $(LDFLAGS) $< -o $@ -L. -lschrift
+
 sftdemo.o schrift.o: schrift.h
 sftdemo.o: arg.h
 

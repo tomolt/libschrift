@@ -1,7 +1,6 @@
 libschrift
 ==========
-*libschrift* is a novel TTF font rendering library with focus
-on simplicity, correctness, and security.
+*libschrift* is a lightweight and secure TTF font rendering library.
 
 Goals
 -----
@@ -42,11 +41,8 @@ Progress
 Although most logic is already in-place and working, *libschrift*
 is not quite usable yet. Still missing are:
 
-- Better documentation. At least some more complete man pages.
+- Import / rewrite most code from libschrift1.
+- Better documentation. At least some man pages.
 - Compound glyph support.
 - Correct handling of grapheme clusters?
-- Removal of TTF "parsing" stage.
-- No more bounds checking in big-endian 'get' functions - use
-  'pop' or ranges instead.
-- More rigorous bounds-checking everywhere.
 

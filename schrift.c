@@ -45,12 +45,13 @@ csearch(const void *key, const void *base,
 	size_t nmemb, size_t size,
 	int (*compar)(const void *, const void *))
 {
-	if (nmemb == 0) return NULL;
-	const uint8_t *bytes = base;
-	size_t low = 0, high = nmemb - 1;
+	const uint8_t *bytes = base, *sample;
+	size_t low = 0, high = nmemb - 1, mid;
+	if (nmemb == 0)
+		return NULL;
 	while (low != high) {
-		size_t mid = low + (high - low) / 2;
-		const void *sample = bytes + mid * size;
+		mid = low + (high - low) / 2;
+		sample = bytes + mid * size;
 		if (compar(key, sample) > 0) {
 			low = mid + 1;
 		} else {
@@ -103,16 +104,19 @@ cmpu32(const void *a, const void *b)
 	return memcmp(a, b, 4);
 }
 
-static ssize_t
+static long
 gettable(SFT_Font *font, char tag[4])
 {
-	if (font->size < 12) return -1;
-	uint16_t numTables = getu16(font, 4);
-	if (font->size < 12 + (size_t) numTables * 16) return -1;
-	void *match = bsearch(tag, font->memory + 12, numTables, 16, cmpu32);
-	if (match == NULL) return -1;
-	ssize_t matchOffset = (uint8_t *) match - font->memory;
-	return getu32(font, matchOffset + 8);
+	void *match;
+	unsigned int numTables;
+	if (font->size < 12)
+		return -1;
+	numTables = getu16(font, 4);
+	if (font->size < 12 + (size_t) numTables * 16)
+		return -1;
+	if ((match = bsearch(tag, font->memory + 12, numTables, 16, cmpu32)) == NULL)
+		return -1;
+	return getu32(font, (uint8_t *) match - font->memory + 8);
 }
 
 static int
@@ -141,7 +145,7 @@ SFT_Font *
 sft_loadfile(char const *filename)
 {
 	SFT_Font *font;
-	uint32_t scalerType;
+	unsigned long scalerType;
 	if ((font = calloc(1, sizeof(SFT_Font))) == NULL) {
 		return NULL;
 	}
@@ -252,15 +256,18 @@ cmap_fmt4(SFT_Font *font, size_t table, int charCode)
 	uint8_t key[2] = { charCode >> 8, charCode };
 	/* TODO Guard against too big charCode. */
 
-	if (font->size < table + 8) return -1;
+	if (font->size < table + 8)
+		return -1;
 	segCountX2 = getu16(font, table);
-	if ((segCountX2 & 1) || !segCountX2) return -1;
+	if ((segCountX2 & 1) || !segCountX2)
+		return -1;
 
 	endCodes = table + 8;
 	startCodes = endCodes + segCountX2 + 2;
 	idDeltas = startCodes + segCountX2;
 	idRangeOffsets = idDeltas + segCountX2;
-	if (font->size < idRangeOffsets + segCountX2) return -1;
+	if (font->size < idRangeOffsets + segCountX2)
+		return -1;
 
 	segIdxX2 = (uintptr_t) csearch(key,
 		font->memory + endCodes,
@@ -274,7 +281,8 @@ cmap_fmt4(SFT_Font *font, size_t table, int charCode)
 		return (charCode + idDelta) & 0xFFFF;
 
 	idOffset = idRangeOffsets + segIdxX2 + idRangeOffset + 2 * (charCode - startCode);
-	if (font->size < idOffset + 2) return -1;
+	if (font->size < idOffset + 2)
+		return -1;
 	id = getu16(font, idOffset);
 	return id ? (id + idDelta) & 0xFFFF : 0L;
 }
@@ -288,13 +296,15 @@ glyph_id(SFT_Font *font, int charCode)
 	int type;
 	uint16_t numEntries, platformId, encodingId;
 
-	cmap = gettable(font, "cmap");
-	if (cmap < 0) return -1;
+	if ((cmap = gettable(font, "cmap")) < 0)
+		return -1;
 
-	if (font->size < (size_t) cmap + 4) return -1;
+	if (font->size < (size_t) cmap + 4)
+		return -1;
 	numEntries = getu16(font, cmap + 2);
 	
-	if (font->size < (size_t) cmap + 4 + numEntries * 8) return -1;
+	if (font->size < (size_t) cmap + 4 + numEntries * 8)
+		return -1;
 	for (i = 0; i < numEntries; ++i) {
 		entry = cmap + 4 + i * 8;
 		
@@ -305,7 +315,8 @@ glyph_id(SFT_Font *font, int charCode)
 		if (type == 0003 || type == 0301) {
 			
 			table = cmap + getu32(font, entry + 4);
-			if (font->size < table + 6) return 1;
+			if (font->size < table + 6)
+				return -1;
 
 			switch (getu16(font, table)) {
 			case 4:
@@ -380,8 +391,9 @@ loca_format(SFT_Font *font)
 static ssize_t
 outline_offset(SFT_Font *font, long glyph)
 {
-	ssize_t loca = gettable(font, "loca");
-	if (loca < 0) return -1;
+	ssize_t loca;
+	if ((loca = gettable(font, "loca")) < 0)
+		return -1;
 	switch (loca_format(font)) {
 	case 0:
 		return getu16(font, loca + 2 * glyph) * 2L;

@@ -442,7 +442,6 @@ sft_char(SFT *sft, unsigned int charCode, int extents[4])
 			yAffine.move -= extents[1];
 			width = extents[2] - extents[0];
 			height = extents[3] - extents[1];
-			buffer = calloc(width * height, 4);
 			if ((buffer = calloc(width * height, 4)) == NULL)
 				return -1;
 			free(buffer);

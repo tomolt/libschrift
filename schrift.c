@@ -7,6 +7,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <math.h>
 
 #include "schrift.h"
 
@@ -15,6 +16,13 @@
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define ABS(x) ((x) >= 0 ? (x) : -(x))
+
+#define AFFINE(affine, value) ((value) * (affine).scale + (affine).move)
+
+struct point  { double x, y; };
+struct line   { struct point beg, end; };
+struct curve  { struct point beg, end, ctrl; };
+struct affine { double scale, move; };
 
 struct SFT_Font
 {
@@ -28,6 +36,7 @@ struct SFT
 	double xScale, yScale;
 	double x, y;
 	long glyph;
+	uint32_t flags;
 };
 
 /* Like bsearch(), but returns the next highest element if key could not be found. */
@@ -83,7 +92,13 @@ getu32(SFT_Font *font, size_t offset)
 }
 
 static int
-compare_tables(const void *a, const void *b)
+cmpu16(const void *a, const void *b)
+{
+	return memcmp(a, b, 2);
+}
+
+static int
+cmpu32(const void *a, const void *b)
 {
 	return memcmp(a, b, 4);
 }
@@ -94,7 +109,7 @@ gettable(SFT_Font *font, char tag[4])
 	if (font->size < 12) return -1;
 	uint16_t numTables = getu16(font, 4);
 	if (font->size < 12 + (size_t) numTables * 16) return -1;
-	void *match = bsearch(tag, font->memory + 12, numTables, 16, compare_tables);
+	void *match = bsearch(tag, font->memory + 12, numTables, 16, cmpu32);
 	if (match == NULL) return -1;
 	ssize_t matchOffset = (uint8_t *) match - font->memory;
 	return getu32(font, matchOffset + 8);
@@ -155,6 +170,7 @@ sft_create(void)
 {
 	SFT *sft = calloc(1, sizeof(SFT));
 	if (sft == NULL) return NULL;
+	sft->flags = ~(uint32_t) 0;
 	return sft;
 }
 
@@ -163,6 +179,29 @@ sft_destroy(SFT *sft)
 {
 	if (sft == NULL) return;
 	free(sft);
+}
+
+void
+sft_setflag(SFT *sft, int flag, int value)
+{
+	if (value) {
+		sft->flags |= (uint32_t) flag;
+	} else {
+		sft->flags &= ~(uint32_t) flag;
+	}
+}
+
+void
+sft_setfont(SFT *sft, SFT_Font *font)
+{
+	sft->font = font;
+}
+
+void
+sft_setscale(SFT *sft, double xScale, double yScale)
+{
+	sft->xScale = xScale;
+	sft->yScale = yScale;
 }
 
 static int16_t
@@ -175,36 +214,17 @@ units_per_em(SFT_Font *font)
 }
 
 int
-sft_setstyle(SFT *sft, struct SFT_Style style)
-{
-	double sizeInPixels = 0.0;
-	switch (style.units) {
-	case 'd':
-		sizeInPixels = style.size * style.vdpi / 72.0;
-		break;
-	case 'x':
-	default:
-		sizeInPixels = style.size;
-		break;
-	}
-	int16_t unitsPerEm;
-	if ((unitsPerEm = units_per_em(style.font)) < 0) return -1;
-	double unitsToPixels = sizeInPixels / unitsPerEm;
-	double ratio = style.hdpi / style.vdpi;
-	sft->font = style.font;
-	sft->xScale = unitsToPixels * ratio;
-	sft->yScale = unitsToPixels;
-	return 0;
-}
-
-int
 sft_linegap(SFT *sft, double *gap)
 {
+	int16_t unitsPerEm;
+	if ((unitsPerEm = units_per_em(sft->font)) < 0)
+		return -1;
+
 	ssize_t hhea = gettable(sft->font, "hhea");
 	if (hhea < 0) return -1;
 
 	if (sft->font->size < (size_t) hhea + 36) return -1;
-	*gap = geti16(sft->font, hhea + 8) * sft->yScale;
+	*gap = geti16(sft->font, hhea + 8) * sft->yScale / unitsPerEm;
 	return 0;
 }
 
@@ -214,12 +234,6 @@ sft_move(SFT *sft, double x, double y)
 	sft->x = x;
 	sft->y = y;
 	sft->glyph = 0;
-}
-
-static int
-compare_segments(const void *a, const void *b)
-{
-	return memcmp(a, b, 2);
 }
 
 static long
@@ -240,7 +254,7 @@ cmap_fmt4(SFT_Font *font, size_t table, int charCode)
 	uint8_t key[2] = { charCode >> 8, charCode };
 	uintptr_t segIdxX2 = (uintptr_t) csearch(key,
 		font->memory + endCodes,
-		segCountX2 / 2, 2, compare_segments);
+		segCountX2 / 2, 2, cmpu16);
 	segIdxX2 -= (uintptr_t) font->memory + endCodes;
 
 	uint16_t startCode = getu16(font, startCodes + segIdxX2);
@@ -258,12 +272,11 @@ cmap_fmt4(SFT_Font *font, size_t table, int charCode)
 	if (font->size < idOffset + 2) return -1;
 
 	uint16_t id = getu16(font, idOffset);
-
 	return id ? (id + idDelta) & 0xFFFF : 0L;
 }
 
-long
-sft_transcribe(SFT_Font *font, int charCode)
+static long
+glyph_id(SFT_Font *font, int charCode)
 {
 	ssize_t cmap = gettable(font, "cmap");
 	if (cmap < 0) return -1;
@@ -305,9 +318,12 @@ num_long_hmtx(SFT_Font *font)
 	return getu16(font, hhea + 34);
 }
 
-int
-sft_hor_metrics(SFT *sft, long glyph, double *advanceWidth, double *leftSideBearing)
+static int
+hor_metrics(SFT *sft, long glyph, double *advanceWidth, double *leftSideBearing)
 {
+	int16_t unitsPerEm;
+	if ((unitsPerEm = units_per_em(sft->font)) < 0)
+		return -1;
 	int numLong = num_long_hmtx(sft->font);
 	if (numLong < 0) return -1;
 	ssize_t hmtx = gettable(sft->font, "hmtx");
@@ -316,8 +332,8 @@ sft_hor_metrics(SFT *sft, long glyph, double *advanceWidth, double *leftSideBear
 		/* glyph is inside long metrics segment. */
 		size_t offset = hmtx + 4 * glyph;
 		if (sft->font->size < offset + 4) return -1;
-		*advanceWidth = getu16(sft->font, offset) * sft->xScale;
-		*leftSideBearing = geti16(sft->font, offset + 2) * sft->xScale;
+		*advanceWidth = getu16(sft->font, offset) * sft->xScale / unitsPerEm;
+		*leftSideBearing = geti16(sft->font, offset + 2) * sft->xScale / unitsPerEm;
 		return 0;
 	} else {
 		/* glyph is inside short metrics segment. */
@@ -325,8 +341,8 @@ sft_hor_metrics(SFT *sft, long glyph, double *advanceWidth, double *leftSideBear
 		size_t offset = shmtx + 2 + (glyph - numLong);
 		if (sft->font->size < offset + 2) return -1;
 		if (shmtx < 4) return -1;
-		*advanceWidth = getu16(sft->font, shmtx - 4) * sft->xScale;
-		*leftSideBearing = geti16(sft->font, offset) * sft->xScale;
+		*advanceWidth = getu16(sft->font, shmtx - 4) * sft->xScale / unitsPerEm;
+		*leftSideBearing = geti16(sft->font, offset) * sft->xScale / unitsPerEm;
 		return 0;
 	}
 }
@@ -340,14 +356,14 @@ loca_format(SFT_Font *font)
 	return geti16(font, head + 50);
 }
 
-ssize_t
-sft_outline_offset(SFT_Font *font, long glyph)
+static ssize_t
+outline_offset(SFT_Font *font, long glyph)
 {
 	ssize_t loca = gettable(font, "loca");
 	if (loca < 0) return -1;
 	switch (loca_format(font)) {
 	case 0:
-		return (ssize_t) 2 * getu16(font, loca + 2 * glyph);
+		return getu16(font, loca + 2 * glyph) * 2L;
 	case 1:
 		return getu32(font, loca + 4 * glyph);
 	default:
@@ -355,19 +371,50 @@ sft_outline_offset(SFT_Font *font, long glyph)
 	}
 }
 
-void *
-sft_char(SFT *sft, const char *ch, int len, int bounds[4])
+int
+sft_char(SFT *sft, int charCode, int extents[4])
 {
-	(void) sft;
-	(void) ch;
-	(void) len;
-	(void) bounds;
-	/* Translate codepoint to glyph id. */
-	/* Look up offset into glyf table. */
-	/* Compute glyph bounds. */
-	/* Draw glyph outlines into buffer. */
-	/* Render grayscale image from buffer. */
-	/* Advance into position for the next char. */
-	return NULL;
+	long glyph;
+	double advanceWidth, leftSideBearing;
+	ssize_t glyf, offset;
+	int16_t unitsPerEm;
+
+	if ((unitsPerEm = units_per_em(sft->font)) < 0)
+		return -1;
+	if ((glyph = glyph_id(sft->font, charCode)) < 0)
+		return -1;
+	if (hor_metrics(sft, glyph, &advanceWidth, &leftSideBearing) < 0)
+		return -1;
+	if ((glyf = gettable(sft->font, "glyf")) < 0)
+		return -1;
+	if ((offset = outline_offset(sft->font, glyph)) < 0)
+		return -1;
+	if (sft->font->size < (size_t) glyf + 10)
+		return -1;
+
+	size_t outline = glyf + offset;
+	int16_t numContours = geti16(sft->font, outline);
+	(void) numContours;
+	struct affine xAffine = { sft->xScale / unitsPerEm, sft->x + leftSideBearing };
+	struct affine yAffine = { sft->yScale / unitsPerEm, sft->y };
+	extents[0] = (int) AFFINE(xAffine, geti16(sft->font, outline + 2) - 1);
+	extents[1] = (int) AFFINE(yAffine, geti16(sft->font, outline + 4) - 1);
+	extents[2] = (int) ceil(AFFINE(xAffine, geti16(sft->font, outline + 6) + 1));
+	extents[3] = (int) ceil(AFFINE(yAffine, geti16(sft->font, outline + 8) + 1));
+
+	if (sft->flags & SFT_CHAR_RENDER) {
+		xAffine.move -= extents[0];
+		yAffine.move -= extents[1];
+		int w = extents[2] - extents[0];
+		int h = extents[3] - extents[1];
+		(void) w, (void) h;
+	}
+
+	if (sft->flags & SFT_CHAR_ADVANCE) {
+		sft->x += advanceWidth;
+		sft->glyph = glyph;
+	}
+
+	return 0;
 }
 

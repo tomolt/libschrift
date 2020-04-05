@@ -7,11 +7,6 @@
 
 #include "arg.h"
 
-#include <sys/types.h>
-extern long sft_transcribe(SFT_Font *font, int charCode);
-extern ssize_t sft_outline_offset(SFT_Font *font, long glyph);
-extern int sft_hor_metrics(SFT *sft, long glyph, double *advanceWidth, double *leftSideBearing);
-
 char *argv0;
 
 static void
@@ -25,8 +20,7 @@ static void
 usage(void)
 {
 	fprintf(stderr,
-		"usage: %s [-f font file] [-h hdpi] [-v vdpi] "
-		"[-d size in pt] [-x size in px]\n", argv0);
+		"usage: %s [-f font file] [-s size in px]\n", argv0);
 }
 
 int
@@ -34,32 +28,18 @@ main(int argc, char *argv[])
 {
 	const char *filename;
 	SFT_Font *font;
-	struct SFT_Style style;
 	SFT *sft;
+	double size;
 
 	filename = "resources/Ubuntu-R.ttf";
-	style.hdpi = 96.0;
-	style.vdpi = 96.0;
-	style.size = 64.0;
-	style.units = 'x';
+	size = 16.0;
 
 	ARGBEGIN {
 	case 'f':
 		filename = EARGF(usage());
 		break;
-	case 'h':
-		style.hdpi = atof(EARGF(usage()));
-		break;
-	case 'v':
-		style.vdpi = atof(EARGF(usage()));
-		break;
-	case 'd':
-		style.size = atof(EARGF(usage()));
-		style.units = 'd';
-		break;
-	case 'x':
-		style.size = atof(EARGF(usage()));
-		style.units = 'x';
+	case 's':
+		size = atof(EARGF(usage()));
 		break;
 	default:
 		usage();
@@ -72,13 +52,11 @@ main(int argc, char *argv[])
 
 	if ((font = sft_loadfile(filename)) == NULL)
 		die("Can't load font file.");
-	style.font = font;
 	if ((sft = sft_create()) == NULL)
 		die("Can't create schrift context.");
-	if (sft_setstyle(sft, style) < 0)
-		die("Can't set text style.");
 
-	printf("font size: %lu\n", *(size_t *)((char *)font + sizeof(void *)));
+	sft_setfont(sft, font);
+	sft_setscale(sft, size, size);
 
 	double linegap;
 	if (sft_linegap(sft, &linegap) < 0)
@@ -87,16 +65,12 @@ main(int argc, char *argv[])
 
 	const char *str = "Hello, World!";
 	for (const char *c = str; *c; ++c) {
-		long glyph;
-		ssize_t loca;
-		double aw, lsb;
-		if ((glyph = sft_transcribe(font, *c)) < 0)
-			die("Can't transcribe character.");
-		if ((loca = sft_outline_offset(font, glyph)) < 0)
-			die("Can't determine offset of glyph outline.");
-		if (sft_hor_metrics(sft, glyph, &aw, &lsb) < 0)
-			die("Can't read horizontal metrics of glyph.");
-		printf("'%c' -> %lu -> %lu | %f, %f\n", *c, glyph, loca, aw, lsb);
+		printf("# '%c':\n", *c);
+		int extents[4];
+		if (sft_char(sft, *c, extents) < 0)
+			die("Can't render character.");
+		printf("extents: %d, %d, %d, %d\n",
+			extents[0], extents[1], extents[2], extents[3]);
 	}
 
 	sft_destroy(sft);

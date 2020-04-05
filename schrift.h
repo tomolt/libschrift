@@ -17,28 +17,31 @@
 #ifndef SCHRIFT_H
 #define SCHRIFT_H 1
 
+#define SFT_DOWNWARD_Y   0x01
+#define SFT_ANTIALIAS    0x02
+#define SFT_KERNING      0x04
+#define SFT_CHAR_ADVANCE 0x08
+#define SFT_CHAR_RENDER  0x10
+
 struct SFT_Font;
 struct SFT;
 
 typedef struct SFT_Font SFT_Font;
 typedef struct SFT SFT;
 
-struct SFT_Style
-{
-	SFT_Font *font;
-	double hdpi, vdpi, size;
-	char units;
-};
-
 SFT_Font *sft_loadfile(char const *filename);
 void sft_freefont(SFT_Font *font);
 
 SFT *sft_create(void);
 void sft_destroy(SFT *sft);
-int sft_setstyle(SFT *sft, struct SFT_Style style);
+
+void sft_setflag(SFT *sft, int flag, int value);
+void sft_setfont(SFT *sft, SFT_Font *font);
+void sft_setscale(SFT *sft, double xScale, double yScale);
+
 int sft_linegap(SFT *sft, double *gap);
 void sft_move(SFT *sft, double x, double y);
-void *sft_char(SFT *sft, const char *ch, int len, int bounds[4]);
+int sft_char(SFT *sft, int charCode, int extents[4]);
 
 #endif
 

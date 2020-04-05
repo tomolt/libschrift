@@ -9,7 +9,7 @@ RANLIB = ranlib
 # flags
 CPPFLAGS = -I./
 CFLAGS = -g -std=c99 -pedantic -Wall -Wextra
-LDFLAGS = -g
+LDFLAGS = -g -lm
 
 # installation paths
 PREFIX = /usr/local

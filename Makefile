@@ -23,7 +23,7 @@ clean:
 	rm -f libschrift.a
 	rm -f sftdemo
 
-install: all
+install: libschrift.a schrift.h
 	mkdir -p "$(DESTDIR)$(PREFIX)/lib"
 	cp -f libschrift.a "$(DESTDIR)$(PREFIX)/lib"
 	mkdir -p "$(DESTDIR)$(PREFIX)/include"

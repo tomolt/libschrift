@@ -322,37 +322,46 @@ glyph_id(SFT_Font *font, int charCode)
 static int
 num_long_hmtx(SFT_Font *font)
 {
-	ssize_t hhea = gettable(font, "hhea");
-	if (hhea < 0) return -1;
-	if (font->size < (size_t) hhea + 36) return -1;
+	ssize_t hhea;
+	if ((hhea = gettable(font, "hhea")) < 0)
+		return -1;
+	if (font->size < (size_t) hhea + 36)
+		return -1;
 	return getu16(font, hhea + 34);
 }
 
 static int
 hor_metrics(SFT *sft, long glyph, double *advanceWidth, double *leftSideBearing)
 {
+	size_t offset, shmtx;
+	ssize_t hmtx;
+	double factor;
+	int numLong;
 	int16_t unitsPerEm;
 	if ((unitsPerEm = units_per_em(sft->font)) < 0)
 		return -1;
-	int numLong = num_long_hmtx(sft->font);
-	if (numLong < 0) return -1;
-	ssize_t hmtx = gettable(sft->font, "hmtx");
-	if (hmtx < 0) return -1;
+	factor = sft->xScale / unitsPerEm;
+	if ((numLong = num_long_hmtx(sft->font)) < 0)
+		return -1;
+	if ((hmtx = gettable(sft->font, "hmtx")) < 0)
+		return -1;
 	if (glyph < numLong) {
 		/* glyph is inside long metrics segment. */
-		size_t offset = hmtx + 4 * glyph;
-		if (sft->font->size < offset + 4) return -1;
-		*advanceWidth = getu16(sft->font, offset) * sft->xScale / unitsPerEm;
-		*leftSideBearing = geti16(sft->font, offset + 2) * sft->xScale / unitsPerEm;
+		offset = hmtx + 4 * glyph;
+		if (sft->font->size < offset + 4)
+			return -1;
+		*advanceWidth = getu16(sft->font, offset) * factor;
+		*leftSideBearing = geti16(sft->font, offset + 2) * factor;
 		return 0;
 	} else {
 		/* glyph is inside short metrics segment. */
-		size_t shmtx = hmtx + 4 * numLong;
-		size_t offset = shmtx + 2 + (glyph - numLong);
-		if (sft->font->size < offset + 2) return -1;
-		if (shmtx < 4) return -1;
-		*advanceWidth = getu16(sft->font, shmtx - 4) * sft->xScale / unitsPerEm;
-		*leftSideBearing = geti16(sft->font, offset) * sft->xScale / unitsPerEm;
+		if ((shmtx = hmtx + 4 * numLong) < 4)
+			return -1;
+		offset = shmtx + 2 + (glyph - numLong);
+		if (sft->font->size < offset + 2)
+			return -1;
+		*advanceWidth = getu16(sft->font, shmtx - 4) * factor;
+		*leftSideBearing = geti16(sft->font, offset) * factor;
 		return 0;
 	}
 }
@@ -360,9 +369,11 @@ hor_metrics(SFT *sft, long glyph, double *advanceWidth, double *leftSideBearing)
 static int16_t
 loca_format(SFT_Font *font)
 {
-	ssize_t head = gettable(font, "head");
-	if (head < 0) return -1;
-	if (font->size < (size_t) head + 54) return -1;
+	ssize_t head;
+	if ((head = gettable(font, "head")) < 0)
+		return -1;
+	if (font->size < (size_t) head + 54)
+		return -1;
 	return geti16(font, head + 50);
 }
 
@@ -384,10 +395,14 @@ outline_offset(SFT_Font *font, long glyph)
 int
 sft_char(SFT *sft, int charCode, int extents[4])
 {
+	struct affine xAffine, yAffine;
+	uint32_t *buffer;
+	size_t outline;
+	ssize_t glyf, offset, next;
 	long glyph;
 	double advanceWidth, leftSideBearing;
-	ssize_t glyf, offset, next;
-	int16_t unitsPerEm;
+	int16_t unitsPerEm, numContours;
+	int width, height;
 
 	if ((unitsPerEm = units_per_em(sft->font)) < 0)
 		return -1;
@@ -407,11 +422,11 @@ sft_char(SFT *sft, int charCode, int extents[4])
 	if (offset == next) {
 		memset(extents, 0, 4 * sizeof(int));
 	} else {
-		size_t outline = glyf + offset;
-		int16_t numContours = geti16(sft->font, outline);
+		outline = glyf + offset;
+		numContours = geti16(sft->font, outline);
 		(void) numContours;
-		struct affine xAffine = { sft->xScale / unitsPerEm, sft->x + leftSideBearing };
-		struct affine yAffine = { sft->yScale / unitsPerEm, sft->y };
+		xAffine = (struct affine) { sft->xScale / unitsPerEm, sft->x + leftSideBearing };
+		yAffine = (struct affine) { sft->yScale / unitsPerEm, sft->y };
 		extents[0] = (int) AFFINE(xAffine, geti16(sft->font, outline + 2) - 1);
 		extents[1] = (int) AFFINE(yAffine, geti16(sft->font, outline + 4) - 1);
 		extents[2] = (int) ceil(AFFINE(xAffine, geti16(sft->font, outline + 6) + 1));
@@ -420,10 +435,11 @@ sft_char(SFT *sft, int charCode, int extents[4])
 		if (sft->flags & SFT_CHAR_RENDER) {
 			xAffine.move -= extents[0];
 			yAffine.move -= extents[1];
-			int width = extents[2] - extents[0];
-			int height = extents[3] - extents[1];
-			uint32_t *buffer = calloc(width * height, 4);
-			if (buffer == NULL) return -1;
+			width = extents[2] - extents[0];
+			height = extents[3] - extents[1];
+			buffer = calloc(width * height, 4);
+			if ((buffer = calloc(width * height, 4)) == NULL)
+				return -1;
 			free(buffer);
 		}
 	}

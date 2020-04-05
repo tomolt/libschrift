@@ -214,17 +214,18 @@ units_per_em(SFT_Font *font)
 }
 
 int
-sft_linegap(SFT *sft, double *gap)
+sft_linemetrics(SFT *sft, double *ascent, double *descent, double *gap)
 {
 	int16_t unitsPerEm;
 	if ((unitsPerEm = units_per_em(sft->font)) < 0)
 		return -1;
-
 	ssize_t hhea = gettable(sft->font, "hhea");
 	if (hhea < 0) return -1;
 
 	if (sft->font->size < (size_t) hhea + 36) return -1;
-	*gap = geti16(sft->font, hhea + 8) * sft->yScale / unitsPerEm;
+	*ascent  = geti16(sft->font, hhea + 4) * sft->yScale / unitsPerEm;
+	*descent = geti16(sft->font, hhea + 6) * sft->yScale / unitsPerEm;
+	*gap     = geti16(sft->font, hhea + 8) * sft->yScale / unitsPerEm;
 	return 0;
 }
 
@@ -376,7 +377,7 @@ sft_char(SFT *sft, int charCode, int extents[4])
 {
 	long glyph;
 	double advanceWidth, leftSideBearing;
-	ssize_t glyf, offset;
+	ssize_t glyf, offset, next;
 	int16_t unitsPerEm;
 
 	if ((unitsPerEm = units_per_em(sft->font)) < 0)
@@ -389,25 +390,31 @@ sft_char(SFT *sft, int charCode, int extents[4])
 		return -1;
 	if ((offset = outline_offset(sft->font, glyph)) < 0)
 		return -1;
+	if ((next = outline_offset(sft->font, glyph + 1)) < 0)
+		return -1;
 	if (sft->font->size < (size_t) glyf + 10)
 		return -1;
 
-	size_t outline = glyf + offset;
-	int16_t numContours = geti16(sft->font, outline);
-	(void) numContours;
-	struct affine xAffine = { sft->xScale / unitsPerEm, sft->x + leftSideBearing };
-	struct affine yAffine = { sft->yScale / unitsPerEm, sft->y };
-	extents[0] = (int) AFFINE(xAffine, geti16(sft->font, outline + 2) - 1);
-	extents[1] = (int) AFFINE(yAffine, geti16(sft->font, outline + 4) - 1);
-	extents[2] = (int) ceil(AFFINE(xAffine, geti16(sft->font, outline + 6) + 1));
-	extents[3] = (int) ceil(AFFINE(yAffine, geti16(sft->font, outline + 8) + 1));
+	if (offset == next) {
+		memset(extents, 0, 4 * sizeof(int));
+	} else {
+		size_t outline = glyf + offset;
+		int16_t numContours = geti16(sft->font, outline);
+		(void) numContours;
+		struct affine xAffine = { sft->xScale / unitsPerEm, sft->x + leftSideBearing };
+		struct affine yAffine = { sft->yScale / unitsPerEm, sft->y };
+		extents[0] = (int) AFFINE(xAffine, geti16(sft->font, outline + 2) - 1);
+		extents[1] = (int) AFFINE(yAffine, geti16(sft->font, outline + 4) - 1);
+		extents[2] = (int) ceil(AFFINE(xAffine, geti16(sft->font, outline + 6) + 1));
+		extents[3] = (int) ceil(AFFINE(yAffine, geti16(sft->font, outline + 8) + 1));
 
-	if (sft->flags & SFT_CHAR_RENDER) {
-		xAffine.move -= extents[0];
-		yAffine.move -= extents[1];
-		int w = extents[2] - extents[0];
-		int h = extents[3] - extents[1];
-		(void) w, (void) h;
+		if (sft->flags & SFT_CHAR_RENDER) {
+			xAffine.move -= extents[0];
+			yAffine.move -= extents[1];
+			int w = extents[2] - extents[0];
+			int h = extents[3] - extents[1];
+			(void) w, (void) h;
+		}
 	}
 
 	if (sft->flags & SFT_CHAR_ADVANCE) {

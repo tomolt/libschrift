@@ -58,10 +58,10 @@ main(int argc, char *argv[])
 	sft_setfont(sft, font);
 	sft_setscale(sft, size, size);
 
-	double linegap;
-	if (sft_linegap(sft, &linegap) < 0)
-		die("Can't look up line gap.");
-	printf("line gap: %f\n", linegap);
+	double ascent, descent, linegap;
+	if (sft_linemetrics(sft, &ascent, &descent, &linegap) < 0)
+		die("Can't look up line metrics.");
+	printf("line spacing: %f\n", ascent + descent + linegap);
 
 	const char *str = "Hello, World!";
 	for (const char *c = str; *c; ++c) {

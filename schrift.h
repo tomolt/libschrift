@@ -39,7 +39,7 @@ void sft_setflag(SFT *sft, int flag, int value);
 void sft_setfont(SFT *sft, SFT_Font *font);
 void sft_setscale(SFT *sft, double xScale, double yScale);
 
-int sft_linegap(SFT *sft, double *gap);
+int sft_linemetrics(SFT *sft, double *ascent, double *descent, double *gap);
 void sft_move(SFT *sft, double x, double y);
 int sft_char(SFT *sft, int charCode, int extents[4]);
 

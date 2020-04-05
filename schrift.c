@@ -118,17 +118,16 @@ gettable(SFT_Font *font, char tag[4])
 static int
 readfile(SFT_Font *font, const char *filename)
 {
+	FILE *file;
 	struct stat info;
 	if (stat(filename, &info) < 0) {
 		return -1;
 	}
 	font->size = info.st_size;
-	font->memory = malloc(font->size);
-	if (font->memory == NULL) {
+	if ((font->memory = malloc(font->size)) == NULL) {
 		return -1;
 	}
-	FILE *file = fopen(filename, "rb");
-	if (file == NULL) {
+	if ((file = fopen(filename, "rb")) == NULL) {
 		free(font->memory);
 		return -1;
 	}
@@ -141,15 +140,16 @@ readfile(SFT_Font *font, const char *filename)
 SFT_Font *
 sft_loadfile(char const *filename)
 {
-	SFT_Font *font = calloc(1, sizeof(SFT_Font));
-	if (font == NULL) {
+	SFT_Font *font;
+	uint32_t scalerType;
+	if ((font = calloc(1, sizeof(SFT_Font))) == NULL) {
 		return NULL;
 	}
 	if (readfile(font, filename) < 0) {
 		free(font);
 		return NULL;
 	}
-	uint32_t scalerType = getu32(font, 0);
+	scalerType = getu32(font, 0);
 	if (scalerType != 0x00010000 && scalerType != 0x74727565) {
 		free(font);
 		return NULL;
@@ -168,8 +168,9 @@ sft_freefont(SFT_Font *font)
 SFT *
 sft_create(void)
 {
-	SFT *sft = calloc(1, sizeof(SFT));
-	if (sft == NULL) return NULL;
+	SFT *sft;
+	if ((sft = calloc(1, sizeof(SFT))) == NULL)
+		return NULL;
 	sft->flags = ~(uint32_t) 0;
 	return sft;
 }
@@ -207,25 +208,29 @@ sft_setscale(SFT *sft, double xScale, double yScale)
 static int16_t
 units_per_em(SFT_Font *font)
 {
-	ssize_t head = gettable(font, "head");
-	if (head < 0) return -1;
-	if (font->size < (size_t) head + 54) return -1;
+	ssize_t head;
+	if ((head = gettable(font, "head")) < 0)
+		return -1;
+	if (font->size < (size_t) head + 54)
+		return -1;
 	return getu16(font, head + 18);
 }
 
 int
 sft_linemetrics(SFT *sft, double *ascent, double *descent, double *gap)
 {
+	ssize_t hhea;
+	double factor;
 	int16_t unitsPerEm;
 	if ((unitsPerEm = units_per_em(sft->font)) < 0)
 		return -1;
-	ssize_t hhea = gettable(sft->font, "hhea");
-	if (hhea < 0) return -1;
-
+	if ((hhea = gettable(sft->font, "hhea")) < 0)
+		return -1;
 	if (sft->font->size < (size_t) hhea + 36) return -1;
-	*ascent  = geti16(sft->font, hhea + 4) * sft->yScale / unitsPerEm;
-	*descent = geti16(sft->font, hhea + 6) * sft->yScale / unitsPerEm;
-	*gap     = geti16(sft->font, hhea + 8) * sft->yScale / unitsPerEm;
+	factor = sft->yScale / unitsPerEm;
+	*ascent  = geti16(sft->font, hhea + 4) * factor;
+	*descent = geti16(sft->font, hhea + 6) * factor;
+	*gap     = geti16(sft->font, hhea + 8) * factor;
 	return 0;
 }
 
@@ -240,62 +245,66 @@ sft_move(SFT *sft, double x, double y)
 static long
 cmap_fmt4(SFT_Font *font, size_t table, int charCode)
 {
+	size_t endCodes, startCodes, idDeltas, idRangeOffsets, idOffset;
+	uintptr_t segIdxX2;
+	uint16_t segCountX2, startCode, idRangeOffset, id;
+	int16_t idDelta;
+	uint8_t key[2] = { charCode >> 8, charCode };
 	/* TODO Guard against too big charCode. */
 
 	if (font->size < table + 8) return -1;
-	uint16_t segCountX2 = getu16(font, table);
+	segCountX2 = getu16(font, table);
 	if ((segCountX2 & 1) || !segCountX2) return -1;
 
-	size_t endCodes = table + 8;
-	size_t startCodes = endCodes + segCountX2 + 2;
-	size_t idDeltas = startCodes + segCountX2;
-	size_t idRangeOffsets = idDeltas + segCountX2;
+	endCodes = table + 8;
+	startCodes = endCodes + segCountX2 + 2;
+	idDeltas = startCodes + segCountX2;
+	idRangeOffsets = idDeltas + segCountX2;
 	if (font->size < idRangeOffsets + segCountX2) return -1;
 
-	uint8_t key[2] = { charCode >> 8, charCode };
-	uintptr_t segIdxX2 = (uintptr_t) csearch(key,
+	segIdxX2 = (uintptr_t) csearch(key,
 		font->memory + endCodes,
 		segCountX2 / 2, 2, cmpu16);
 	segIdxX2 -= (uintptr_t) font->memory + endCodes;
 
-	uint16_t startCode = getu16(font, startCodes + segIdxX2);
-	int16_t  idDelta = geti16(font, idDeltas + segIdxX2);
-	uint16_t idRangeOffset = getu16(font, idRangeOffsets + segIdxX2);
-
-	if (startCode > charCode) {
+	if ((startCode = getu16(font, startCodes + segIdxX2)) > charCode)
 		return 0;
-	}
-	if (!idRangeOffset) {
+	idDelta = geti16(font, idDeltas + segIdxX2);
+	if (!(idRangeOffset = getu16(font, idRangeOffsets + segIdxX2)))
 		return (charCode + idDelta) & 0xFFFF;
-	}
 
-	size_t idOffset = idRangeOffsets + segIdxX2 + idRangeOffset + 2 * (charCode - startCode);
+	idOffset = idRangeOffsets + segIdxX2 + idRangeOffset + 2 * (charCode - startCode);
 	if (font->size < idOffset + 2) return -1;
-
-	uint16_t id = getu16(font, idOffset);
+	id = getu16(font, idOffset);
 	return id ? (id + idDelta) & 0xFFFF : 0L;
 }
 
 static long
 glyph_id(SFT_Font *font, int charCode)
 {
-	ssize_t cmap = gettable(font, "cmap");
+	size_t entry, table;
+	ssize_t cmap;
+	unsigned int i;
+	int type;
+	uint16_t numEntries, platformId, encodingId;
+
+	cmap = gettable(font, "cmap");
 	if (cmap < 0) return -1;
 
 	if (font->size < (size_t) cmap + 4) return -1;
-	uint16_t numEntries = getu16(font, cmap + 2);
+	numEntries = getu16(font, cmap + 2);
 	
 	if (font->size < (size_t) cmap + 4 + numEntries * 8) return -1;
-	for (unsigned int i = 0; i < numEntries; ++i) {
-		size_t entry = cmap + 4 + i * 8;
+	for (i = 0; i < numEntries; ++i) {
+		entry = cmap + 4 + i * 8;
 		
-		uint16_t platformId = getu16(font, entry);
-		uint16_t encodingId = getu16(font, entry + 2);
-		int type = platformId * 0100 + encodingId;
+		platformId = getu16(font, entry);
+		encodingId = getu16(font, entry + 2);
+		type = platformId * 0100 + encodingId;
 		
 		if (type == 0003 || type == 0301) {
 			
-			size_t table = cmap + getu32(font, entry + 4);
+			table = cmap + getu32(font, entry + 4);
 			if (font->size < table + 6) return 1;
 
 			switch (getu16(font, table)) {
@@ -411,9 +420,11 @@ sft_char(SFT *sft, int charCode, int extents[4])
 		if (sft->flags & SFT_CHAR_RENDER) {
 			xAffine.move -= extents[0];
 			yAffine.move -= extents[1];
-			int w = extents[2] - extents[0];
-			int h = extents[3] - extents[1];
-			(void) w, (void) h;
+			int width = extents[2] - extents[0];
+			int height = extents[3] - extents[1];
+			uint32_t *buffer = calloc(width * height, 4);
+			if (buffer == NULL) return -1;
+			free(buffer);
 		}
 	}
 

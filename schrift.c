@@ -27,7 +27,7 @@ struct affine { double scale, move; };
 struct SFT_Font
 {
 	uint8_t *memory;
-	size_t size;
+	unsigned long size;
 };
 
 struct SFT
@@ -62,14 +62,14 @@ csearch(const void *key, const void *base,
 }
 
 static inline uint8_t
-getu8(SFT_Font *font, size_t offset)
+getu8(SFT_Font *font, unsigned long offset)
 {
 	assert(offset + 1 <= font->size);
 	return *(font->memory + offset);
 }
 
 static inline uint16_t
-getu16(SFT_Font *font, size_t offset)
+getu16(SFT_Font *font, unsigned long offset)
 {
 	assert(offset + 2 <= font->size);
 	uint8_t *base = font->memory + offset;
@@ -78,13 +78,13 @@ getu16(SFT_Font *font, size_t offset)
 }
 
 static inline int16_t
-geti16(SFT_Font *font, size_t offset)
+geti16(SFT_Font *font, unsigned long offset)
 {
 	return (int16_t) getu16(font, offset);
 }
 
 static inline uint32_t
-getu32(SFT_Font *font, size_t offset)
+getu32(SFT_Font *font, unsigned long offset)
 {
 	assert(offset + 4 <= font->size);
 	uint8_t *base = font->memory + offset;
@@ -209,13 +209,13 @@ sft_setscale(SFT *sft, double xScale, double yScale)
 	sft->yScale = yScale;
 }
 
-static int16_t
+static int
 units_per_em(SFT_Font *font)
 {
-	ssize_t head;
+	long head;
 	if ((head = gettable(font, "head")) < 0)
 		return -1;
-	if (font->size < (size_t) head + 54)
+	if (font->size < (unsigned long) head + 54)
 		return -1;
 	return getu16(font, head + 18);
 }
@@ -223,14 +223,14 @@ units_per_em(SFT_Font *font)
 int
 sft_linemetrics(SFT *sft, double *ascent, double *descent, double *gap)
 {
-	ssize_t hhea;
 	double factor;
-	int16_t unitsPerEm;
+	long hhea;
+	int unitsPerEm;
 	if ((unitsPerEm = units_per_em(sft->font)) < 0)
 		return -1;
 	if ((hhea = gettable(sft->font, "hhea")) < 0)
 		return -1;
-	if (sft->font->size < (size_t) hhea + 36) return -1;
+	if (sft->font->size < (unsigned long) hhea + 36) return -1;
 	factor = sft->yScale / unitsPerEm;
 	*ascent  = geti16(sft->font, hhea + 4) * factor;
 	*descent = geti16(sft->font, hhea + 6) * factor;
@@ -247,12 +247,11 @@ sft_move(SFT *sft, double x, double y)
 }
 
 static long
-cmap_fmt4(SFT_Font *font, size_t table, int charCode)
+cmap_fmt4(SFT_Font *font, unsigned long table, unsigned int charCode)
 {
-	size_t endCodes, startCodes, idDeltas, idRangeOffsets, idOffset;
-	uintptr_t segIdxX2;
-	uint16_t segCountX2, startCode, idRangeOffset, id;
-	int16_t idDelta;
+	unsigned long endCodes, startCodes, idDeltas, idRangeOffsets, idOffset;
+	unsigned int segCountX2, segIdxX2, startCode, idRangeOffset, id;
+	int idDelta;
 	uint8_t key[2] = { charCode >> 8, charCode };
 	/* TODO Guard against too big charCode. */
 
@@ -269,10 +268,8 @@ cmap_fmt4(SFT_Font *font, size_t table, int charCode)
 	if (font->size < idRangeOffsets + segCountX2)
 		return -1;
 
-	segIdxX2 = (uintptr_t) csearch(key,
-		font->memory + endCodes,
-		segCountX2 / 2, 2, cmpu16);
-	segIdxX2 -= (uintptr_t) font->memory + endCodes;
+	segIdxX2 = (uintptr_t) csearch(key, font->memory + endCodes,
+		segCountX2 / 2, 2, cmpu16) - (uintptr_t) font->memory + endCodes;
 
 	if ((startCode = getu16(font, startCodes + segIdxX2)) > charCode)
 		return 0;
@@ -288,22 +285,21 @@ cmap_fmt4(SFT_Font *font, size_t table, int charCode)
 }
 
 static long
-glyph_id(SFT_Font *font, int charCode)
+glyph_id(SFT_Font *font, unsigned int charCode)
 {
-	size_t entry, table;
-	ssize_t cmap;
-	unsigned int i;
+	unsigned long entry, table;
+	long cmap;
+	unsigned int i, numEntries, platformId, encodingId;
 	int type;
-	uint16_t numEntries, platformId, encodingId;
 
 	if ((cmap = gettable(font, "cmap")) < 0)
 		return -1;
 
-	if (font->size < (size_t) cmap + 4)
+	if (font->size < (unsigned long) cmap + 4)
 		return -1;
 	numEntries = getu16(font, cmap + 2);
 	
-	if (font->size < (size_t) cmap + 4 + numEntries * 8)
+	if (font->size < (unsigned long) cmap + 4 + numEntries * 8)
 		return -1;
 	for (i = 0; i < numEntries; ++i) {
 		entry = cmap + 4 + i * 8;
@@ -333,10 +329,10 @@ glyph_id(SFT_Font *font, int charCode)
 static int
 num_long_hmtx(SFT_Font *font)
 {
-	ssize_t hhea;
+	long hhea;
 	if ((hhea = gettable(font, "hhea")) < 0)
 		return -1;
-	if (font->size < (size_t) hhea + 36)
+	if (font->size < (unsigned long) hhea + 36)
 		return -1;
 	return getu16(font, hhea + 34);
 }
@@ -344,11 +340,10 @@ num_long_hmtx(SFT_Font *font)
 static int
 hor_metrics(SFT *sft, long glyph, double *advanceWidth, double *leftSideBearing)
 {
-	size_t offset, shmtx;
-	ssize_t hmtx;
 	double factor;
-	int numLong;
-	int16_t unitsPerEm;
+	unsigned long offset, shmtx;
+	long hmtx;
+	int unitsPerEm, numLong;
 	if ((unitsPerEm = units_per_em(sft->font)) < 0)
 		return -1;
 	factor = sft->xScale / unitsPerEm;
@@ -377,21 +372,21 @@ hor_metrics(SFT *sft, long glyph, double *advanceWidth, double *leftSideBearing)
 	}
 }
 
-static int16_t
+static int
 loca_format(SFT_Font *font)
 {
-	ssize_t head;
+	long head;
 	if ((head = gettable(font, "head")) < 0)
 		return -1;
-	if (font->size < (size_t) head + 54)
+	if (font->size < (unsigned long) head + 54)
 		return -1;
 	return geti16(font, head + 50);
 }
 
-static ssize_t
+static long
 outline_offset(SFT_Font *font, long glyph)
 {
-	ssize_t loca;
+	long loca;
 	if ((loca = gettable(font, "loca")) < 0)
 		return -1;
 	switch (loca_format(font)) {
@@ -405,16 +400,14 @@ outline_offset(SFT_Font *font, long glyph)
 }
 
 int
-sft_char(SFT *sft, int charCode, int extents[4])
+sft_char(SFT *sft, unsigned int charCode, int extents[4])
 {
 	struct affine xAffine, yAffine;
-	uint32_t *buffer;
-	size_t outline;
-	ssize_t glyf, offset, next;
-	long glyph;
 	double advanceWidth, leftSideBearing;
-	int16_t unitsPerEm, numContours;
-	int width, height;
+	uint32_t *buffer;
+	unsigned long outline;
+	long glyph, glyf, offset, next;
+	int unitsPerEm, numContours, width, height;
 
 	if ((unitsPerEm = units_per_em(sft->font)) < 0)
 		return -1;
@@ -428,7 +421,7 @@ sft_char(SFT *sft, int charCode, int extents[4])
 		return -1;
 	if ((next = outline_offset(sft->font, glyph + 1)) < 0)
 		return -1;
-	if (sft->font->size < (size_t) glyf + 10)
+	if (sft->font->size < (unsigned long) glyf + 10)
 		return -1;
 
 	if (offset == next) {

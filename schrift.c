@@ -269,7 +269,7 @@ cmap_fmt4(SFT_Font *font, unsigned long table, unsigned int charCode)
 		return -1;
 
 	segIdxX2 = (uintptr_t) csearch(key, font->memory + endCodes,
-		segCountX2 / 2, 2, cmpu16) - (uintptr_t) font->memory + endCodes;
+		segCountX2 / 2, 2, cmpu16) - (uintptr_t) (font->memory + endCodes);
 
 	if ((startCode = getu16(font, startCodes + segIdxX2)) > charCode)
 		return 0;

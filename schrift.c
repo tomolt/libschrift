@@ -402,126 +402,100 @@ outline_offset(SFT_Font *font, long glyph)
 static int
 draw_simple(SFT *sft, unsigned long offset, int numContours, struct affine xAffine, struct affine yAffine)
 {
-	struct contour *contours = NULL;
-	double *xCoords, *yCoords;
-	uint8_t *memory = NULL, *flags;
-	int i, numPts, value, repeat, ret = 0;
+#define ADVU8(var, asgn) do { if (sft->font->size < offset + 1) goto failure; var asgn getu8(sft->font, offset); ++offset; } while (0)
+#define ADVU16(var, asgn) do { if (sft->font->size < offset + 2) goto failure; var asgn getu16(sft->font, offset); offset += 2; } while (0)
+#define ADVI16(var, asgn) do { if (sft->font->size < offset + 2) goto failure; var asgn geti16(sft->font, offset); offset += 2; } while (0)
+#define MOVEPT(d, s) do { _d = (d), _s = (s); flags[_d] = flags[_s]; points[_d] = points[_s]; } while (0)
 	
+	struct point *points;
+	struct contour *contours = NULL;
+	uint8_t *memory = NULL, *flags;
+	int i, numPts, value, repeat, _d, _s;
+
 	if ((contours = malloc(numContours * sizeof(contours[0]))) == NULL)
 		goto failure;
 
-	if (sft->font->size < offset + numContours * 2)
-		goto failure;
 	for (numPts = i = 0; i < numContours; ++i) {
 		contours[i].first = numPts;
-		contours[i].last = getu16(sft->font, offset);
-		offset += 2;
+		ADVU16(contours[i].last, =);
 		numPts = contours[i].last + 1;
 	}
 
-	if ((memory = malloc((numPts + 2) * 17)) == NULL)
+	if ((memory = malloc((numPts + 2) * (1 + sizeof(points[0])))) == NULL)
 		goto failure;
 	flags = memory + 2;
-	xCoords = (double *) (flags + numPts) + 2;
-	yCoords = xCoords + numPts + 2;
+	points = (struct point *) (flags + numPts) + 2;
 
 	/* Skip hinting instructions. */
-	if (sft->font->size < offset + 2)
-		goto failure;
-	offset += 2 + getu16(sft->font, offset);
+	ADVU16(offset, +=);
 	/* Read flags. */
 	for (value = repeat = i = 0; i < numPts; ++i) {
 		if (repeat) {
 			--repeat;
 		} else {
-			if (sft->font->size < offset + 1)
-				goto failure;
-			value = getu8(sft->font, offset++);
-			if (value & 0x08) {
-				if (sft->font->size < offset + 1)
-					goto failure;
-				repeat = getu8(sft->font, offset++);
-			}
+			ADVU8(value, =);
+			if (value & 0x08)
+				ADVU8(repeat, =);
 		}
 		flags[i] = value;
 	}
 	/* Read x coordinates. */
 	for (value = i = 0; i < numPts; ++i) {
 		if (flags[i] & 0x02) {
-			if (sft->font->size < offset + 1)
-				goto failure;
 			if (flags[i] & 0x10) {
-				value += getu8(sft->font, offset++);
+				ADVU8(value, +=);
 			} else {
-				value -= getu8(sft->font, offset++);
+				ADVU8(value, -=);
 			}
 		} else if (!(flags[i] & 0x10)) {
-			if (sft->font->size < offset + 2)
-				goto failure;
-			value += geti16(sft->font, offset);
-			offset += 2;
+			ADVI16(value, +=);
 		}
-		xCoords[i] = AFFINE(xAffine, value);
+		points[i].x = AFFINE(xAffine, value);
 	}
 	/* Read y coordinates. */
 	for (value = i = 0; i < numPts; ++i) {
 		if (flags[i] & 0x04) {
-			if (sft->font->size < offset + 1)
-				goto failure;
 			if (flags[i] & 0x20) {
-				value += getu8(sft->font, offset++);
+				ADVU8(value, +=);
 			} else {
-				value -= getu8(sft->font, offset++);
+				ADVU8(value, -=);
 			}
 		} else if (!(flags[i] & 0x20)) {
-			if (sft->font->size < offset + 2)
-				goto failure;
-			value += geti16(sft->font, offset);
-			offset += 2;
+			ADVI16(value, +=);
 		}
-		yCoords[i] = AFFINE(yAffine, value);
+		points[i].y = AFFINE(yAffine, value);
 	}
 	/* Print contours. */
 	for (int j = 0; j < numContours; ++j) {
 		printf("contour #%d:\n", j);
 		int f = contours[j].first, l = contours[j].last;
 		/* Rotate contour points back by one position to make space to the right. */
-		--f;
-		flags[f] = flags[l];
-		xCoords[f] = xCoords[l];
-		yCoords[f] = yCoords[l];
-		--l;
+		MOVEPT(--f, l--);
 		/* Connect the two ends of the contour such that it both starts and ends with an on-curve point. */
 		if (flags[f] & 0x01) {
-			++l;
-			flags[l] = flags[f];
-			xCoords[l] = xCoords[f];
-			yCoords[l] = yCoords[f];
+			MOVEPT(++l, f);
 		} else if (flags[l] & 0x01) {
-			--f;
-			flags[f] = flags[l];
-			xCoords[f] = xCoords[l];
-			yCoords[f] = yCoords[l];
+			MOVEPT(--f, l);
 		} else {
-			double cx = 0.5 * xCoords[f] + 0.5 * xCoords[l];
-			double cy = 0.5 * yCoords[f] + 0.5 * yCoords[l];
+			struct point center = {
+				0.5 * points[f].x + 0.5 * points[l].x,
+				0.5 * points[f].y + 0.5 * points[l].y
+			};
 			--f, ++l;
 			flags[f] = flags[l] = 0x01;
-			xCoords[f] = xCoords[l] = cx;
-			yCoords[f] = yCoords[l] = cy;
+			points[f] = points[l] = center;
 		}
 		for (i = f; i <= l; ++i) {
-			printf("%s, %f, %f\n", flags[i] & 0x01 ? "ON " : "OFF", xCoords[i], yCoords[i]);
+			printf("%s, %f, %f\n", flags[i] & 0x01 ? "ON " : "OFF", points[i].x, points[i].y);
 		}
 	}
-cleanup:
 	free(contours);
 	free(memory);
-	return ret;
-
+	return 0;
 failure:
-	ret = -1;
-	goto cleanup;
+	free(contours);
+	free(memory);
+	return -1;
 }
 
 static int

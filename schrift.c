@@ -399,6 +399,106 @@ outline_offset(SFT_Font *font, long glyph)
 }
 
 static int
+draw_simple(SFT *sft, unsigned long offset, int numContours, struct affine xAffine, struct affine yAffine)
+{
+	int *endPts = NULL;
+	double *xCoords = NULL, *yCoords = NULL;
+	uint8_t *flags = NULL;
+	int i, numPts, value, repeat, ret = 0;
+	
+	if ((endPts = malloc(numContours * sizeof(endPts[0]))) == NULL)
+		goto failure;
+
+	if (sft->font->size < offset + numContours * 2)
+		goto failure;
+	for (i = 0; i < numContours; ++i) {
+		endPts[i] = getu16(sft->font, offset);
+		offset += 2;
+	}
+	numPts = endPts[numContours - 1] + 1;
+
+	if ((flags = malloc(numPts * sizeof(flags[0]))) == NULL)
+		goto failure;
+	if ((xCoords = malloc(numPts * sizeof(xCoords[0]))) == NULL)
+		goto failure;
+	if ((yCoords = malloc(numPts * sizeof(yCoords[0]))) == NULL)
+		goto failure;
+	/* Skip hinting instructions. */
+	if (sft->font->size < offset + 2)
+		goto failure;
+	offset += 2 + getu16(sft->font, offset);
+	/* Read flags. */
+	for (value = repeat = i = 0; i < numPts; ++i) {
+		if (repeat) {
+			--repeat;
+		} else {
+			if (sft->font->size < offset + 1)
+				goto failure;
+			value = getu8(sft->font, offset++);
+			if (value & 0x08) {
+				if (sft->font->size < offset + 1)
+					goto failure;
+				repeat = getu8(sft->font, offset++);
+			}
+		}
+		flags[i] = value;
+	}
+	/* Read x coordinates. */
+	for (value = i = 0; i < numPts; ++i) {
+		if (flags[i] & 0x02) {
+			if (sft->font->size < offset + 1)
+				goto failure;
+			if (flags[i] & 0x10) {
+				value += getu8(sft->font, offset++);
+			} else {
+				value -= getu8(sft->font, offset++);
+			}
+		} else if (!(flags[i] & 0x10)) {
+			if (sft->font->size < offset + 2)
+				goto failure;
+			value += geti16(sft->font, offset);
+			offset += 2;
+		}
+		xCoords[i] = AFFINE(xAffine, value);
+	}
+	/* Read y coordinates. */
+	for (value = i = 0; i < numPts; ++i) {
+		if (flags[i] & 0x04) {
+			if (sft->font->size < offset + 1)
+				goto failure;
+			if (flags[i] & 0x20) {
+				value += getu8(sft->font, offset++);
+			} else {
+				value -= getu8(sft->font, offset++);
+			}
+		} else if (!(flags[i] & 0x20)) {
+			if (sft->font->size < offset + 2)
+				goto failure;
+			value += geti16(sft->font, offset);
+			offset += 2;
+		}
+		yCoords[i] = AFFINE(yAffine, value);
+	}
+	/* Print contours. */
+	for (int j = 0, i = 0; j < numContours; ++j) {
+		printf("countour #%d:\n", j);
+		for (; i <= endPts[j]; ++i) {
+			printf("%s, %f, %f\n", flags[i] & 0x01 ? "ON " : "OFF", xCoords[i], yCoords[i]);
+		}
+	}
+cleanup:
+	free(endPts);
+	free(flags);
+	free(xCoords);
+	free(yCoords);
+	return ret;
+
+failure:
+	ret = -1;
+	goto cleanup;
+}
+
+static int
 proc_outline(SFT *sft, unsigned long offset, double leftSideBearing, int extents[4])
 {
 	struct affine xAffine, yAffine;
@@ -427,7 +527,10 @@ proc_outline(SFT *sft, unsigned long offset, double leftSideBearing, int extents
 			return -1;
 		if (numContours >= 0) {
 			/* Glyph has a 'simple' outline consisting of a number of contours. */
-			/* TODO Implement this path! */
+			if (draw_simple(sft, offset + 10, numContours, xAffine, yAffine) < 0) {
+				free(buffer);
+				return -1;
+			}
 		} else {
 			/* Glyph has a compound outline combined from mutiple other outlines. */
 			/* TODO Implement this path! */

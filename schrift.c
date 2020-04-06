@@ -398,18 +398,52 @@ outline_offset(SFT_Font *font, long glyph)
 	}
 }
 
+static int
+proc_outline(SFT *sft, unsigned long offset, double leftSideBearing, int extents[4])
+{
+	struct affine xAffine, yAffine;
+	uint32_t *buffer;
+	int unitsPerEm, numContours, width, height;
+	if ((unitsPerEm = units_per_em(sft->font)) < 0)
+		return -1;
+	numContours = geti16(sft->font, offset);
+	/* Set up linear transformations. */
+	xAffine = (struct affine) { sft->xScale / unitsPerEm, sft->x + leftSideBearing };
+	yAffine = (struct affine) { sft->yScale / unitsPerEm, sft->y };
+	/* Calculate outline extents. */
+	extents[0] = (int) AFFINE(xAffine, geti16(sft->font, offset + 2) - 1);
+	extents[1] = (int) AFFINE(yAffine, geti16(sft->font, offset + 4) - 1);
+	extents[2] = (int) ceil(AFFINE(xAffine, geti16(sft->font, offset + 6) + 1));
+	extents[3] = (int) ceil(AFFINE(yAffine, geti16(sft->font, offset + 8) + 1));
+	/* Render the outline (if requested). */
+	if (sft->flags & SFT_CHAR_RENDER) {
+		/* Make transformations relative to min corner. */
+		xAffine.move -= extents[0];
+		yAffine.move -= extents[1];
+		/* Allocate internal buffer for drawing into. */
+		width = extents[2] - extents[0];
+		height = extents[3] - extents[1];
+		if ((buffer = calloc(width * height, 4)) == NULL)
+			return -1;
+		if (numContours >= 0) {
+			/* Glyph has a 'simple' outline consisting of a number of contours. */
+			/* TODO Implement this path! */
+		} else {
+			/* Glyph has a compound outline combined from mutiple other outlines. */
+			/* TODO Implement this path! */
+			free(buffer);
+			return -1;
+		}
+		free(buffer);
+	}
+	return 0;
+}
+
 int
 sft_char(SFT *sft, unsigned int charCode, int extents[4])
 {
-	struct affine xAffine, yAffine;
 	double advanceWidth, leftSideBearing;
-	uint32_t *buffer;
-	unsigned long outline;
 	long glyph, glyf, offset, next;
-	int unitsPerEm, numContours, width, height;
-
-	if ((unitsPerEm = units_per_em(sft->font)) < 0)
-		return -1;
 	if ((glyph = glyph_id(sft->font, charCode)) < 0)
 		return -1;
 	if (hor_metrics(sft, glyph, &advanceWidth, &leftSideBearing) < 0)
@@ -427,37 +461,8 @@ sft_char(SFT *sft, unsigned int charCode, int extents[4])
 		memset(extents, 0, 4 * sizeof(int));
 	} else {
 		/* Glyph has an outline. */
-		outline = glyf + offset;
-		numContours = geti16(sft->font, outline);
-		/* Set up linear transformations. */
-		xAffine = (struct affine) { sft->xScale / unitsPerEm, sft->x + leftSideBearing };
-		yAffine = (struct affine) { sft->yScale / unitsPerEm, sft->y };
-		/* Calculate outline extents. */
-		extents[0] = (int) AFFINE(xAffine, geti16(sft->font, outline + 2) - 1);
-		extents[1] = (int) AFFINE(yAffine, geti16(sft->font, outline + 4) - 1);
-		extents[2] = (int) ceil(AFFINE(xAffine, geti16(sft->font, outline + 6) + 1));
-		extents[3] = (int) ceil(AFFINE(yAffine, geti16(sft->font, outline + 8) + 1));
-		/* Render the outline (if requested). */
-		if (sft->flags & SFT_CHAR_RENDER) {
-			/* Make transformations relative to min corner. */
-			xAffine.move -= extents[0];
-			yAffine.move -= extents[1];
-			/* Allocate internal buffer for drawing into. */
-			width = extents[2] - extents[0];
-			height = extents[3] - extents[1];
-			if ((buffer = calloc(width * height, 4)) == NULL)
-				return -1;
-			if (numContours >= 0) {
-				/* Glyph has a 'simple' outline consisting of a number of contours. */
-				/* TODO Implement this path! */
-			} else {
-				/* Glyph has a compound outline combined from mutiple other outlines. */
-				/* TODO Implement this path! */
-				free(buffer);
-				return -1;
-			}
-			free(buffer);
-		}
+		if (proc_outline(sft, glyf + offset, leftSideBearing, extents) < 0)
+			return -1;
 	}
 	/* Advance into position for the next character (if requested). */
 	if (sft->flags & SFT_CHAR_ADVANCE) {

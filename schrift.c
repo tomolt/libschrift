@@ -23,6 +23,7 @@ struct point  { double x, y; };
 struct line   { struct point beg, end; };
 struct curve  { struct point beg, end, ctrl; };
 struct affine { double scale, move; };
+struct contour { int first, last; };
 
 struct SFT_Font
 {
@@ -401,27 +402,28 @@ outline_offset(SFT_Font *font, long glyph)
 static int
 draw_simple(SFT *sft, unsigned long offset, int numContours, struct affine xAffine, struct affine yAffine)
 {
-	int *endPts = NULL;
+	struct contour *contours = NULL;
 	double *xCoords, *yCoords;
 	uint8_t *memory = NULL, *flags;
 	int i, numPts, value, repeat, ret = 0;
 	
-	if ((endPts = malloc(numContours * sizeof(endPts[0]))) == NULL)
+	if ((contours = malloc(numContours * sizeof(contours[0]))) == NULL)
 		goto failure;
 
 	if (sft->font->size < offset + numContours * 2)
 		goto failure;
-	for (i = 0; i < numContours; ++i) {
-		endPts[i] = getu16(sft->font, offset);
+	for (numPts = i = 0; i < numContours; ++i) {
+		contours[i].first = numPts;
+		contours[i].last = getu16(sft->font, offset);
 		offset += 2;
+		numPts = contours[i].last + 1;
 	}
-	numPts = endPts[numContours - 1] + 1;
 
-	if ((memory = malloc(numPts * 17)) == NULL)
+	if ((memory = malloc((numPts + 2) * 17)) == NULL)
 		goto failure;
-	flags = memory;
-	xCoords = (double *) (flags + numPts);
-	yCoords = xCoords + numPts;
+	flags = memory + 2;
+	xCoords = (double *) (flags + numPts) + 2;
+	yCoords = xCoords + numPts + 2;
 
 	/* Skip hinting instructions. */
 	if (sft->font->size < offset + 2)
@@ -480,14 +482,18 @@ draw_simple(SFT *sft, unsigned long offset, int numContours, struct affine xAffi
 		yCoords[i] = AFFINE(yAffine, value);
 	}
 	/* Print contours. */
-	for (int j = 0, i = 0; j < numContours; ++j) {
+	for (int j = 0; j < numContours; ++j) {
 		printf("contour #%d:\n", j);
-		for (; i <= endPts[j]; ++i) {
+		/* --i;
+		flags[i] = flags[endPts[j]];
+		xCoords[i] = xCoords[endPts[j]];
+		yCoords[i] = yCoords[endPts[j]]; */
+		for (i = contours[j].first; i <= contours[j].last; ++i) {
 			printf("%s, %f, %f\n", flags[i] & 0x01 ? "ON " : "OFF", xCoords[i], yCoords[i]);
 		}
 	}
 cleanup:
-	free(endPts);
+	free(contours);
 	free(memory);
 	return ret;
 

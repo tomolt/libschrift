@@ -153,6 +153,7 @@ sft_loadfile(char const *filename)
 		free(font);
 		return NULL;
 	}
+	/* Check for a compatible scalerType (magic number). */
 	scalerType = getu32(font, 0);
 	if (scalerType != 0x00010000 && scalerType != 0x74727565) {
 		free(font);
@@ -175,6 +176,7 @@ sft_create(void)
 	SFT *sft;
 	if ((sft = calloc(1, sizeof(SFT))) == NULL)
 		return NULL;
+	/* Initially set all flags to true. */
 	sft->flags = ~(uint32_t) 0;
 	return sft;
 }
@@ -243,6 +245,7 @@ sft_move(SFT *sft, double x, double y)
 {
 	sft->x = x;
 	sft->y = y;
+	/* Reset kerning state. */
 	sft->glyph = 0;
 }
 
@@ -260,23 +263,23 @@ cmap_fmt4(SFT_Font *font, unsigned long table, unsigned int charCode)
 	segCountX2 = getu16(font, table);
 	if ((segCountX2 & 1) || !segCountX2)
 		return -1;
-
+	/* Find starting positions of the relevant arrays. */
 	endCodes = table + 8;
 	startCodes = endCodes + segCountX2 + 2;
 	idDeltas = startCodes + segCountX2;
 	idRangeOffsets = idDeltas + segCountX2;
 	if (font->size < idRangeOffsets + segCountX2)
 		return -1;
-
+	/* Find the segment that contains charCode by binary searching over the highest codes in the segments. */
 	segIdxX2 = (uintptr_t) csearch(key, font->memory + endCodes,
 		segCountX2 / 2, 2, cmpu16) - (uintptr_t) (font->memory + endCodes);
-
+	/* Look up segment info from the arrays & short circuit if the spec requires. */
 	if ((startCode = getu16(font, startCodes + segIdxX2)) > charCode)
 		return 0;
 	idDelta = geti16(font, idDeltas + segIdxX2);
 	if (!(idRangeOffset = getu16(font, idRangeOffsets + segIdxX2)))
 		return (charCode + idDelta) & 0xFFFF;
-
+	/* Calculate offset into glyph array and determine ultimate value. */
 	idOffset = idRangeOffsets + segIdxX2 + idRangeOffset + 2 * (charCode - startCode);
 	if (font->size < idOffset + 2)
 		return -1;
@@ -289,7 +292,7 @@ glyph_id(SFT_Font *font, unsigned int charCode)
 {
 	unsigned long entry, table;
 	long cmap;
-	unsigned int i, numEntries, platformId, encodingId;
+	unsigned int idx, numEntries;
 	int type;
 
 	if ((cmap = gettable(font, "cmap")) < 0)
@@ -301,19 +304,15 @@ glyph_id(SFT_Font *font, unsigned int charCode)
 	
 	if (font->size < (unsigned long) cmap + 4 + numEntries * 8)
 		return -1;
-	for (i = 0; i < numEntries; ++i) {
-		entry = cmap + 4 + i * 8;
-		
-		platformId = getu16(font, entry);
-		encodingId = getu16(font, entry + 2);
-		type = platformId * 0100 + encodingId;
-		
+	/* Search for the first Unicode BMP entry. */
+	for (idx = 0; idx < numEntries; ++idx) {
+		entry = cmap + 4 + idx * 8;
+		type = getu16(font, entry) * 0100 + getu16(font, entry + 2);
 		if (type == 0003 || type == 0301) {
-			
 			table = cmap + getu32(font, entry + 4);
 			if (font->size < table + 6)
 				return -1;
-
+			/* Dispatch based on cmap format. */
 			switch (getu16(font, table)) {
 			case 4:
 				return cmap_fmt4(font, table + 6, charCode);
@@ -423,36 +422,48 @@ sft_char(SFT *sft, unsigned int charCode, int extents[4])
 		return -1;
 	if (sft->font->size < (unsigned long) glyf + 10)
 		return -1;
-
 	if (offset == next) {
+		/* Glyph has completely empty outline. This is allowed by the spec. */
 		memset(extents, 0, 4 * sizeof(int));
 	} else {
+		/* Glyph has an outline. */
 		outline = glyf + offset;
 		numContours = geti16(sft->font, outline);
-		(void) numContours;
+		/* Set up linear transformations. */
 		xAffine = (struct affine) { sft->xScale / unitsPerEm, sft->x + leftSideBearing };
 		yAffine = (struct affine) { sft->yScale / unitsPerEm, sft->y };
+		/* Calculate outline extents. */
 		extents[0] = (int) AFFINE(xAffine, geti16(sft->font, outline + 2) - 1);
 		extents[1] = (int) AFFINE(yAffine, geti16(sft->font, outline + 4) - 1);
 		extents[2] = (int) ceil(AFFINE(xAffine, geti16(sft->font, outline + 6) + 1));
 		extents[3] = (int) ceil(AFFINE(yAffine, geti16(sft->font, outline + 8) + 1));
-
+		/* Render the outline (if requested). */
 		if (sft->flags & SFT_CHAR_RENDER) {
+			/* Make transformations relative to min corner. */
 			xAffine.move -= extents[0];
 			yAffine.move -= extents[1];
+			/* Allocate internal buffer for drawing into. */
 			width = extents[2] - extents[0];
 			height = extents[3] - extents[1];
 			if ((buffer = calloc(width * height, 4)) == NULL)
 				return -1;
+			if (numContours >= 0) {
+				/* Glyph has a 'simple' outline consisting of a number of contours. */
+				/* TODO Implement this path! */
+			} else {
+				/* Glyph has a compound outline combined from mutiple other outlines. */
+				/* TODO Implement this path! */
+				free(buffer);
+				return -1;
+			}
 			free(buffer);
 		}
 	}
-
+	/* Advance into position for the next character (if requested). */
 	if (sft->flags & SFT_CHAR_ADVANCE) {
 		sft->x += advanceWidth;
 		sft->glyph = glyph;
 	}
-
 	return 0;
 }
 

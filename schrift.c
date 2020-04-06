@@ -402,8 +402,8 @@ static int
 draw_simple(SFT *sft, unsigned long offset, int numContours, struct affine xAffine, struct affine yAffine)
 {
 	int *endPts = NULL;
-	double *xCoords = NULL, *yCoords = NULL;
-	uint8_t *flags = NULL;
+	double *xCoords, *yCoords;
+	uint8_t *memory = NULL, *flags;
 	int i, numPts, value, repeat, ret = 0;
 	
 	if ((endPts = malloc(numContours * sizeof(endPts[0]))) == NULL)
@@ -417,12 +417,12 @@ draw_simple(SFT *sft, unsigned long offset, int numContours, struct affine xAffi
 	}
 	numPts = endPts[numContours - 1] + 1;
 
-	if ((flags = malloc(numPts * sizeof(flags[0]))) == NULL)
+	if ((memory = malloc(numPts * 17)) == NULL)
 		goto failure;
-	if ((xCoords = malloc(numPts * sizeof(xCoords[0]))) == NULL)
-		goto failure;
-	if ((yCoords = malloc(numPts * sizeof(yCoords[0]))) == NULL)
-		goto failure;
+	flags = memory;
+	xCoords = (double *) (flags + numPts);
+	yCoords = xCoords + numPts;
+
 	/* Skip hinting instructions. */
 	if (sft->font->size < offset + 2)
 		goto failure;
@@ -481,16 +481,14 @@ draw_simple(SFT *sft, unsigned long offset, int numContours, struct affine xAffi
 	}
 	/* Print contours. */
 	for (int j = 0, i = 0; j < numContours; ++j) {
-		printf("countour #%d:\n", j);
+		printf("contour #%d:\n", j);
 		for (; i <= endPts[j]; ++i) {
 			printf("%s, %f, %f\n", flags[i] & 0x01 ? "ON " : "OFF", xCoords[i], yCoords[i]);
 		}
 	}
 cleanup:
 	free(endPts);
-	free(flags);
-	free(xCoords);
-	free(yCoords);
+	free(memory);
 	return ret;
 
 failure:

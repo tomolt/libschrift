@@ -484,11 +484,33 @@ draw_simple(SFT *sft, unsigned long offset, int numContours, struct affine xAffi
 	/* Print contours. */
 	for (int j = 0; j < numContours; ++j) {
 		printf("contour #%d:\n", j);
-		/* --i;
-		flags[i] = flags[endPts[j]];
-		xCoords[i] = xCoords[endPts[j]];
-		yCoords[i] = yCoords[endPts[j]]; */
-		for (i = contours[j].first; i <= contours[j].last; ++i) {
+		int f = contours[j].first, l = contours[j].last;
+		/* Rotate contour points back by one position to make space to the right. */
+		--f;
+		flags[f] = flags[l];
+		xCoords[f] = xCoords[l];
+		yCoords[f] = yCoords[l];
+		--l;
+		/* Connect the two ends of the contour such that it both starts and ends with an on-curve point. */
+		if (flags[f] & 0x01) {
+			++l;
+			flags[l] = flags[f];
+			xCoords[l] = xCoords[f];
+			yCoords[l] = yCoords[f];
+		} else if (flags[l] & 0x01) {
+			--f;
+			flags[f] = flags[l];
+			xCoords[f] = xCoords[l];
+			yCoords[f] = yCoords[l];
+		} else {
+			double cx = 0.5 * xCoords[f] + 0.5 * xCoords[l];
+			double cy = 0.5 * yCoords[f] + 0.5 * yCoords[l];
+			--f, ++l;
+			flags[f] = flags[l] = 0x01;
+			xCoords[f] = xCoords[l] = cx;
+			yCoords[f] = yCoords[l] = cy;
+		}
+		for (i = f; i <= l; ++i) {
 			printf("%s, %f, %f\n", flags[i] & 0x01 ? "ON " : "OFF", xCoords[i], yCoords[i]);
 		}
 	}

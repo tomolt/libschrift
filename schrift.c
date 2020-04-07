@@ -14,9 +14,12 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 #include <math.h>
+
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/mman.h>
 
 #include "schrift.h"
 
@@ -52,7 +55,8 @@ struct SFT
 
 /* function declarations */
 /* file loading */
-static int readfile(SFT_Font *font, const char *filename);
+static int  map_file(SFT_Font *font, const char *filename);
+static void unmap_file(SFT_Font *font);
 /* TTF parsing */
 static void *csearch(const void *key, const void *base,
 	size_t nmemb, size_t size, int (*compar)(const void *, const void *));
@@ -95,7 +99,7 @@ sft_loadfile(char const *filename)
 	if ((font = calloc(1, sizeof(SFT_Font))) == NULL) {
 		return NULL;
 	}
-	if (readfile(font, filename) < 0) {
+	if (map_file(font, filename) < 0) {
 		free(font);
 		return NULL;
 	}
@@ -112,7 +116,7 @@ void
 sft_freefont(SFT_Font *font)
 {
 	if (font == NULL) return;
-	free(font->memory);
+	unmap_file(font);
 	free(font);
 }
 
@@ -218,25 +222,30 @@ sft_char(SFT *sft, unsigned int charCode, int extents[4])
 }
 
 static int
-readfile(SFT_Font *font, const char *filename)
+map_file(SFT_Font *font, const char *filename)
 {
-	FILE *file;
 	struct stat info;
-	if (stat(filename, &info) < 0) {
+	int fd;
+	font->memory = MAP_FAILED;
+	font->size = 0;
+	if ((fd = open(filename, O_RDONLY)) < 0) {
 		return -1;
 	}
+	if (fstat(fd, &info) < 0) {
+		close(fd);
+		return -1;
+	}
+	font->memory = mmap(NULL, info.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
 	font->size = info.st_size;
-	if ((font->memory = malloc(font->size)) == NULL) {
-		return -1;
-	}
-	if ((file = fopen(filename, "rb")) == NULL) {
-		free(font->memory);
-		return -1;
-	}
-	/* TODO error handling here! */
-	fread(font->memory, 1, font->size, file);
-	fclose(file);
-	return 0;
+	close(fd);
+	return font->memory != MAP_FAILED ? 0 : -1;
+}
+
+static void
+unmap_file(SFT_Font *font)
+{
+	if (font->memory != MAP_FAILED)
+		munmap(font->memory, font->size);
 }
 
 /* Like bsearch(), but returns the next highest element if key could not be found. */

@@ -42,163 +42,41 @@ struct SFT
 };
 
 /* function declarations */
+/* file loading */
+static int readfile(SFT_Font *font, const char *filename);
+/* TTF parsing */
 static void *csearch(const void *key, const void *base,
 	size_t nmemb, size_t size, int (*compar)(const void *, const void *));
-static struct point midpoint(struct point a, struct point b);
-
+static int  cmpu16(const void *a, const void *b);
+static int  cmpu32(const void *a, const void *b);
 static inline uint8_t  getu8 (SFT_Font *font, unsigned long offset);
 static inline uint16_t getu16(SFT_Font *font, unsigned long offset);
 static inline int16_t  geti16(SFT_Font *font, unsigned long offset);
 static inline uint32_t getu32(SFT_Font *font, unsigned long offset);
-
-static int cmpu16(const void *a, const void *b);
-static int cmpu32(const void *a, const void *b);
-
 static long gettable(SFT_Font *font, char tag[4]);
-
-static int readfile(SFT_Font *font, const char *filename);
-
-static int units_per_em(SFT_Font *font);
-
+static int  units_per_em(SFT_Font *font);
 static long cmap_fmt4(SFT_Font *font, unsigned long table, unsigned int charCode);
 static long glyph_id(SFT_Font *font, unsigned int charCode);
-
-static int num_long_hmtx(SFT_Font *font);
-static int hor_metrics(SFT *sft, long glyph, double *advanceWidth, double *leftSideBearing);
-
-static int loca_format(SFT_Font *font);
+static int  num_long_hmtx(SFT_Font *font);
+static int  hor_metrics(SFT *sft, long glyph, double *advanceWidth, double *leftSideBearing);
+static int  loca_format(SFT_Font *font);
 static long outline_offset(SFT_Font *font, long glyph);
-
 static long simple_flags(SFT_Font *font, unsigned long offset, int numPts, uint8_t *flags);
-static int simple_points(SFT_Font *font, long offset, int numPts, uint8_t *flags, struct point *points);
-
+static int  simple_points(SFT_Font *font, long offset, int numPts, uint8_t *flags, struct point *points);
 static void transform_points(int numPts, struct point *points, struct affine xAffine, struct affine yAffine);
-
-static void draw_line(struct line line);
-
+static void draw_contours(int numContours, struct contour *contours, uint8_t *flags, struct point *points);
+static int  draw_simple(SFT *sft, long offset, int numContours, struct affine xAffine, struct affine yAffine);
+static int  proc_outline(SFT *sft, unsigned long offset, double leftSideBearing, int extents[4]);
+/* tesselation */
+static struct point midpoint(struct point a, struct point b);
 static double manhattan(struct point a, struct point b);
-
-static int is_flat(struct curve curve, double flatness);
+static int  is_flat(struct curve curve, double flatness);
 static void split_curve(struct curve curve, struct curve segments[2]);
 static void draw_curve(struct curve curve);
-static void draw_contours(int numContours, struct contour *contours, uint8_t *flags, struct point *points);
-
-static int draw_simple(SFT *sft, long offset, int numContours, struct affine xAffine, struct affine yAffine);
-
-static int proc_outline(SFT *sft, unsigned long offset, double leftSideBearing, int extents[4]);
+/* silhouette rasterization */
+static void draw_line(struct line line);
 
 /* function implementations */
-
-/* Like bsearch(), but returns the next highest element if key could not be found. */
-static void *
-csearch(const void *key, const void *base,
-	size_t nmemb, size_t size,
-	int (*compar)(const void *, const void *))
-{
-	const uint8_t *bytes = base, *sample;
-	size_t low = 0, high = nmemb - 1, mid;
-	if (nmemb == 0)
-		return NULL;
-	while (low != high) {
-		mid = low + (high - low) / 2;
-		sample = bytes + mid * size;
-		if (compar(key, sample) > 0) {
-			low = mid + 1;
-		} else {
-			high = mid;
-		}
-	}
-	return (uint8_t *) bytes + low * size;
-}
-
-static struct point
-midpoint(struct point a, struct point b)
-{
-	return (struct point) {
-		0.5 * a.x + 0.5 * b.x,
-		0.5 * a.y + 0.5 * b.y
-	};
-}
-
-static inline uint8_t
-getu8(SFT_Font *font, unsigned long offset)
-{
-	assert(offset + 1 <= font->size);
-	return *(font->memory + offset);
-}
-
-static inline uint16_t
-getu16(SFT_Font *font, unsigned long offset)
-{
-	assert(offset + 2 <= font->size);
-	uint8_t *base = font->memory + offset;
-	uint16_t b1 = base[0], b0 = base[1]; 
-	return (uint16_t) (b1 << 8 | b0);
-}
-
-static inline int16_t
-geti16(SFT_Font *font, unsigned long offset)
-{
-	return (int16_t) getu16(font, offset);
-}
-
-static inline uint32_t
-getu32(SFT_Font *font, unsigned long offset)
-{
-	assert(offset + 4 <= font->size);
-	uint8_t *base = font->memory + offset;
-	uint32_t b3 = base[0], b2 = base[1], b1 = base[2], b0 = base[3]; 
-	return (uint32_t) (b3 << 24 | b2 << 16 | b1 << 8 | b0);
-}
-
-static int
-cmpu16(const void *a, const void *b)
-{
-	return memcmp(a, b, 2);
-}
-
-static int
-cmpu32(const void *a, const void *b)
-{
-	return memcmp(a, b, 4);
-}
-
-static long
-gettable(SFT_Font *font, char tag[4])
-{
-	void *match;
-	unsigned int numTables;
-	if (font->size < 12)
-		return -1;
-	numTables = getu16(font, 4);
-	if (font->size < 12 + (size_t) numTables * 16)
-		return -1;
-	if ((match = bsearch(tag, font->memory + 12, numTables, 16, cmpu32)) == NULL)
-		return -1;
-	return getu32(font, (uint8_t *) match - font->memory + 8);
-}
-
-static int
-readfile(SFT_Font *font, const char *filename)
-{
-	FILE *file;
-	struct stat info;
-	if (stat(filename, &info) < 0) {
-		return -1;
-	}
-	font->size = info.st_size;
-	if ((font->memory = malloc(font->size)) == NULL) {
-		return -1;
-	}
-	if ((file = fopen(filename, "rb")) == NULL) {
-		free(font->memory);
-		return -1;
-	}
-	/* TODO error handling here! */
-	fread(font->memory, 1, font->size, file);
-	fclose(file);
-	return 0;
-}
 
 SFT_Font *
 sft_loadfile(char const *filename)
@@ -270,17 +148,6 @@ sft_setscale(SFT *sft, double xScale, double yScale)
 	sft->yScale = yScale;
 }
 
-static int
-units_per_em(SFT_Font *font)
-{
-	long head;
-	if ((head = gettable(font, "head")) < 0)
-		return -1;
-	if (font->size < (unsigned long) head + 54)
-		return -1;
-	return getu16(font, head + 18);
-}
-
 int
 sft_linemetrics(SFT *sft, double *ascent, double *descent, double *gap)
 {
@@ -306,6 +173,152 @@ sft_move(SFT *sft, double x, double y)
 	sft->y = y;
 	/* Reset kerning state. */
 	sft->glyph = 0;
+}
+
+int
+sft_char(SFT *sft, unsigned int charCode, int extents[4])
+{
+	double advanceWidth, leftSideBearing;
+	long glyph, glyf, offset, next;
+	if ((glyph = glyph_id(sft->font, charCode)) < 0)
+		return -1;
+	if (hor_metrics(sft, glyph, &advanceWidth, &leftSideBearing) < 0)
+		return -1;
+	if ((glyf = gettable(sft->font, "glyf")) < 0)
+		return -1;
+	if ((offset = outline_offset(sft->font, glyph)) < 0)
+		return -1;
+	if ((next = outline_offset(sft->font, glyph + 1)) < 0)
+		return -1;
+	if (sft->font->size < (unsigned long) glyf + 10)
+		return -1;
+	if (offset == next) {
+		/* Glyph has completely empty outline. This is allowed by the spec. */
+		memset(extents, 0, 4 * sizeof(int));
+	} else {
+		/* Glyph has an outline. */
+		if (proc_outline(sft, glyf + offset, leftSideBearing, extents) < 0)
+			return -1;
+	}
+	/* Advance into position for the next character (if requested). */
+	if (sft->flags & SFT_CHAR_ADVANCE) {
+		sft->x += advanceWidth;
+		sft->glyph = glyph;
+	}
+	return 0;
+}
+
+static int
+readfile(SFT_Font *font, const char *filename)
+{
+	FILE *file;
+	struct stat info;
+	if (stat(filename, &info) < 0) {
+		return -1;
+	}
+	font->size = info.st_size;
+	if ((font->memory = malloc(font->size)) == NULL) {
+		return -1;
+	}
+	if ((file = fopen(filename, "rb")) == NULL) {
+		free(font->memory);
+		return -1;
+	}
+	/* TODO error handling here! */
+	fread(font->memory, 1, font->size, file);
+	fclose(file);
+	return 0;
+}
+
+/* Like bsearch(), but returns the next highest element if key could not be found. */
+static void *
+csearch(const void *key, const void *base,
+	size_t nmemb, size_t size,
+	int (*compar)(const void *, const void *))
+{
+	const uint8_t *bytes = base, *sample;
+	size_t low = 0, high = nmemb - 1, mid;
+	if (nmemb == 0)
+		return NULL;
+	while (low != high) {
+		mid = low + (high - low) / 2;
+		sample = bytes + mid * size;
+		if (compar(key, sample) > 0) {
+			low = mid + 1;
+		} else {
+			high = mid;
+		}
+	}
+	return (uint8_t *) bytes + low * size;
+}
+
+static int
+cmpu16(const void *a, const void *b)
+{
+	return memcmp(a, b, 2);
+}
+
+static int
+cmpu32(const void *a, const void *b)
+{
+	return memcmp(a, b, 4);
+}
+
+static inline uint8_t
+getu8(SFT_Font *font, unsigned long offset)
+{
+	assert(offset + 1 <= font->size);
+	return *(font->memory + offset);
+}
+
+static inline uint16_t
+getu16(SFT_Font *font, unsigned long offset)
+{
+	assert(offset + 2 <= font->size);
+	uint8_t *base = font->memory + offset;
+	uint16_t b1 = base[0], b0 = base[1]; 
+	return (uint16_t) (b1 << 8 | b0);
+}
+
+static inline int16_t
+geti16(SFT_Font *font, unsigned long offset)
+{
+	return (int16_t) getu16(font, offset);
+}
+
+static inline uint32_t
+getu32(SFT_Font *font, unsigned long offset)
+{
+	assert(offset + 4 <= font->size);
+	uint8_t *base = font->memory + offset;
+	uint32_t b3 = base[0], b2 = base[1], b1 = base[2], b0 = base[3]; 
+	return (uint32_t) (b3 << 24 | b2 << 16 | b1 << 8 | b0);
+}
+
+static long
+gettable(SFT_Font *font, char tag[4])
+{
+	void *match;
+	unsigned int numTables;
+	if (font->size < 12)
+		return -1;
+	numTables = getu16(font, 4);
+	if (font->size < 12 + (size_t) numTables * 16)
+		return -1;
+	if ((match = bsearch(tag, font->memory + 12, numTables, 16, cmpu32)) == NULL)
+		return -1;
+	return getu32(font, (uint8_t *) match - font->memory + 8);
+}
+
+static int
+units_per_em(SFT_Font *font)
+{
+	long head;
+	if ((head = gettable(font, "head")) < 0)
+		return -1;
+	if (font->size < (unsigned long) head + 54)
+		return -1;
+	return getu16(font, head + 18);
 }
 
 static long
@@ -523,62 +536,6 @@ transform_points(int numPts, struct point *points, struct affine xAffine, struct
 }
 
 static void
-draw_line(struct line line)
-{
-	printf("(%f, %f) -> (%f, %f)\n",
-		line.beg.x, line.beg.y, line.end.x, line.end.y);
-}
-
-static double
-manhattan(struct point a, struct point b)
-{
-	return ABS(a.x - b.x) + ABS(a.y - b.y);
-}
-
-static int
-is_flat(struct curve curve, double flatness)
-{
-	struct point mid = midpoint(curve.beg, curve.end);
-	double dist = manhattan(curve.ctrl, mid);
-	return dist <= flatness;
-}
-
-static void
-split_curve(struct curve curve, struct curve segments[2])
-{
-	struct point ctrl0 = midpoint(curve.beg, curve.ctrl);
-	struct point ctrl1 = midpoint(curve.ctrl, curve.end);
-	struct point pivot = midpoint(ctrl0, ctrl1);
-	segments[0] = (struct curve) { curve.beg, pivot, ctrl0 };
-	segments[1] = (struct curve) { pivot, curve.end, ctrl1 };
-}
-
-static void
-draw_curve(struct curve curve)
-{
-	/*
-	From my tests I can conclude that this stack barely reaches a top height
-	of 4 elements even for the largest font sizes I'm willing to support. And
-	as space requirements should only grow logarithmically, I think 10 is
-	more than enough.
-	*/
-#define STACK_SIZE 10
-	int top = 1;
-	struct curve stack[STACK_SIZE];
-	stack[0] = curve;
-	while (top > 0) {
-		struct curve curve = stack[--top];
-		if (is_flat(curve, 0.5) || top + 2 > STACK_SIZE) {
-			struct line line = { curve.beg, curve.end };
-			draw_line(line);
-		} else {
-			split_curve(curve, &stack[top]);
-			top += 2;
-		}
-	}
-}
-
-static void
 draw_contours(int numContours, struct contour *contours, uint8_t *flags, struct point *points)
 {
 #define MOVEPT(d, s) do { _d = (d), _s = (s); flags[_d] = flags[_s]; points[_d] = points[_s]; } while (0)
@@ -715,36 +672,68 @@ proc_outline(SFT *sft, unsigned long offset, double leftSideBearing, int extents
 	return 0;
 }
 
-int
-sft_char(SFT *sft, unsigned int charCode, int extents[4])
+static struct point
+midpoint(struct point a, struct point b)
 {
-	double advanceWidth, leftSideBearing;
-	long glyph, glyf, offset, next;
-	if ((glyph = glyph_id(sft->font, charCode)) < 0)
-		return -1;
-	if (hor_metrics(sft, glyph, &advanceWidth, &leftSideBearing) < 0)
-		return -1;
-	if ((glyf = gettable(sft->font, "glyf")) < 0)
-		return -1;
-	if ((offset = outline_offset(sft->font, glyph)) < 0)
-		return -1;
-	if ((next = outline_offset(sft->font, glyph + 1)) < 0)
-		return -1;
-	if (sft->font->size < (unsigned long) glyf + 10)
-		return -1;
-	if (offset == next) {
-		/* Glyph has completely empty outline. This is allowed by the spec. */
-		memset(extents, 0, 4 * sizeof(int));
-	} else {
-		/* Glyph has an outline. */
-		if (proc_outline(sft, glyf + offset, leftSideBearing, extents) < 0)
-			return -1;
+	return (struct point) {
+		0.5 * a.x + 0.5 * b.x,
+		0.5 * a.y + 0.5 * b.y
+	};
+}
+
+static double
+manhattan(struct point a, struct point b)
+{
+	return ABS(a.x - b.x) + ABS(a.y - b.y);
+}
+
+static int
+is_flat(struct curve curve, double flatness)
+{
+	struct point mid = midpoint(curve.beg, curve.end);
+	double dist = manhattan(curve.ctrl, mid);
+	return dist <= flatness;
+}
+
+static void
+split_curve(struct curve curve, struct curve segments[2])
+{
+	struct point ctrl0 = midpoint(curve.beg, curve.ctrl);
+	struct point ctrl1 = midpoint(curve.ctrl, curve.end);
+	struct point pivot = midpoint(ctrl0, ctrl1);
+	segments[0] = (struct curve) { curve.beg, pivot, ctrl0 };
+	segments[1] = (struct curve) { pivot, curve.end, ctrl1 };
+}
+
+static void
+draw_curve(struct curve curve)
+{
+	/*
+	From my tests I can conclude that this stack barely reaches a top height
+	of 4 elements even for the largest font sizes I'm willing to support. And
+	as space requirements should only grow logarithmically, I think 10 is
+	more than enough.
+	*/
+#define STACK_SIZE 10
+	int top = 1;
+	struct curve stack[STACK_SIZE];
+	stack[0] = curve;
+	while (top > 0) {
+		struct curve curve = stack[--top];
+		if (is_flat(curve, 0.5) || top + 2 > STACK_SIZE) {
+			struct line line = { curve.beg, curve.end };
+			draw_line(line);
+		} else {
+			split_curve(curve, &stack[top]);
+			top += 2;
+		}
 	}
-	/* Advance into position for the next character (if requested). */
-	if (sft->flags & SFT_CHAR_ADVANCE) {
-		sft->x += advanceWidth;
-		sft->glyph = glyph;
-	}
-	return 0;
+}
+
+static void
+draw_line(struct line line)
+{
+	printf("(%f, %f) -> (%f, %f)\n",
+		line.beg.x, line.beg.y, line.end.x, line.end.y);
 }
 

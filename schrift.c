@@ -399,76 +399,90 @@ outline_offset(SFT_Font *font, long glyph)
 	}
 }
 
-static int
-draw_simple(SFT *sft, unsigned long offset, int numContours, struct affine xAffine, struct affine yAffine)
+static long
+skip_hints(SFT_Font *font, long offset)
 {
-#define ADVU8(var, asgn) do { if (sft->font->size < offset + 1) goto failure; var asgn getu8(sft->font, offset); ++offset; } while (0)
-#define ADVU16(var, asgn) do { if (sft->font->size < offset + 2) goto failure; var asgn getu16(sft->font, offset); offset += 2; } while (0)
-#define ADVI16(var, asgn) do { if (sft->font->size < offset + 2) goto failure; var asgn geti16(sft->font, offset); offset += 2; } while (0)
-#define MOVEPT(d, s) do { _d = (d), _s = (s); flags[_d] = flags[_s]; points[_d] = points[_s]; } while (0)
-	
-	struct point *points;
-	struct contour *contours = NULL;
-	uint8_t *memory = NULL, *flags;
-	int i, numPts, value, repeat, _d, _s;
+	if (font->size < (unsigned long) offset + 2)
+		return -1;
+	return offset + 2 + getu16(font, offset);
+}
 
-	if ((contours = malloc(numContours * sizeof(contours[0]))) == NULL)
-		goto failure;
-
-	for (numPts = i = 0; i < numContours; ++i) {
-		contours[i].first = numPts;
-		ADVU16(contours[i].last, =);
-		numPts = contours[i].last + 1;
-	}
-
-	if ((memory = malloc((numPts + 2) * (1 + sizeof(points[0])))) == NULL)
-		goto failure;
-	flags = memory + 2;
-	points = (struct point *) (flags + numPts) + 2;
-
-	/* Skip hinting instructions. */
-	ADVU16(offset, +=);
-	/* Read flags. */
-	for (value = repeat = i = 0; i < numPts; ++i) {
+static long
+read_flags(SFT_Font *font, unsigned long offset, int numPts, uint8_t *flags)
+{
+	int value = 0, repeat = 0, i;
+	for (i = 0; i < numPts; ++i) {
 		if (repeat) {
 			--repeat;
 		} else {
-			ADVU8(value, =);
-			if (value & 0x08)
-				ADVU8(repeat, =);
+			if (font->size < offset + 1)
+				return -1;
+			value = getu8(font, offset++);
+			if (value & 0x08) {
+				if (font->size < offset + 1)
+					return -1;
+				repeat = getu8(font, offset++);
+			}
 		}
 		flags[i] = value;
 	}
-	/* Read x coordinates. */
-	for (value = i = 0; i < numPts; ++i) {
+	return offset;
+}
+
+static void
+count_coord_bytes(int numPts, uint8_t *flags, long *xBytes, long *yBytes)
+{
+	long x = 0, y = 0;
+	int i;
+	for (i = 0; i < numPts; ++i) {
+		if (flags[i] & 0x02) x += 1;
+		else if (!(flags[i] & 0x10)) x += 2;
+		if (flags[i] & 0x04) y += 1;
+		else if (!(flags[i] & 0x20)) y += 2;
+	}
+	*xBytes = x, *yBytes = y;
+}
+
+static void
+read_coords(SFT_Font *font, long xOffset, long yOffset, int numPts, uint8_t *flags, struct point *points)
+{
+	long x = 0, y = 0;
+	int i;
+	for (i = 0; i < numPts; ++i) {
 		if (flags[i] & 0x02) {
-			if (flags[i] & 0x10) {
-				ADVU8(value, +=);
-			} else {
-				ADVU8(value, -=);
-			}
+			x += (long) getu8(font, xOffset++) * (flags[i] & 0x10 ? 1 : -1);
 		} else if (!(flags[i] & 0x10)) {
-			ADVI16(value, +=);
+			x += geti16(font, xOffset);
+			xOffset += 2;
 		}
-		points[i].x = AFFINE(xAffine, value);
-	}
-	/* Read y coordinates. */
-	for (value = i = 0; i < numPts; ++i) {
 		if (flags[i] & 0x04) {
-			if (flags[i] & 0x20) {
-				ADVU8(value, +=);
-			} else {
-				ADVU8(value, -=);
-			}
+			y += (long) getu8(font, yOffset++) * (flags[i] & 0x20 ? 1 : -1);
 		} else if (!(flags[i] & 0x20)) {
-			ADVI16(value, +=);
+			y += geti16(font, yOffset);
+			yOffset += 2;
 		}
-		points[i].y = AFFINE(yAffine, value);
+		points[i] = (struct point) { x, y };
 	}
-	/* Print contours. */
-	for (int j = 0; j < numContours; ++j) {
-		printf("contour #%d:\n", j);
-		int f = contours[j].first, l = contours[j].last;
+}
+
+static void
+transform_points(int numPts, struct point *points, struct affine xAffine, struct affine yAffine)
+{
+	int i;
+	for (i = 0; i < numPts; ++i) {
+		points[i].x = AFFINE(xAffine, points[i].x);
+		points[i].y = AFFINE(yAffine, points[i].y);
+	}
+}
+
+static void
+draw_contours(int numContours, struct contour *contours, uint8_t *flags, struct point *points)
+{
+#define MOVEPT(d, s) do { _d = (d), _s = (s); flags[_d] = flags[_s]; points[_d] = points[_s]; } while (0)
+	int c, i, _d, _s;
+	for (c = 0; c < numContours; ++c) {
+		printf("contour #%d:\n", c);
+		int f = contours[c].first, l = contours[c].last;
 		/* Rotate contour points back by one position to make space to the right. */
 		MOVEPT(--f, l--);
 		/* Connect the two ends of the contour such that it both starts and ends with an on-curve point. */
@@ -489,6 +503,45 @@ draw_simple(SFT *sft, unsigned long offset, int numContours, struct affine xAffi
 			printf("%s, %f, %f\n", flags[i] & 0x01 ? "ON " : "OFF", points[i].x, points[i].y);
 		}
 	}
+}
+
+static int
+draw_simple(SFT *sft, long offset, int numContours, struct affine xAffine, struct affine yAffine)
+{
+	struct point *points;
+	struct contour *contours = NULL;
+	uint8_t *memory = NULL, *flags;
+	long xBytes, yBytes;
+	int i, numPts;
+
+	if ((contours = malloc(numContours * sizeof(contours[0]))) == NULL)
+		goto failure;
+
+	if (sft->font->size < (unsigned long) offset + numContours * 2)
+		goto failure;
+	for (numPts = i = 0; i < numContours; ++i) {
+		contours[i].first = numPts;
+		contours[i].last = getu16(sft->font, offset);
+		numPts = contours[i].last + 1;
+		offset += 2;
+	}
+
+	if ((memory = malloc((numPts + 2) * (1 + sizeof(points[0])))) == NULL)
+		goto failure;
+	/* FIXME points should come before flags to guarantee good memory alignment. */
+	flags = memory + 2;
+	points = (struct point *) (flags + numPts) + 2;
+
+	if ((offset = skip_hints(sft->font, offset)) < 0)
+		goto failure;
+	if ((offset = read_flags(sft->font, offset, numPts, flags)) < 0)
+		goto failure;
+	count_coord_bytes(numPts, flags, &xBytes, &yBytes);
+	if (sft->font->size < (unsigned long) offset + xBytes + yBytes)
+		goto failure;
+	read_coords(sft->font, offset, offset + xBytes, numPts, flags, points);
+	transform_points(numPts, points, xAffine, yAffine);
+	draw_contours(numContours, contours, flags, points);
 	free(contours);
 	free(memory);
 	return 0;

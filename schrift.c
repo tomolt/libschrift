@@ -400,15 +400,7 @@ outline_offset(SFT_Font *font, long glyph)
 }
 
 static long
-skip_hints(SFT_Font *font, long offset)
-{
-	if (font->size < (unsigned long) offset + 2)
-		return -1;
-	return offset + 2 + getu16(font, offset);
-}
-
-static long
-read_flags(SFT_Font *font, unsigned long offset, int numPts, uint8_t *flags)
+simple_flags(SFT_Font *font, unsigned long offset, int numPts, uint8_t *flags)
 {
 	int value = 0, repeat = 0, i;
 	for (i = 0; i < numPts; ++i) {
@@ -429,25 +421,21 @@ read_flags(SFT_Font *font, unsigned long offset, int numPts, uint8_t *flags)
 	return offset;
 }
 
-static void
-count_coord_bytes(int numPts, uint8_t *flags, long *xBytes, long *yBytes)
+static int
+simple_points(SFT_Font *font, long offset, int numPts, uint8_t *flags, struct point *points)
 {
-	long x = 0, y = 0;
+	long xBytes = 0, yBytes = 0, xOffset, yOffset, x = 0, y = 0;
 	int i;
 	for (i = 0; i < numPts; ++i) {
-		if (flags[i] & 0x02) x += 1;
-		else if (!(flags[i] & 0x10)) x += 2;
-		if (flags[i] & 0x04) y += 1;
-		else if (!(flags[i] & 0x20)) y += 2;
+		if (flags[i] & 0x02) xBytes += 1;
+		else if (!(flags[i] & 0x10)) xBytes += 2;
+		if (flags[i] & 0x04) yBytes += 1;
+		else if (!(flags[i] & 0x20)) yBytes += 2;
 	}
-	*xBytes = x, *yBytes = y;
-}
-
-static void
-read_coords(SFT_Font *font, long xOffset, long yOffset, int numPts, uint8_t *flags, struct point *points)
-{
-	long x = 0, y = 0;
-	int i;
+	if (font->size < (unsigned long) offset + xBytes + yBytes)
+		return -1;
+	xOffset = offset;
+	yOffset = offset + xBytes;
 	for (i = 0; i < numPts; ++i) {
 		if (flags[i] & 0x02) {
 			x += (long) getu8(font, xOffset++) * (flags[i] & 0x10 ? 1 : -1);
@@ -463,6 +451,7 @@ read_coords(SFT_Font *font, long xOffset, long yOffset, int numPts, uint8_t *fla
 		}
 		points[i] = (struct point) { x, y };
 	}
+	return 0;
 }
 
 static void
@@ -512,10 +501,9 @@ draw_simple(SFT *sft, long offset, int numContours, struct affine xAffine, struc
 	struct contour *contours = NULL;
 	uint8_t *memory = NULL, *flags;
 	unsigned long memLen;
-	long xBytes, yBytes;
 	int i, numPts, top;
 
-	if (sft->font->size < (unsigned long) offset + numContours * 2)
+	if (sft->font->size < (unsigned long) offset + numContours * 2 + 2)
 		goto failure;
 	numPts = getu16(sft->font, offset + (numContours - 1) * 2) + 1;
 	
@@ -534,15 +522,12 @@ draw_simple(SFT *sft, long offset, int numContours, struct affine xAffine, struc
 		top = contours[i].last + 1;
 		offset += 2;
 	}
+	offset += 2 + getu16(sft->font, offset);
 
-	if ((offset = skip_hints(sft->font, offset)) < 0)
+	if ((offset = simple_flags(sft->font, offset, numPts, flags)) < 0)
 		goto failure;
-	if ((offset = read_flags(sft->font, offset, numPts, flags)) < 0)
+	if (simple_points(sft->font, offset, numPts, flags, points) < 0)
 		goto failure;
-	count_coord_bytes(numPts, flags, &xBytes, &yBytes);
-	if (sft->font->size < (unsigned long) offset + xBytes + yBytes)
-		goto failure;
-	read_coords(sft->font, offset, offset + xBytes, numPts, flags, points);
 	transform_points(numPts, points, xAffine, yAffine);
 	draw_contours(numContours, contours, flags, points);
 

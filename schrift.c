@@ -11,14 +11,15 @@
 
 #include "schrift.h"
 
+/* macros */
+#define AFFINE(affine, value) ((value) * (affine).scale + (affine).move)
 /* So as it turns out, these first three naive macros are actually
  * faster than any bit-tricks or specialized functions on amd64. */
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define ABS(x) ((x) >= 0 ? (x) : -(x))
 
-#define AFFINE(affine, value) ((value) * (affine).scale + (affine).move)
-
+/* structs */
 struct point  { double x, y; };
 struct line   { struct point beg, end; };
 struct curve  { struct point beg, ctrl, end; };
@@ -39,6 +40,54 @@ struct SFT
 	long glyph;
 	uint32_t flags;
 };
+
+/* function declarations */
+static void *csearch(const void *key, const void *base,
+	size_t nmemb, size_t size, int (*compar)(const void *, const void *));
+static struct point midpoint(struct point a, struct point b);
+
+static inline uint8_t  getu8 (SFT_Font *font, unsigned long offset);
+static inline uint16_t getu16(SFT_Font *font, unsigned long offset);
+static inline int16_t  geti16(SFT_Font *font, unsigned long offset);
+static inline uint32_t getu32(SFT_Font *font, unsigned long offset);
+
+static int cmpu16(const void *a, const void *b);
+static int cmpu32(const void *a, const void *b);
+
+static long gettable(SFT_Font *font, char tag[4]);
+
+static int readfile(SFT_Font *font, const char *filename);
+
+static int units_per_em(SFT_Font *font);
+
+static long cmap_fmt4(SFT_Font *font, unsigned long table, unsigned int charCode);
+static long glyph_id(SFT_Font *font, unsigned int charCode);
+
+static int num_long_hmtx(SFT_Font *font);
+static int hor_metrics(SFT *sft, long glyph, double *advanceWidth, double *leftSideBearing);
+
+static int loca_format(SFT_Font *font);
+static long outline_offset(SFT_Font *font, long glyph);
+
+static long simple_flags(SFT_Font *font, unsigned long offset, int numPts, uint8_t *flags);
+static int simple_points(SFT_Font *font, long offset, int numPts, uint8_t *flags, struct point *points);
+
+static void transform_points(int numPts, struct point *points, struct affine xAffine, struct affine yAffine);
+
+static void draw_line(struct line line);
+
+static double manhattan(struct point a, struct point b);
+
+static int is_flat(struct curve curve, double flatness);
+static void split_curve(struct curve curve, struct curve segments[2]);
+static void draw_curve(struct curve curve);
+static void draw_contours(int numContours, struct contour *contours, uint8_t *flags, struct point *points);
+
+static int draw_simple(SFT *sft, long offset, int numContours, struct affine xAffine, struct affine yAffine);
+
+static int proc_outline(SFT *sft, unsigned long offset, double leftSideBearing, int extents[4]);
+
+/* function implementations */
 
 /* Like bsearch(), but returns the next highest element if key could not be found. */
 static void *

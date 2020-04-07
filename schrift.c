@@ -511,26 +511,29 @@ draw_simple(SFT *sft, long offset, int numContours, struct affine xAffine, struc
 	struct point *points;
 	struct contour *contours = NULL;
 	uint8_t *memory = NULL, *flags;
+	unsigned long memLen;
 	long xBytes, yBytes;
-	int i, numPts;
-
-	if ((contours = malloc(numContours * sizeof(contours[0]))) == NULL)
-		goto failure;
+	int i, numPts, top;
 
 	if (sft->font->size < (unsigned long) offset + numContours * 2)
 		goto failure;
-	for (numPts = i = 0; i < numContours; ++i) {
-		contours[i].first = numPts;
+	numPts = getu16(sft->font, (numContours - 1) * 2) + 1;
+	
+	memLen  = (numPts + 2) * sizeof(points[0]);
+	memLen +=  numContours * sizeof(contours[0]);
+	memLen += (numPts + 2) * sizeof(flags[0]);
+	if ((memory = malloc(memLen)) == NULL)
+		goto failure;
+	points = (struct point *) memory + 2;
+	contours = (struct contour *) (points + numPts);
+	flags = (uint8_t *) (contours + numContours) + 2;
+
+	for (top = i = 0; i < numContours; ++i) {
+		contours[i].first = top;
 		contours[i].last = getu16(sft->font, offset);
-		numPts = contours[i].last + 1;
+		top = contours[i].last + 1;
 		offset += 2;
 	}
-
-	if ((memory = malloc((numPts + 2) * (1 + sizeof(points[0])))) == NULL)
-		goto failure;
-	/* FIXME points should come before flags to guarantee good memory alignment. */
-	flags = memory + 2;
-	points = (struct point *) (flags + numPts) + 2;
 
 	if ((offset = skip_hints(sft->font, offset)) < 0)
 		goto failure;
@@ -542,11 +545,10 @@ draw_simple(SFT *sft, long offset, int numContours, struct affine xAffine, struc
 	read_coords(sft->font, offset, offset + xBytes, numPts, flags, points);
 	transform_points(numPts, points, xAffine, yAffine);
 	draw_contours(numContours, contours, flags, points);
-	free(contours);
+
 	free(memory);
 	return 0;
 failure:
-	free(contours);
 	free(memory);
 	return -1;
 }

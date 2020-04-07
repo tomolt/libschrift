@@ -465,6 +465,18 @@ transform_points(int numPts, struct point *points, struct affine xAffine, struct
 }
 
 static void
+draw_line(struct point beg, struct point end)
+{
+	printf("(%f, %f) -> (%f, %f)\n", beg.x, beg.y, end.x, end.y);
+}
+
+static void
+draw_curve(struct point beg, struct point ctrl, struct point end)
+{
+	printf("(%f, %f) -> (%f, %f) ~~ (%f, %f)\n", beg.x, beg.y, end.x, end.y, ctrl.x, ctrl.y);
+}
+
+static void
 draw_contours(int numContours, struct contour *contours, uint8_t *flags, struct point *points)
 {
 #define MOVEPT(d, s) do { _d = (d), _s = (s); flags[_d] = flags[_s]; points[_d] = points[_s]; } while (0)
@@ -488,8 +500,33 @@ draw_contours(int numContours, struct contour *contours, uint8_t *flags, struct 
 			flags[f] = flags[l] = 0x01;
 			points[f] = points[l] = center;
 		}
-		for (i = f; i <= l; ++i) {
-			printf("%s, %f, %f\n", flags[i] & 0x01 ? "ON " : "OFF", points[i].x, points[i].y);
+		struct point beg, ctrl;
+		int gotCtrl = 0;
+		beg = points[f];
+		for (i = f + 1; i <= l; ++i) {
+			if (gotCtrl) {
+				if (flags[i] & 0x01) {
+					draw_curve(beg, ctrl, points[i]);
+					beg = points[i];
+					gotCtrl = 0;
+				} else {
+					struct point center = {
+						0.5 * ctrl.x + 0.5 * points[i].x,
+						0.5 * ctrl.y + 0.5 * points[i].y
+					};
+					draw_curve(beg, ctrl, center);
+					beg = center;
+					ctrl = points[i];
+				}
+			} else {
+				if (flags[i] & 0x01) {
+					draw_line(beg, points[i]);
+					beg = points[i];
+				} else {
+					ctrl = points[i];
+					gotCtrl = 1;
+				}
+			}
 		}
 	}
 }

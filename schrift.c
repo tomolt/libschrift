@@ -517,7 +517,7 @@ draw_simple(SFT *sft, long offset, int numContours, struct affine xAffine, struc
 
 	if (sft->font->size < (unsigned long) offset + numContours * 2)
 		goto failure;
-	numPts = getu16(sft->font, (numContours - 1) * 2) + 1;
+	numPts = getu16(sft->font, offset + (numContours - 1) * 2) + 1;
 	
 	memLen  = (numPts + 2) * sizeof(points[0]);
 	memLen +=  numContours * sizeof(contours[0]);

@@ -21,7 +21,7 @@
 
 struct point  { double x, y; };
 struct line   { struct point beg, end; };
-struct curve  { struct point beg, end, ctrl; };
+struct curve  { struct point beg, ctrl, end; };
 struct affine { double scale, move; };
 struct contour { int first, last; };
 
@@ -60,6 +60,15 @@ csearch(const void *key, const void *base,
 		}
 	}
 	return (uint8_t *) bytes + low * size;
+}
+
+static struct point
+midpoint(struct point a, struct point b)
+{
+	return (struct point) {
+		0.5 * a.x + 0.5 * b.x,
+		0.5 * a.y + 0.5 * b.y
+	};
 }
 
 static inline uint8_t
@@ -465,15 +474,59 @@ transform_points(int numPts, struct point *points, struct affine xAffine, struct
 }
 
 static void
-draw_line(struct point beg, struct point end)
+draw_line(struct line line)
 {
-	printf("(%f, %f) -> (%f, %f)\n", beg.x, beg.y, end.x, end.y);
+	printf("(%f, %f) -> (%f, %f)\n",
+		line.beg.x, line.beg.y, line.end.x, line.end.y);
+}
+
+static double
+manhattan(struct point a, struct point b)
+{
+	return ABS(a.x - b.x) + ABS(a.y - b.y);
+}
+
+static int
+is_flat(struct curve curve, double flatness)
+{
+	struct point mid = midpoint(curve.beg, curve.end);
+	double dist = manhattan(curve.ctrl, mid);
+	return dist <= flatness;
 }
 
 static void
-draw_curve(struct point beg, struct point ctrl, struct point end)
+split_curve(struct curve curve, struct curve segments[2])
 {
-	printf("(%f, %f) -> (%f, %f) ~~ (%f, %f)\n", beg.x, beg.y, end.x, end.y, ctrl.x, ctrl.y);
+	struct point ctrl0 = midpoint(curve.beg, curve.ctrl);
+	struct point ctrl1 = midpoint(curve.ctrl, curve.end);
+	struct point pivot = midpoint(ctrl0, ctrl1);
+	segments[0] = (struct curve) { curve.beg, pivot, ctrl0 };
+	segments[1] = (struct curve) { pivot, curve.end, ctrl1 };
+}
+
+static void
+draw_curve(struct curve curve)
+{
+	/*
+	From my tests I can conclude that this stack barely reaches a top height
+	of 4 elements even for the largest font sizes I'm willing to support. And
+	as space requirements should only grow logarithmically, I think 10 is
+	more than enough.
+	*/
+#define STACK_SIZE 10
+	int top = 1;
+	struct curve stack[STACK_SIZE];
+	stack[0] = curve;
+	while (top > 0) {
+		struct curve curve = stack[--top];
+		if (is_flat(curve, 0.5) || top + 2 > STACK_SIZE) {
+			struct line line = { curve.beg, curve.end };
+			draw_line(line);
+		} else {
+			split_curve(curve, &stack[top]);
+			top += 2;
+		}
+	}
 }
 
 static void
@@ -492,10 +545,7 @@ draw_contours(int numContours, struct contour *contours, uint8_t *flags, struct 
 		} else if (flags[l] & 0x01) {
 			MOVEPT(--f, l);
 		} else {
-			struct point center = {
-				0.5 * points[f].x + 0.5 * points[l].x,
-				0.5 * points[f].y + 0.5 * points[l].y
-			};
+			struct point center = midpoint(points[f], points[l]);
 			--f, ++l;
 			flags[f] = flags[l] = 0x01;
 			points[f] = points[l] = center;
@@ -506,21 +556,18 @@ draw_contours(int numContours, struct contour *contours, uint8_t *flags, struct 
 		for (i = f + 1; i <= l; ++i) {
 			if (gotCtrl) {
 				if (flags[i] & 0x01) {
-					draw_curve(beg, ctrl, points[i]);
+					draw_curve((struct curve) { beg, ctrl, points[i] });
 					beg = points[i];
 					gotCtrl = 0;
 				} else {
-					struct point center = {
-						0.5 * ctrl.x + 0.5 * points[i].x,
-						0.5 * ctrl.y + 0.5 * points[i].y
-					};
-					draw_curve(beg, ctrl, center);
+					struct point center = midpoint(ctrl, points[i]);
+					draw_curve((struct curve) { beg, ctrl, center });
 					beg = center;
 					ctrl = points[i];
 				}
 			} else {
 				if (flags[i] & 0x01) {
-					draw_line(beg, points[i]);
+					draw_line((struct line) { beg, points[i] });
 					beg = points[i];
 				} else {
 					ctrl = points[i];

@@ -1,5 +1,14 @@
 /* See LICENSE file for copyright and license details. */
 
+/**** TODOS ****
+ * - Port over line rasterization.
+ * - Bound / clip / clamp coordinates that exceed extents.
+ * - Write simple running-sum post-processor.
+ * - Port over cmap format 6 support from old libschrift.
+ * - Port over kerning support.
+ * - Less aggressive / naive tesselation heuristic (is_flat()).
+ */
+
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>

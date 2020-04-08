@@ -29,14 +29,23 @@
  * faster than any bit-tricks or specialized functions on amd64. */
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
-#define ABS(x) ((x) >= 0 ? (x) : -(x))
+#define ABS(x)  ((x) >= 0 ? (x) : -(x))
+#define SIGN(x) ((x) >= 0 ? 1 : -1)
+#define GRAIN 255
 
 /* structs */
-struct point  { double x, y; };
-struct line   { struct point beg, end; };
-struct curve  { struct point beg, ctrl, end; };
-struct affine { double scale, move; };
+struct point   { double x, y; };
+struct line    { struct point beg, end; };
+struct curve   { struct point beg, ctrl, end; };
+struct affine  { double scale, move; };
 struct contour { int first, last; };
+struct cell    { int16_t area, cover; };
+
+struct buffer
+{
+	struct cell *cells;
+	int width, height;
+};
 
 struct SFT_Font
 {
@@ -77,17 +86,18 @@ static long outline_offset(SFT_Font *font, long glyph);
 static long simple_flags(SFT_Font *font, unsigned long offset, int numPts, uint8_t *flags);
 static int  simple_points(SFT_Font *font, long offset, int numPts, uint8_t *flags, struct point *points);
 static void transform_points(int numPts, struct point *points, struct affine xAffine, struct affine yAffine);
-static void draw_contours(int numContours, struct contour *contours, uint8_t *flags, struct point *points);
-static int  draw_simple(SFT *sft, long offset, int numContours, struct affine xAffine, struct affine yAffine);
+static void draw_contours(struct buffer buf, int numContours, struct contour *contours, uint8_t *flags, struct point *points);
+static int  draw_simple(SFT *sft, long offset, int numContours, struct buffer buf, struct affine xAffine, struct affine yAffine);
 static int  proc_outline(SFT *sft, unsigned long offset, double leftSideBearing, int extents[4]);
 /* tesselation */
 static struct point midpoint(struct point a, struct point b);
 static double manhattan(struct point a, struct point b);
 static int  is_flat(struct curve curve, double flatness);
 static void split_curve(struct curve curve, struct curve segments[2]);
-static void draw_curve(struct curve curve);
+static void draw_curve(struct buffer buf, struct curve curve);
 /* silhouette rasterization */
-static void draw_line(struct line line);
+static void draw_dot(struct buffer buf, double ax, double ay, double bx, double by);
+static void draw_line(struct buffer buf, struct line line);
 
 /* function implementations */
 
@@ -554,7 +564,7 @@ transform_points(int numPts, struct point *points, struct affine xAffine, struct
 }
 
 static void
-draw_contours(int numContours, struct contour *contours, uint8_t *flags, struct point *points)
+draw_contours(struct buffer buf, int numContours, struct contour *contours, uint8_t *flags, struct point *points)
 {
 #define MOVEPT(d, s) do { _d = (d), _s = (s); flags[_d] = flags[_s]; points[_d] = points[_s]; } while (0)
 	int c, i, _d, _s;
@@ -579,18 +589,18 @@ draw_contours(int numContours, struct contour *contours, uint8_t *flags, struct 
 		for (i = f + 1; i <= l; ++i) {
 			if (gotCtrl) {
 				if (flags[i] & 0x01) {
-					draw_curve((struct curve) { beg, ctrl, points[i] });
+					draw_curve(buf, (struct curve) { beg, ctrl, points[i] });
 					beg = points[i];
 					gotCtrl = 0;
 				} else {
 					struct point center = midpoint(ctrl, points[i]);
-					draw_curve((struct curve) { beg, ctrl, center });
+					draw_curve(buf, (struct curve) { beg, ctrl, center });
 					beg = center;
 					ctrl = points[i];
 				}
 			} else {
 				if (flags[i] & 0x01) {
-					draw_line((struct line) { beg, points[i] });
+					draw_line(buf, (struct line) { beg, points[i] });
 					beg = points[i];
 				} else {
 					ctrl = points[i];
@@ -602,7 +612,7 @@ draw_contours(int numContours, struct contour *contours, uint8_t *flags, struct 
 }
 
 static int
-draw_simple(SFT *sft, long offset, int numContours, struct affine xAffine, struct affine yAffine)
+draw_simple(SFT *sft, long offset, int numContours, struct buffer buf, struct affine xAffine, struct affine yAffine)
 {
 	struct point *points;
 	struct contour *contours = NULL;
@@ -636,7 +646,7 @@ draw_simple(SFT *sft, long offset, int numContours, struct affine xAffine, struc
 	if (simple_points(sft->font, offset, numPts, flags, points) < 0)
 		goto failure;
 	transform_points(numPts, points, xAffine, yAffine);
-	draw_contours(numContours, contours, flags, points);
+	draw_contours(buf, numContours, contours, flags, points);
 
 	free(memory);
 	return 0;
@@ -649,8 +659,8 @@ static int
 proc_outline(SFT *sft, unsigned long offset, double leftSideBearing, int extents[4])
 {
 	struct affine xAffine, yAffine;
-	uint32_t *buffer;
-	int unitsPerEm, numContours, width, height;
+	struct buffer buf;
+	int unitsPerEm, numContours;
 	if ((unitsPerEm = units_per_em(sft->font)) < 0)
 		return -1;
 	numContours = geti16(sft->font, offset);
@@ -658,37 +668,47 @@ proc_outline(SFT *sft, unsigned long offset, double leftSideBearing, int extents
 	xAffine = (struct affine) { sft->xScale / unitsPerEm, sft->x + leftSideBearing };
 	yAffine = (struct affine) { sft->yScale / unitsPerEm, sft->y };
 	/* Calculate outline extents. */
-	extents[0] = (int) floor(AFFINE(xAffine, geti16(sft->font, offset + 2)));
-	extents[1] = (int) floor(AFFINE(yAffine, geti16(sft->font, offset + 4)));
-	extents[2] = (int) ceil(AFFINE(xAffine, geti16(sft->font, offset + 6)));
-	extents[3] = (int) ceil(AFFINE(yAffine, geti16(sft->font, offset + 8)));
-	printf("<?xml version=\"1.0\" standalone=\"no\"?>\n");
-	printf("<svg width=\"%d\" height=\"%d\" version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\">\n", 10 * (extents[2] - extents[0]), 10 * (extents[3] - extents[1]));
+	extents[0] = (int) floor(AFFINE(xAffine, geti16(sft->font, offset + 2))) - 1;
+	extents[1] = (int) floor(AFFINE(yAffine, geti16(sft->font, offset + 4))) - 1;
+	extents[2] = (int) ceil(AFFINE(xAffine, geti16(sft->font, offset + 6))) + 1;
+	extents[3] = (int) ceil(AFFINE(yAffine, geti16(sft->font, offset + 8))) + 1;
 	/* Render the outline (if requested). */
 	if (sft->flags & SFT_CHAR_RENDER) {
 		/* Make transformations relative to min corner. */
 		xAffine.move -= extents[0];
 		yAffine.move -= extents[1];
 		/* Allocate internal buffer for drawing into. */
-		width = extents[2] - extents[0];
-		height = extents[3] - extents[1];
-		if ((buffer = calloc(width * height, 4)) == NULL)
+		buf.width = extents[2] - extents[0];
+		buf.height = extents[3] - extents[1];
+		if ((buf.cells = calloc(buf.width * buf.height, sizeof(buf.cells[0]))) == NULL)
 			return -1;
 		if (numContours >= 0) {
 			/* Glyph has a 'simple' outline consisting of a number of contours. */
-			if (draw_simple(sft, offset + 10, numContours, xAffine, yAffine) < 0) {
-				free(buffer);
+			if (draw_simple(sft, offset + 10, numContours, buf, xAffine, yAffine) < 0) {
+				free(buf.cells);
 				return -1;
 			}
 		} else {
 			/* Glyph has a compound outline combined from mutiple other outlines. */
 			/* TODO Implement this path! */
-			free(buffer);
+			free(buf.cells);
 			return -1;
 		}
-		free(buffer);
+
+		printf("P2\n%d\n%d\n255\n", buf.width, buf.height);
+		for (int y = 0; y < buf.height; ++y) {
+			int accum = 0;
+			for (int x = 0; x < buf.width; ++x) {
+				struct cell cell = buf.cells[x + buf.width * y];
+				int value = MIN(ABS(accum + cell.area), 255);
+				accum += cell.cover;
+				printf("%d ", value);
+			}
+			printf("\n");
+		}
+
+		free(buf.cells);
 	}
-	printf("</svg>\n");
 	return 0;
 }
 
@@ -726,7 +746,7 @@ split_curve(struct curve curve, struct curve segments[2])
 }
 
 static void
-draw_curve(struct curve curve)
+draw_curve(struct buffer buf, struct curve curve)
 {
 	/*
 	From my tests I can conclude that this stack barely reaches a top height
@@ -742,7 +762,7 @@ draw_curve(struct curve curve)
 		struct curve curve = stack[--top];
 		if (is_flat(curve, 1.0) || top + 2 > STACK_SIZE) {
 			struct line line = { curve.beg, curve.end };
-			draw_line(line);
+			draw_line(buf, line);
 		} else {
 			split_curve(curve, &stack[top]);
 			top += 2;
@@ -751,9 +771,54 @@ draw_curve(struct curve curve)
 }
 
 static void
-draw_line(struct line line)
+draw_dot(struct buffer buf, double ax, double ay, double bx, double by)
 {
-	printf("\t<line x1=\"%f\" y1=\"%f\" x2=\"%f\" y2=\"%f\" stroke=\"orange\" stroke-width=\"5\" />\n",
-		10.0 * line.beg.x, 10.0 * line.beg.y, 10.0 * line.end.x, 10.0 * line.end.y);
+	double xAvg = 0.5 * ax + 0.5 * bx;
+	double yAvg = 0.5 * ay + 0.5 * by;
+	unsigned int x = floor(xAvg), y = floor(yAvg);
+	struct cell * restrict ptr = &buf.cells[x + buf.width * y];
+	struct cell cell = *ptr;
+	double cover = by - ay;
+	cell.cover += round(cover * GRAIN);
+	cell.area += round((x + 1 - xAvg) * cover * GRAIN);
+	*ptr = cell;
+}
+
+static void
+draw_line(struct buffer buf, struct line line)
+{
+	double xOrigin, xDelta, xTimeStep = 0.0, xTime = 1.0;
+	xOrigin = line.beg.x;
+	xDelta = line.end.x - xOrigin;
+	if (xDelta != 0.0) {
+		double signedOrigin = SIGN(xDelta) * xOrigin;
+		xTimeStep = ABS(1.0 / xDelta);
+		xTime = xTimeStep * (ceil(signedOrigin) - signedOrigin);
+	}
+	double yOrigin, yDelta, yTimeStep = 0.0, yTime = 1.0;
+	yOrigin = line.beg.y;
+	yDelta = line.end.y - yOrigin;
+	if (yDelta != 0.0) {
+		double signedOrigin = SIGN(yDelta) * yOrigin;
+		yTimeStep = ABS(1.0 / yDelta);
+		yTime = yTimeStep * (ceil(signedOrigin) - signedOrigin);
+	}
+	double xPrev = xOrigin, yPrev = yOrigin;
+	while (xTime < 1.0 || yTime < 1.0) {
+		double time;
+		if (xTime <= yTime) {
+			time = xTime;
+			xTime += xTimeStep;
+		} else {
+			time = yTime;
+			yTime += yTimeStep;
+		}
+		double x = xOrigin + time * xDelta;
+		double y = yOrigin + time * yDelta;
+		draw_dot(buf, xPrev, yPrev, x, y);
+		xPrev = x;
+		yPrev = y;
+	}
+	draw_dot(buf, xPrev, yPrev, line.end.x, line.end.y);
 }
 

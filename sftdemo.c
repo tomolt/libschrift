@@ -63,7 +63,7 @@ main(int argc, char *argv[])
 		die("Can't look up line metrics.");
 
 	int extents[4];
-	if (sft_char(sft, '!', extents) < 0)
+	if (sft_char(sft, 'Q', extents) < 0)
 		die("Can't render character.");
 
 	sft_destroy(sft);

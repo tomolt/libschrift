@@ -658,10 +658,10 @@ proc_outline(SFT *sft, unsigned long offset, double leftSideBearing, int extents
 	xAffine = (struct affine) { sft->xScale / unitsPerEm, sft->x + leftSideBearing };
 	yAffine = (struct affine) { sft->yScale / unitsPerEm, sft->y };
 	/* Calculate outline extents. */
-	extents[0] = (int) AFFINE(xAffine, geti16(sft->font, offset + 2) - 1);
-	extents[1] = (int) AFFINE(yAffine, geti16(sft->font, offset + 4) - 1);
-	extents[2] = (int) ceil(AFFINE(xAffine, geti16(sft->font, offset + 6) + 1));
-	extents[3] = (int) ceil(AFFINE(yAffine, geti16(sft->font, offset + 8) + 1));
+	extents[0] = (int) floor(AFFINE(xAffine, geti16(sft->font, offset + 2)));
+	extents[1] = (int) floor(AFFINE(yAffine, geti16(sft->font, offset + 4)));
+	extents[2] = (int) ceil(AFFINE(xAffine, geti16(sft->font, offset + 6)));
+	extents[3] = (int) ceil(AFFINE(yAffine, geti16(sft->font, offset + 8)));
 	printf("<?xml version=\"1.0\" standalone=\"no\"?>\n");
 	printf("<svg width=\"%d\" height=\"%d\" version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\">\n", 10 * (extents[2] - extents[0]), 10 * (extents[3] - extents[1]));
 	/* Render the outline (if requested). */

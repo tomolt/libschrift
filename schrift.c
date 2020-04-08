@@ -559,7 +559,6 @@ draw_contours(int numContours, struct contour *contours, uint8_t *flags, struct 
 #define MOVEPT(d, s) do { _d = (d), _s = (s); flags[_d] = flags[_s]; points[_d] = points[_s]; } while (0)
 	int c, i, _d, _s;
 	for (c = 0; c < numContours; ++c) {
-		printf("contour #%d:\n", c);
 		int f = contours[c].first, l = contours[c].last;
 		/* Rotate contour points back by one position to make space to the right. */
 		MOVEPT(--f, l--);
@@ -663,6 +662,8 @@ proc_outline(SFT *sft, unsigned long offset, double leftSideBearing, int extents
 	extents[1] = (int) AFFINE(yAffine, geti16(sft->font, offset + 4) - 1);
 	extents[2] = (int) ceil(AFFINE(xAffine, geti16(sft->font, offset + 6) + 1));
 	extents[3] = (int) ceil(AFFINE(yAffine, geti16(sft->font, offset + 8) + 1));
+	printf("<?xml version=\"1.0\" standalone=\"no\"?>\n");
+	printf("<svg width=\"%d\" height=\"%d\" version=\"1.1\" xmlns=\"http://www.w3.org/2000/svg\">\n", 10 * (extents[2] - extents[0]), 10 * (extents[3] - extents[1]));
 	/* Render the outline (if requested). */
 	if (sft->flags & SFT_CHAR_RENDER) {
 		/* Make transformations relative to min corner. */
@@ -687,6 +688,7 @@ proc_outline(SFT *sft, unsigned long offset, double leftSideBearing, int extents
 		}
 		free(buffer);
 	}
+	printf("</svg>\n");
 	return 0;
 }
 
@@ -719,8 +721,8 @@ split_curve(struct curve curve, struct curve segments[2])
 	struct point ctrl0 = midpoint(curve.beg, curve.ctrl);
 	struct point ctrl1 = midpoint(curve.ctrl, curve.end);
 	struct point pivot = midpoint(ctrl0, ctrl1);
-	segments[0] = (struct curve) { curve.beg, pivot, ctrl0 };
-	segments[1] = (struct curve) { pivot, curve.end, ctrl1 };
+	segments[0] = (struct curve) { curve.beg, ctrl0, pivot };
+	segments[1] = (struct curve) { pivot, ctrl1, curve.end };
 }
 
 static void
@@ -738,7 +740,7 @@ draw_curve(struct curve curve)
 	stack[0] = curve;
 	while (top > 0) {
 		struct curve curve = stack[--top];
-		if (is_flat(curve, 0.5) || top + 2 > STACK_SIZE) {
+		if (is_flat(curve, 1.0) || top + 2 > STACK_SIZE) {
 			struct line line = { curve.beg, curve.end };
 			draw_line(line);
 		} else {
@@ -751,7 +753,7 @@ draw_curve(struct curve curve)
 static void
 draw_line(struct line line)
 {
-	printf("(%f, %f) -> (%f, %f)\n",
-		line.beg.x, line.beg.y, line.end.x, line.end.y);
+	printf("\t<line x1=\"%f\" y1=\"%f\" x2=\"%f\" y2=\"%f\" stroke=\"orange\" stroke-width=\"5\" />\n",
+		10.0 * line.beg.x, 10.0 * line.beg.y, 10.0 * line.end.x, 10.0 * line.end.y);
 }
 

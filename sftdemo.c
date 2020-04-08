@@ -61,17 +61,10 @@ main(int argc, char *argv[])
 	double ascent, descent, linegap;
 	if (sft_linemetrics(sft, &ascent, &descent, &linegap) < 0)
 		die("Can't look up line metrics.");
-	printf("line spacing: %f\n", ascent + descent + linegap);
 
-	const char *str = "Hello, World!";
-	for (const char *c = str; *c; ++c) {
-		printf("# '%c':\n", *c);
-		int extents[4];
-		if (sft_char(sft, *c, extents) < 0)
-			die("Can't render character.");
-		printf("extents: %d, %d, %d, %d\n",
-			extents[0], extents[1], extents[2], extents[3]);
-	}
+	int extents[4];
+	if (sft_char(sft, '!', extents) < 0)
+		die("Can't render character.");
 
 	sft_destroy(sft);
 	sft_freefont(font);

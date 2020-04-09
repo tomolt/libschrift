@@ -1,9 +1,9 @@
 /* See LICENSE file for copyright and license details. */
 
 /**** TODOS ****
- * - Port over line rasterization.
+ * - Rework the maths on line rasterization.
+ * - Proper image outputting API.
  * - Bound / clip / clamp coordinates that exceed extents.
- * - Write simple running-sum post-processor.
  * - Port over cmap format 6 support from old libschrift.
  * - Port over kerning support.
  * - Less aggressive / naive tesselation heuristic (is_flat()).
@@ -357,7 +357,6 @@ cmap_fmt4(SFT_Font *font, unsigned long table, unsigned int charCode)
 	int idDelta;
 	uint8_t key[2] = { charCode >> 8, charCode };
 	/* TODO Guard against too big charCode. */
-
 	if (font->size < table + 8)
 		return -1;
 	segCountX2 = getu16(font, table);

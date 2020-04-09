@@ -41,7 +41,7 @@ void sft_setscale(SFT *sft, double xScale, double yScale);
 
 int sft_linemetrics(SFT *sft, double *ascent, double *descent, double *gap);
 void sft_move(SFT *sft, double x, double y);
-int sft_char(SFT *sft, unsigned int charCode, int extents[4]);
+int sft_char(SFT *sft, unsigned int charCode, int extents[4], unsigned char **image);
 
 #endif
 

@@ -62,9 +62,20 @@ main(int argc, char *argv[])
 	if (sft_linemetrics(sft, &ascent, &descent, &linegap) < 0)
 		die("Can't look up line metrics.");
 
+	unsigned char *image;
 	int extents[4];
-	if (sft_char(sft, 'Q', extents) < 0)
+	if (sft_char(sft, 'Q', extents, &image) < 0)
 		die("Can't render character.");
+
+	int width = extents[2] - extents[0];
+	int height = extents[3] - extents[1];
+	printf("P2\n%d\n%d\n255\n", width, height);
+	for (int y = 0; y < height; ++y) {
+		for (int x = 0; x < width; ++x) {
+			printf("%u ", image[x + y * width]);
+		}
+		printf("\n");
+	}
 
 	sft_destroy(sft);
 	sft_freefont(font);

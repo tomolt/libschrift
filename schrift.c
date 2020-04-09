@@ -2,7 +2,6 @@
 
 /**** TODOS ****
  * - Rework the maths on line rasterization.
- * - Proper image outputting API.
  * - Bound / clip / clamp coordinates that exceed extents.
  * - Port over cmap format 6 support from old libschrift.
  * - Port over kerning support.
@@ -88,7 +87,7 @@ static int  simple_points(SFT_Font *font, long offset, int numPts, uint8_t *flag
 static void transform_points(int numPts, struct point *points, struct affine xAffine, struct affine yAffine);
 static void draw_contours(struct buffer buf, int numContours, struct contour *contours, uint8_t *flags, struct point *points);
 static int  draw_simple(SFT *sft, long offset, int numContours, struct buffer buf, struct affine xAffine, struct affine yAffine);
-static int  proc_outline(SFT *sft, unsigned long offset, double leftSideBearing, int extents[4]);
+static int  proc_outline(SFT *sft, unsigned long offset, double leftSideBearing, int extents[4], uint8_t **image);
 /* tesselation */
 static struct point midpoint(struct point a, struct point b);
 static double manhattan(struct point a, struct point b);
@@ -98,6 +97,8 @@ static void draw_curve(struct buffer buf, struct curve curve);
 /* silhouette rasterization */
 static void draw_dot(struct buffer buf, double ax, double ay, double bx, double by);
 static void draw_line(struct buffer buf, struct line line);
+/* post-processing */
+static void post_process(struct buffer buf, uint8_t *image);
 
 /* function implementations */
 
@@ -199,10 +200,11 @@ sft_move(SFT *sft, double x, double y)
 }
 
 int
-sft_char(SFT *sft, unsigned int charCode, int extents[4])
+sft_char(SFT *sft, unsigned int charCode, int extents[4], unsigned char **image)
 {
 	double advanceWidth, leftSideBearing;
 	long glyph, glyf, offset, next;
+	*image = NULL;
 	if ((glyph = glyph_id(sft->font, charCode)) < 0)
 		return -1;
 	if (hor_metrics(sft, glyph, &advanceWidth, &leftSideBearing) < 0)
@@ -220,7 +222,7 @@ sft_char(SFT *sft, unsigned int charCode, int extents[4])
 		memset(extents, 0, 4 * sizeof(int));
 	} else {
 		/* Glyph has an outline. */
-		if (proc_outline(sft, glyf + offset, leftSideBearing, extents) < 0)
+		if (proc_outline(sft, glyf + offset, leftSideBearing, extents, image) < 0)
 			return -1;
 	}
 	/* Advance into position for the next character (if requested). */
@@ -644,7 +646,7 @@ failure:
 }
 
 static int
-proc_outline(SFT *sft, unsigned long offset, double leftSideBearing, int extents[4])
+proc_outline(SFT *sft, unsigned long offset, double leftSideBearing, int extents[4], uint8_t **image)
 {
 	struct affine xAffine, yAffine;
 	struct buffer buf;
@@ -682,19 +684,11 @@ proc_outline(SFT *sft, unsigned long offset, double leftSideBearing, int extents
 			free(buf.cells);
 			return -1;
 		}
-
-		printf("P2\n%d\n%d\n255\n", buf.width, buf.height);
-		for (int y = 0; y < buf.height; ++y) {
-			int accum = 0;
-			for (int x = 0; x < buf.width; ++x) {
-				struct cell cell = buf.cells[x + buf.width * y];
-				int value = MIN(ABS(accum + cell.area), 255);
-				accum += cell.cover;
-				printf("%d ", value);
-			}
-			printf("\n");
+		if ((*image = calloc(buf.width * buf.height, 1)) == NULL) {
+			free(buf.cells);
+			return -1;
 		}
-
+		post_process(buf, *image);
 		free(buf.cells);
 	}
 	return 0;
@@ -808,5 +802,19 @@ draw_line(struct buffer buf, struct line line)
 		yPrev = y;
 	}
 	draw_dot(buf, xPrev, yPrev, line.end.x, line.end.y);
+}
+
+static void
+post_process(struct buffer buf, uint8_t *image)
+{
+	for (int y = 0; y < buf.height; ++y) {
+		int accum = 0;
+		for (int x = 0; x < buf.width; ++x) {
+			struct cell cell = buf.cells[x + buf.width * y];
+			int value = MIN(ABS(accum + cell.area), 255);
+			accum += cell.cover;
+			image[x + buf.width * y] = value;
+		}
+	}
 }
 

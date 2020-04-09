@@ -92,7 +92,6 @@ static int  proc_outline(SFT *sft, unsigned long offset, double leftSideBearing,
 static struct point midpoint(struct point a, struct point b);
 static double manhattan(struct point a, struct point b);
 static int  is_flat(struct curve curve, double flatness);
-static void split_curve(struct curve curve, struct curve segments[2]);
 static void draw_curve(struct buffer buf, struct curve curve);
 /* silhouette rasterization */
 static void draw_dot(struct buffer buf, double ax, double ay, double bx, double by);
@@ -718,16 +717,6 @@ is_flat(struct curve curve, double flatness)
 }
 
 static void
-split_curve(struct curve curve, struct curve segments[2])
-{
-	struct point ctrl0 = midpoint(curve.beg, curve.ctrl);
-	struct point ctrl1 = midpoint(curve.ctrl, curve.end);
-	struct point pivot = midpoint(ctrl0, ctrl1);
-	segments[0] = (struct curve) { curve.beg, ctrl0, pivot };
-	segments[1] = (struct curve) { pivot, ctrl1, curve.end };
-}
-
-static void
 draw_curve(struct buffer buf, struct curve curve)
 {
 	/*
@@ -737,19 +726,23 @@ draw_curve(struct buffer buf, struct curve curve)
 	more than enough.
 	*/
 #define STACK_SIZE 10
-	int top = 1;
 	struct curve stack[STACK_SIZE];
-	stack[0] = curve;
-	while (top > 0) {
-		struct curve curve = stack[--top];
-		if (is_flat(curve, 1.0) || top + 2 > STACK_SIZE) {
-			struct line line = { curve.beg, curve.end };
-			draw_line(buf, line);
+	struct point ctrl0, ctrl1, pivot;
+	int top = 0;
+	for (;;) {
+		if (is_flat(curve, 0.75) || top + 1 > STACK_SIZE) {
+			draw_line(buf, (struct line) { curve.beg, curve.end });
+			if (top == 0) return;
+			curve = stack[--top];
 		} else {
-			split_curve(curve, &stack[top]);
-			top += 2;
+			ctrl0 = midpoint(curve.beg, curve.ctrl);
+			ctrl1 = midpoint(curve.ctrl, curve.end);
+			pivot = midpoint(ctrl0, ctrl1);
+			stack[top++] = (struct curve) { curve.beg, ctrl0, pivot };
+			curve = (struct curve) { pivot, ctrl1, curve.end };
 		}
 	}
+#undef STACK_SIZE
 }
 
 static void

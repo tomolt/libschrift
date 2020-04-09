@@ -566,49 +566,38 @@ transform_points(int numPts, struct point *points, struct affine xAffine, struct
 static void
 draw_contours(struct buffer buf, int numContours, struct contour *contours, uint8_t *flags, struct point *points)
 {
-#define MOVEPT(d, s) do { _d = (d), _s = (s); flags[_d] = flags[_s]; points[_d] = points[_s]; } while (0)
-	int c, i, _d, _s;
+#define DRAW_SEGMENT(end) do { \
+		if (gotCtrl) draw_curve(buf, (struct curve) { beg, ctrl, (end) }); \
+		else draw_line(buf, (struct line) { beg, (end) }); \
+	} while (0)
+	struct point looseEnd, beg, ctrl, center;
+	int c, f, l, firstOn, lastOn, gotCtrl, i;
 	for (c = 0; c < numContours; ++c) {
-		int f = contours[c].first, l = contours[c].last;
-		/* Rotate contour points back by one position to make space to the right. */
-		MOVEPT(--f, l--);
-		/* Connect the two ends of the contour such that it both starts and ends with an on-curve point. */
-		if (flags[f] & 0x01) {
-			MOVEPT(++l, f);
-		} else if (flags[l] & 0x01) {
-			MOVEPT(--f, l);
-		} else {
-			struct point center = midpoint(points[f], points[l]);
-			--f, ++l;
-			flags[f] = flags[l] = 0x01;
-			points[f] = points[l] = center;
-		}
-		struct point beg, ctrl;
-		int gotCtrl = 0;
-		beg = points[f];
-		for (i = f + 1; i <= l; ++i) {
-			if (gotCtrl) {
-				if (flags[i] & 0x01) {
-					draw_curve(buf, (struct curve) { beg, ctrl, points[i] });
-					beg = points[i];
-					gotCtrl = 0;
-				} else {
-					struct point center = midpoint(ctrl, points[i]);
-					draw_curve(buf, (struct curve) { beg, ctrl, center });
-					beg = center;
-					ctrl = points[i];
-				}
+		f = contours[c].first;
+		l = contours[c].last;
+		firstOn = flags[f] & 0x01;
+		lastOn = flags[l] & 0x01;
+		looseEnd = firstOn ? points[f++] : lastOn ? points[l] : midpoint(points[f], points[l]);
+		beg = looseEnd;
+		gotCtrl = 0;
+		for (i = f; i <= l; ++i) {
+			if (flags[i] & 0x01) {
+				DRAW_SEGMENT(points[i]);
+				beg = points[i];
+				gotCtrl = 0;
 			} else {
-				if (flags[i] & 0x01) {
-					draw_line(buf, (struct line) { beg, points[i] });
-					beg = points[i];
-				} else {
-					ctrl = points[i];
-					gotCtrl = 1;
+				if (gotCtrl) {
+					center = midpoint(ctrl, points[i]);
+					DRAW_SEGMENT(center);
+					beg = center;
 				}
+				ctrl = points[i];
+				gotCtrl = 1;
 			}
 		}
+		if (!lastOn) DRAW_SEGMENT(looseEnd);
 	}
+#undef DRAW_SEGMENT
 }
 
 static int
@@ -624,14 +613,14 @@ draw_simple(SFT *sft, long offset, int numContours, struct buffer buf, struct af
 		goto failure;
 	numPts = getu16(sft->font, offset + (numContours - 1) * 2) + 1;
 	
-	memLen  = (numPts + 2) * sizeof(points[0]);
-	memLen +=  numContours * sizeof(contours[0]);
-	memLen += (numPts + 2) * sizeof(flags[0]);
+	memLen  = numPts * sizeof(points[0]);
+	memLen += numContours * sizeof(contours[0]);
+	memLen += numPts * sizeof(flags[0]);
 	if ((memory = malloc(memLen)) == NULL)
 		goto failure;
-	points = (struct point *) memory + 2;
+	points = (struct point *) memory;
 	contours = (struct contour *) (points + numPts);
-	flags = (uint8_t *) (contours + numContours) + 2;
+	flags = (uint8_t *) (contours + numContours);
 
 	for (top = i = 0; i < numContours; ++i) {
 		contours[i].first = top;

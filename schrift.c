@@ -807,13 +807,15 @@ draw_line(struct buffer buf, struct line line)
 static void
 post_process(struct buffer buf, uint8_t *image)
 {
-	for (int y = 0; y < buf.height; ++y) {
-		int accum = 0;
-		for (int x = 0; x < buf.width; ++x) {
-			struct cell cell = buf.cells[x + buf.width * y];
-			int value = MIN(ABS(accum + cell.area), 255);
+	struct cell cell;
+	int x, y, idx = 0, accum;
+	for (y = 0; y < buf.height; ++y) {
+		accum = 0;
+		for (x = 0; x < buf.width; ++x) {
+			cell = buf.cells[idx];
+			image[idx] = MIN(ABS(accum + cell.area), 255);
 			accum += cell.cover;
-			image[x + buf.width * y] = value;
+			++idx;
 		}
 	}
 }

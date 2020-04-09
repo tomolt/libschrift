@@ -683,12 +683,33 @@ proc_outline(SFT *sft, unsigned long offset, double leftSideBearing, int extents
 			free(buf.cells);
 			return -1;
 		}
+		if (sft->flags & SFT_DOWNWARD_Y) {
+			size_t rowSize = buf.width * sizeof(buf.cells[0]);
+			struct cell *rowBuf, *row1, *row2;
+			if ((rowBuf = malloc(rowSize)) == NULL) {
+				free(buf.cells);
+				return -1;
+			}
+			for (int y = 0; y < buf.height / 2; ++y) {
+				row1 = buf.cells + y * buf.width;
+				row2 = buf.cells + (buf.height - 1 - y) * buf.width;
+				memcpy(rowBuf, row1, rowSize);
+				memcpy(row1, row2, rowSize);
+				memcpy(row2, rowBuf, rowSize);
+			}
+			free(rowBuf);
+		}
 		if ((*image = calloc(buf.width * buf.height, 1)) == NULL) {
 			free(buf.cells);
 			return -1;
 		}
 		post_process(buf, *image);
 		free(buf.cells);
+	}
+	if (sft->flags & SFT_DOWNWARD_Y) {
+		int tmp = extents[1];
+		extents[1] = -extents[3];
+		extents[3] = -tmp;
 	}
 	return 0;
 }

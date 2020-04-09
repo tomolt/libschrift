@@ -76,6 +76,7 @@ main(int argc, char *argv[])
 		}
 		printf("\n");
 	}
+	free(image);
 
 	sft_destroy(sft);
 	sft_freefont(font);

@@ -577,7 +577,7 @@ draw_contours(struct buffer buf, int numContours, struct contour *contours, uint
 		l = contours[c].last;
 		firstOn = flags[f] & 0x01;
 		lastOn = flags[l] & 0x01;
-		looseEnd = firstOn ? points[f++] : lastOn ? points[l] : midpoint(points[f], points[l]);
+		looseEnd = firstOn ? points[f++] : lastOn ? points[l--] : midpoint(points[f], points[l]);
 		beg = looseEnd;
 		gotCtrl = 0;
 		for (i = f; i <= l; ++i) {
@@ -595,7 +595,7 @@ draw_contours(struct buffer buf, int numContours, struct contour *contours, uint
 				gotCtrl = 1;
 			}
 		}
-		if (!lastOn) DRAW_SEGMENT(looseEnd);
+		DRAW_SEGMENT(looseEnd);
 	}
 #undef DRAW_SEGMENT
 }

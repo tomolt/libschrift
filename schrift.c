@@ -94,7 +94,7 @@ static double manhattan(struct point a, struct point b);
 static int  is_flat(struct curve curve, double flatness);
 static void draw_curve(struct buffer buf, struct curve curve);
 /* silhouette rasterization */
-static void draw_dot(struct buffer buf, int px, int py, double ax, double bx, double yDiff);
+static void draw_dot(struct buffer buf, int px, int py, double xAvg, double yDiff);
 static void draw_line(struct buffer buf, struct line line);
 /* post-processing */
 static void post_process(struct buffer buf, uint8_t *image);
@@ -767,11 +767,10 @@ draw_curve(struct buffer buf, struct curve curve)
 }
 
 static void
-draw_dot(struct buffer buf, int px, int py, double ax, double bx, double yDiff)
+draw_dot(struct buffer buf, int px, int py, double xAvg, double yDiff)
 {
 	struct cell * restrict ptr = &buf.cells[px + buf.width * py];
 	struct cell cell = *ptr;
-	double xAvg = 0.5 * (ax - px) + 0.5 * (bx - px);
 	cell.cover += round(yDiff * GRAIN);
 	cell.area += round((1.0 - xAvg) * yDiff * GRAIN);
 	*ptr = cell;
@@ -799,25 +798,28 @@ draw_line(struct buffer buf, struct line line)
 		ySideDistance = yDeltaDistance * (ceil(yStep * yOrigin) - yStep * yOrigin);
 	}
 	int xPixel = floor(xOrigin), yPixel = floor(yOrigin);
-	double xPrev = xOrigin, prevDistance = 0.0;
+	double prevDistance = 0.0;
 	while (xSideDistance < 1.0 || ySideDistance < 1.0) {
 		if (xSideDistance <= ySideDistance) {
-			double x = xPixel + (xStep > 0);
-			draw_dot(buf, xPixel, yPixel, xPrev, x, yDelta * (xSideDistance - prevDistance));
-			xPrev = x;
+			double deltaDistance = xSideDistance - prevDistance;
+			double xAvg = (xStep > 0) - 0.5 * xDelta * deltaDistance;
+			draw_dot(buf, xPixel, yPixel, xAvg, yDelta * deltaDistance);
 			prevDistance = xSideDistance;
 			xPixel += xStep;
 			xSideDistance += xDeltaDistance;
 		} else {
-			double x = xOrigin + ySideDistance * xDelta;
-			draw_dot(buf, xPixel, yPixel, xPrev, x, yDelta * (ySideDistance - prevDistance));
-			xPrev = x;
+			double deltaDistance = ySideDistance - prevDistance;
+			double x = xOrigin - xPixel + ySideDistance * xDelta;
+			double xAvg = x - 0.5 * xDelta * deltaDistance;
+			draw_dot(buf, xPixel, yPixel, xAvg, yDelta * deltaDistance);
 			prevDistance = ySideDistance;
 			yPixel += yStep;
 			ySideDistance += yDeltaDistance;
 		}
 	}
-	draw_dot(buf, xPixel, yPixel, xPrev, line.end.x, yDelta * (1.0 - prevDistance));
+	double deltaDistance = 1.0 - prevDistance;
+	double xAvg = (line.end.x - xPixel) - 0.5 * xDelta * deltaDistance;
+	draw_dot(buf, xPixel, yPixel, xAvg, yDelta * deltaDistance);
 }
 
 static void

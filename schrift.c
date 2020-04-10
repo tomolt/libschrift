@@ -803,7 +803,7 @@ draw_line(struct buffer buf, struct line line)
 	double xPrev = xOrigin, yPrev = yOrigin;
 	while (xSideDistance < 1.0 || ySideDistance < 1.0) {
 		if (xSideDistance <= ySideDistance) {
-			double x = xOrigin + xSideDistance * xDelta;
+			double x = xPixel + (xStep > 0);
 			double y = yOrigin + xSideDistance * yDelta;
 			draw_dot(buf, xPixel, yPixel, xPrev, yPrev, x, y);
 			xPrev = x;
@@ -812,7 +812,7 @@ draw_line(struct buffer buf, struct line line)
 			xSideDistance += xDeltaDistance;
 		} else {
 			double x = xOrigin + ySideDistance * xDelta;
-			double y = yOrigin + ySideDistance * yDelta;
+			double y = yPixel + (yStep > 0);
 			draw_dot(buf, xPixel, yPixel, xPrev, yPrev, x, y);
 			xPrev = x;
 			yPrev = y;

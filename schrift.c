@@ -94,7 +94,7 @@ static double manhattan(struct point a, struct point b);
 static int  is_flat(struct curve curve, double flatness);
 static void draw_curve(struct buffer buf, struct curve curve);
 /* silhouette rasterization */
-static void draw_dot(struct buffer buf, double ax, double ay, double bx, double by);
+static void draw_dot(struct buffer buf, int px, int py, double ax, double ay, double bx, double by);
 static void draw_line(struct buffer buf, struct line line);
 /* post-processing */
 static void post_process(struct buffer buf, uint8_t *image);
@@ -767,55 +767,60 @@ draw_curve(struct buffer buf, struct curve curve)
 }
 
 static void
-draw_dot(struct buffer buf, double ax, double ay, double bx, double by)
+draw_dot(struct buffer buf, int px, int py, double ax, double ay, double bx, double by)
 {
 	double xAvg = 0.5 * ax + 0.5 * bx;
-	double yAvg = 0.5 * ay + 0.5 * by;
-	unsigned int x = floor(xAvg), y = floor(yAvg);
-	struct cell * restrict ptr = &buf.cells[x + buf.width * y];
+	struct cell * restrict ptr = &buf.cells[px + buf.width * py];
 	struct cell cell = *ptr;
 	double cover = by - ay;
 	cell.cover += round(cover * GRAIN);
-	cell.area += round((x + 1 - xAvg) * cover * GRAIN);
+	cell.area += round((px + 1 - xAvg) * cover * GRAIN);
 	*ptr = cell;
 }
 
 static void
 draw_line(struct buffer buf, struct line line)
 {
-	double xOrigin, xDelta, xTimeStep = 0.0, xTime = 1.0;
+	double xOrigin, xDelta, xDeltaDistance = 0.0, xSideDistance = 1.0;
+	int xStep;
 	xOrigin = line.beg.x;
 	xDelta = line.end.x - xOrigin;
+	xStep = SIGN(xDelta);
 	if (xDelta != 0.0) {
-		double signedOrigin = SIGN(xDelta) * xOrigin;
-		xTimeStep = ABS(1.0 / xDelta);
-		xTime = xTimeStep * (ceil(signedOrigin) - signedOrigin);
+		xDeltaDistance = ABS(1.0 / xDelta);
+		xSideDistance = xDeltaDistance * (ceil(xStep * xOrigin) - xStep * xOrigin);
 	}
-	double yOrigin, yDelta, yTimeStep = 0.0, yTime = 1.0;
+	double yOrigin, yDelta, yDeltaDistance = 0.0, ySideDistance = 1.0;
+	int yStep;
 	yOrigin = line.beg.y;
 	yDelta = line.end.y - yOrigin;
+	yStep = SIGN(yDelta);
 	if (yDelta != 0.0) {
-		double signedOrigin = SIGN(yDelta) * yOrigin;
-		yTimeStep = ABS(1.0 / yDelta);
-		yTime = yTimeStep * (ceil(signedOrigin) - signedOrigin);
+		yDeltaDistance = ABS(1.0 / yDelta);
+		ySideDistance = yDeltaDistance * (ceil(yStep * yOrigin) - yStep * yOrigin);
 	}
+	int xPixel = floor(xOrigin), yPixel = floor(yOrigin);
 	double xPrev = xOrigin, yPrev = yOrigin;
-	while (xTime < 1.0 || yTime < 1.0) {
-		double time;
-		if (xTime <= yTime) {
-			time = xTime;
-			xTime += xTimeStep;
+	while (xSideDistance < 1.0 || ySideDistance < 1.0) {
+		if (xSideDistance <= ySideDistance) {
+			double x = xOrigin + xSideDistance * xDelta;
+			double y = yOrigin + xSideDistance * yDelta;
+			draw_dot(buf, xPixel, yPixel, xPrev, yPrev, x, y);
+			xPrev = x;
+			yPrev = y;
+			xPixel += xStep;
+			xSideDistance += xDeltaDistance;
 		} else {
-			time = yTime;
-			yTime += yTimeStep;
+			double x = xOrigin + ySideDistance * xDelta;
+			double y = yOrigin + ySideDistance * yDelta;
+			draw_dot(buf, xPixel, yPixel, xPrev, yPrev, x, y);
+			xPrev = x;
+			yPrev = y;
+			yPixel += yStep;
+			ySideDistance += yDeltaDistance;
 		}
-		double x = xOrigin + time * xDelta;
-		double y = yOrigin + time * yDelta;
-		draw_dot(buf, xPrev, yPrev, x, y);
-		xPrev = x;
-		yPrev = y;
 	}
-	draw_dot(buf, xPrev, yPrev, line.end.x, line.end.y);
+	draw_dot(buf, xPixel, yPixel, xPrev, yPrev, line.end.x, line.end.y);
 }
 
 static void

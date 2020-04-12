@@ -6,6 +6,9 @@ LD = cc
 AR = ar
 RANLIB = ranlib
 
+X11INC = /usr/include/X11
+X11LIB = /usr/lib/X11
+
 # flags
 CPPFLAGS = -I./
 CFLAGS = -g -std=c99 -pedantic -Wall -Wextra

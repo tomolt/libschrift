@@ -13,10 +13,12 @@ libschrift.a: schrift.o
 	$(RANLIB) $@
 
 sftdemo: sftdemo.o libschrift.a
-	$(LD) $(LDFLAGS) $< -o $@ -L. -lschrift
+	$(LD) $(LDFLAGS) $< -o $@ -L$(X11LIB) -L. -lX11 -lXrender -lschrift
 
-sftdemo.o schrift.o: schrift.h
-sftdemo.o: arg.h
+sftdemo.o: sftdemo.c schrift.h arg.h
+	$(CC) -c $(CFLAGS) $< -o $@ $(CPPFLAGS) -I$(X11INC)
+
+schrift.o: schrift.h
 
 clean:
 	rm -f *.o

@@ -208,7 +208,8 @@ sft_char(SFT *sft, unsigned int charCode, int extents[4], unsigned char **image)
 {
 	double advanceWidth, leftSideBearing;
 	long glyph, glyf, offset, next;
-	*image = NULL;
+	if (image != NULL)
+		*image = NULL;
 	if ((glyph = glyph_id(sft->font, charCode)) < 0)
 		return -1;
 	if (hor_metrics(sft, glyph, &advanceWidth, &leftSideBearing) < 0)

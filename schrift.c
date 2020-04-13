@@ -92,7 +92,7 @@ static int  simple_points(SFT_Font *font, long offset, int numPts, uint8_t *flag
 static void transform_points(int numPts, struct point *points, struct affine xAffine, struct affine yAffine);
 static void draw_contours(struct buffer buf, int numContours, struct contour *contours, uint8_t *flags, struct point *points);
 static int  draw_simple(SFT *sft, long offset, int numContours, struct buffer buf, struct affine xAffine, struct affine yAffine);
-static int  proc_outline(SFT *sft, unsigned long offset, double leftSideBearing, int extents[4], uint8_t **image);
+static int  proc_outline(SFT *sft, unsigned long offset, double leftSideBearing, struct SFT_Char *chr);
 /* tesselation */
 static struct point midpoint(struct point a, struct point b);
 static double manhattan(struct point a, struct point b);
@@ -204,12 +204,10 @@ sft_move(SFT *sft, double x, double y)
 }
 
 int
-sft_char(SFT *sft, unsigned int charCode, int extents[4], unsigned char **image)
+sft_char(SFT *sft, unsigned int charCode, struct SFT_Char *chr)
 {
 	double advanceWidth, leftSideBearing;
 	long glyph, glyf, offset, next;
-	if (image != NULL)
-		*image = NULL;
 	if ((glyph = glyph_id(sft->font, charCode)) < 0)
 		return -1;
 	if (hor_metrics(sft, glyph, &advanceWidth, &leftSideBearing) < 0)
@@ -224,10 +222,12 @@ sft_char(SFT *sft, unsigned int charCode, int extents[4], unsigned char **image)
 		return -1;
 	if (offset == next) {
 		/* Glyph has completely empty outline. This is allowed by the spec. */
-		memset(extents, 0, 4 * sizeof(int));
+		chr->x = chr->y = 0;
+		chr->width = chr->height = 0;
+		chr->image = NULL;
 	} else {
 		/* Glyph has an outline. */
-		if (proc_outline(sft, glyf + offset, leftSideBearing, extents, image) < 0)
+		if (proc_outline(sft, glyf + offset, leftSideBearing, chr) < 0)
 			return -1;
 	}
 	/* Advance into position for the next character (if requested). */
@@ -651,7 +651,7 @@ failure:
 }
 
 static int
-proc_outline(SFT *sft, unsigned long offset, double leftSideBearing, int extents[4], uint8_t **image)
+proc_outline(SFT *sft, unsigned long offset, double leftSideBearing, struct SFT_Char *chr)
 {
 	struct affine xAffine, yAffine;
 	struct buffer buf;
@@ -663,18 +663,18 @@ proc_outline(SFT *sft, unsigned long offset, double leftSideBearing, int extents
 	xAffine = (struct affine) { sft->xScale / unitsPerEm, sft->x + leftSideBearing };
 	yAffine = (struct affine) { sft->yScale / unitsPerEm, sft->y };
 	/* Calculate outline extents. */
-	extents[0] = (int) floor(AFFINE(xAffine, geti16(sft->font, offset + 2))) - 1;
-	extents[1] = (int) floor(AFFINE(yAffine, geti16(sft->font, offset + 4))) - 1;
-	extents[2] = (int) ceil(AFFINE(xAffine, geti16(sft->font, offset + 6))) + 1;
-	extents[3] = (int) ceil(AFFINE(yAffine, geti16(sft->font, offset + 8))) + 1;
+	chr->x = (int) floor(AFFINE(xAffine, geti16(sft->font, offset + 2))) - 1;
+	chr->y = (int) floor(AFFINE(yAffine, geti16(sft->font, offset + 4))) - 1;
+	chr->width  = (int) ceil(AFFINE(xAffine, geti16(sft->font, offset + 6))) + 1 - chr->x;
+	chr->height = (int) ceil(AFFINE(yAffine, geti16(sft->font, offset + 8))) + 1 - chr->y;
 	/* Render the outline (if requested). */
-	if (sft->flags & SFT_CHAR_RENDER) {
+	if (sft->flags & SFT_CHAR_IMAGE) {
 		/* Make transformations relative to min corner. */
-		xAffine.move -= extents[0];
-		yAffine.move -= extents[1];
+		xAffine.move -= chr->x;
+		yAffine.move -= chr->y;
 		/* Allocate internal buffer for drawing into. */
-		buf.width = extents[2] - extents[0];
-		buf.height = extents[3] - extents[1];
+		buf.width = chr->width;
+		buf.height = chr->height;
 		if ((buf.cells = calloc(buf.width * buf.height, sizeof(buf.cells[0]))) == NULL)
 			return -1;
 		if (numContours >= 0) {
@@ -705,17 +705,15 @@ proc_outline(SFT *sft, unsigned long offset, double leftSideBearing, int extents
 			}
 			free(rowBuf);
 		}
-		if ((*image = calloc(buf.width * buf.height, 1)) == NULL) {
+		if ((chr->image = calloc(buf.width * buf.height, 1)) == NULL) {
 			free(buf.cells);
 			return -1;
 		}
-		post_process(buf, *image);
+		post_process(buf, chr->image);
 		free(buf.cells);
 	}
 	if (sft->flags & SFT_DOWNWARD_Y) {
-		int tmp = extents[1];
-		extents[1] = -extents[3];
-		extents[3] = -tmp;
+		chr->y = -(chr->y + chr->height);
 	}
 	return 0;
 }

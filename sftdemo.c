@@ -39,21 +39,18 @@ usage(void)
 static void
 draw(int width, int height)
 {
-	int extents[4], w, h;
+	struct SFT_Char chr;
 	const char *c;
 
 	XRenderFillRectangle(dpy, PictOpSrc, pic, &bgcolor, 0, 0, width, height);
 
-	sft_setflag(sft, SFT_CHAR_RENDER, 0);
+	sft_setflag(sft, SFT_CHAR_IMAGE, 0);
 	sft_move(sft, 0, -50);
 	for (c = "Hello, World!"; *c; ++c) {
-		if (sft_char(sft, *c, extents, NULL) < 0)
+		if (sft_char(sft, *c, &chr) < 0)
 			die("Can't render character.");
-		w = extents[2] - extents[0];
-		h = extents[3] - extents[1];
-
 		XRenderComposite(dpy, PictOpOver, fgpic, None, pic, 0, 0, 0, 0,
-			extents[0], extents[1], w, h);
+			chr.x, chr.y, chr.width, chr.height);
 	}
 }
 

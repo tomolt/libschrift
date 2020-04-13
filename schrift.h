@@ -18,16 +18,20 @@
 #define SCHRIFT_H 1
 
 #define SFT_DOWNWARD_Y   0x01
-#define SFT_ANTIALIAS    0x02
-#define SFT_KERNING      0x04
-#define SFT_CHAR_ADVANCE 0x08
-#define SFT_CHAR_RENDER  0x10
+#define SFT_CHAR_ADVANCE 0x02
+#define SFT_CHAR_IMAGE   0x04
 
 struct SFT_Font;
 struct SFT;
 
 typedef struct SFT_Font SFT_Font;
 typedef struct SFT SFT;
+
+struct SFT_Char
+{
+	unsigned char *image;
+	int x, y, width, height;
+};
 
 SFT_Font *sft_loadfile(char const *filename);
 void sft_freefont(SFT_Font *font);
@@ -41,7 +45,7 @@ void sft_setscale(SFT *sft, double xScale, double yScale);
 
 int sft_linemetrics(SFT *sft, double *ascent, double *descent, double *gap);
 void sft_move(SFT *sft, double x, double y);
-int sft_char(SFT *sft, unsigned int charCode, int extents[4], unsigned char **image);
+int sft_char(SFT *sft, unsigned int charCode, struct SFT_Char *chr);
 
 #endif
 

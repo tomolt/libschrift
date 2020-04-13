@@ -16,6 +16,7 @@ char *argv0;
 static XRenderColor fgcolor, bgcolor;
 static Display *dpy;
 static int screen;
+static Atom wmDeleteWindow;
 static Window win;
 static Pixmap fgpix;
 static Picture pic, fgpic;
@@ -37,6 +38,14 @@ usage(void)
 }
 
 static void
+teardownx(void)
+{
+	sft_freefont(font);
+	XCloseDisplay(dpy);
+	exit(0);
+}
+
+static void
 draw(int width, int height)
 {
 	struct SFT_Char chr;
@@ -47,8 +56,11 @@ draw(int width, int height)
 	for (c = "Hello, World!"; *c; ++c) {
 		if (sft_char(&sft, *c, &chr) < 0)
 			die("Can't render character.");
-		XRenderComposite(dpy, PictOpOver, fgpic, None, pic, 0, 0, 0, 0,
-			chr.x, chr.y, chr.width, chr.height);
+		if (chr.image != NULL) {
+			XRenderComposite(dpy, PictOpOver, fgpic, None, pic, 0, 0, 0, 0,
+				chr.x, chr.y, chr.width, chr.height);
+			free(chr.image);
+		}
 		sft.x += chr.advance;
 	}
 }
@@ -59,6 +71,10 @@ handleevent(XEvent *ev)
 	switch (ev->type) {
 	case Expose:
 		draw(ev->xexpose.width, ev->xexpose.height);
+		break;
+	case ClientMessage:
+		if ((Atom) ev->xclient.data.l[0] == wmDeleteWindow)
+			teardownx();
 		break;
 	}
 }
@@ -78,6 +94,8 @@ setupx(void)
 	                    CopyFromParent, 0, NULL);
 	XStoreName(dpy, win, APP_NAME);
 	XSelectInput(dpy, win, ExposureMask);
+	wmDeleteWindow = XInternAtom(dpy, "WM_DELETE_WINDOW", False);
+	XSetWMProtocols(dpy, win, &wmDeleteWindow, 1);
 	XMapRaised(dpy, win);
 
 	format = XRenderFindVisualFormat(dpy, DefaultVisual(dpy, screen));
@@ -131,7 +149,7 @@ main(int argc, char *argv[])
 	sft.font = font;
 	sft.xScale = size;
 	sft.yScale = size;
-	sft.flags = SFT_DOWNWARD_Y;
+	sft.flags = SFT_DOWNWARD_Y | SFT_CHAR_IMAGE;
 
 	setupx();
 	runx();

@@ -57,15 +57,6 @@ struct SFT_Font
 	unsigned long size;
 };
 
-struct SFT
-{
-	SFT_Font *font;
-	double xScale, yScale;
-	double x, y;
-	long glyph;
-	uint32_t flags;
-};
-
 /* function declarations */
 /* file loading */
 static int  map_file(SFT_Font *font, const char *filename);
@@ -84,15 +75,15 @@ static int  units_per_em(SFT_Font *font);
 static long cmap_fmt4(SFT_Font *font, unsigned long table, unsigned int charCode);
 static long glyph_id(SFT_Font *font, unsigned int charCode);
 static int  num_long_hmtx(SFT_Font *font);
-static int  hor_metrics(SFT *sft, long glyph, double *advanceWidth, double *leftSideBearing);
+static int  hor_metrics(struct SFT *sft, long glyph, double *advanceWidth, double *leftSideBearing);
 static int  loca_format(SFT_Font *font);
 static long outline_offset(SFT_Font *font, long glyph);
 static long simple_flags(SFT_Font *font, unsigned long offset, int numPts, uint8_t *flags);
 static int  simple_points(SFT_Font *font, long offset, int numPts, uint8_t *flags, struct point *points);
 static void transform_points(int numPts, struct point *points, struct affine xAffine, struct affine yAffine);
 static void draw_contours(struct buffer buf, int numContours, struct contour *contours, uint8_t *flags, struct point *points);
-static int  draw_simple(SFT *sft, long offset, int numContours, struct buffer buf, struct affine xAffine, struct affine yAffine);
-static int  proc_outline(SFT *sft, unsigned long offset, double leftSideBearing, struct SFT_Char *chr);
+static int  draw_simple(struct SFT *sft, long offset, int numContours, struct buffer buf, struct affine xAffine, struct affine yAffine);
+static int  proc_outline(struct SFT *sft, unsigned long offset, double leftSideBearing, struct SFT_Char *chr);
 /* tesselation */
 static struct point midpoint(struct point a, struct point b);
 static double manhattan(struct point a, struct point b);
@@ -135,49 +126,8 @@ sft_freefont(SFT_Font *font)
 	free(font);
 }
 
-SFT *
-sft_create(void)
-{
-	SFT *sft;
-	if ((sft = calloc(1, sizeof(SFT))) == NULL)
-		return NULL;
-	/* Initially set all flags to true. */
-	sft->flags = ~(uint32_t) 0;
-	return sft;
-}
-
-void
-sft_destroy(SFT *sft)
-{
-	if (sft == NULL) return;
-	free(sft);
-}
-
-void
-sft_setflag(SFT *sft, int flag, int value)
-{
-	if (value) {
-		sft->flags |= (uint32_t) flag;
-	} else {
-		sft->flags &= ~(uint32_t) flag;
-	}
-}
-
-void
-sft_setfont(SFT *sft, SFT_Font *font)
-{
-	sft->font = font;
-}
-
-void
-sft_setscale(SFT *sft, double xScale, double yScale)
-{
-	sft->xScale = xScale;
-	sft->yScale = yScale;
-}
-
 int
-sft_linemetrics(SFT *sft, double *ascent, double *descent, double *gap)
+sft_linemetrics(struct SFT *sft, double *ascent, double *descent, double *gap)
 {
 	double factor;
 	long hhea;
@@ -194,17 +144,8 @@ sft_linemetrics(SFT *sft, double *ascent, double *descent, double *gap)
 	return 0;
 }
 
-void
-sft_move(SFT *sft, double x, double y)
-{
-	sft->x = x;
-	sft->y = y;
-	/* Reset kerning state. */
-	sft->glyph = 0;
-}
-
 int
-sft_char(SFT *sft, unsigned int charCode, struct SFT_Char *chr)
+sft_char(struct SFT *sft, unsigned int charCode, struct SFT_Char *chr)
 {
 	double advanceWidth, leftSideBearing;
 	long glyph, glyf, offset, next;
@@ -233,7 +174,6 @@ sft_char(SFT *sft, unsigned int charCode, struct SFT_Char *chr)
 	/* Advance into position for the next character (if requested). */
 	if (sft->flags & SFT_CHAR_ADVANCE) {
 		sft->x += advanceWidth;
-		sft->glyph = glyph;
 	}
 	return 0;
 }
@@ -443,7 +383,7 @@ num_long_hmtx(SFT_Font *font)
 }
 
 static int
-hor_metrics(SFT *sft, long glyph, double *advanceWidth, double *leftSideBearing)
+hor_metrics(struct SFT *sft, long glyph, double *advanceWidth, double *leftSideBearing)
 {
 	double factor;
 	unsigned long offset, shmtx;
@@ -607,7 +547,7 @@ draw_contours(struct buffer buf, int numContours, struct contour *contours, uint
 }
 
 static int
-draw_simple(SFT *sft, long offset, int numContours, struct buffer buf, struct affine xAffine, struct affine yAffine)
+draw_simple(struct SFT *sft, long offset, int numContours, struct buffer buf, struct affine xAffine, struct affine yAffine)
 {
 	struct point *points;
 	struct contour *contours = NULL;
@@ -651,7 +591,7 @@ failure:
 }
 
 static int
-proc_outline(SFT *sft, unsigned long offset, double leftSideBearing, struct SFT_Char *chr)
+proc_outline(struct SFT *sft, unsigned long offset, double leftSideBearing, struct SFT_Char *chr)
 {
 	struct affine xAffine, yAffine;
 	struct buffer buf;

@@ -20,7 +20,7 @@ static Window win;
 static Pixmap fgpix;
 static Picture pic, fgpic;
 static SFT_Font *font;
-static SFT *sft;
+static struct SFT sft;
 
 static void
 die(const char *msg)
@@ -44,10 +44,10 @@ draw(int width, int height)
 
 	XRenderFillRectangle(dpy, PictOpSrc, pic, &bgcolor, 0, 0, width, height);
 
-	sft_setflag(sft, SFT_CHAR_IMAGE, 0);
-	sft_move(sft, 0, -50);
+	sft.x = 0.0;
+	sft.y = -50.0;
 	for (c = "Hello, World!"; *c; ++c) {
-		if (sft_char(sft, *c, &chr) < 0)
+		if (sft_char(&sft, *c, &chr) < 0)
 			die("Can't render character.");
 		XRenderComposite(dpy, PictOpOver, fgpic, None, pic, 0, 0, 0, 0,
 			chr.x, chr.y, chr.width, chr.height);
@@ -129,10 +129,10 @@ main(int argc, char *argv[])
 
 	if ((font = sft_loadfile(filename)) == NULL)
 		die("Can't load font file.");
-	if ((sft = sft_create()) == NULL)
-		die("Can't create schrift context.");
-	sft_setfont(sft, font);
-	sft_setscale(sft, size, size);
+	sft.font = font;
+	sft.xScale = size;
+	sft.yScale = size;
+	sft.flags = SFT_DOWNWARD_Y | SFT_CHAR_ADVANCE;
 
 	setupx();
 	runx();

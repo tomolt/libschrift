@@ -22,10 +22,15 @@
 #define SFT_CHAR_IMAGE   0x04
 
 struct SFT_Font;
-struct SFT;
-
 typedef struct SFT_Font SFT_Font;
-typedef struct SFT SFT;
+
+struct SFT
+{
+	SFT_Font *font;
+	double xScale, yScale;
+	double x, y;
+	unsigned int flags;
+};
 
 struct SFT_Char
 {
@@ -36,16 +41,8 @@ struct SFT_Char
 SFT_Font *sft_loadfile(char const *filename);
 void sft_freefont(SFT_Font *font);
 
-SFT *sft_create(void);
-void sft_destroy(SFT *sft);
-
-void sft_setflag(SFT *sft, int flag, int value);
-void sft_setfont(SFT *sft, SFT_Font *font);
-void sft_setscale(SFT *sft, double xScale, double yScale);
-
-int sft_linemetrics(SFT *sft, double *ascent, double *descent, double *gap);
-void sft_move(SFT *sft, double x, double y);
-int sft_char(SFT *sft, unsigned int charCode, struct SFT_Char *chr);
+int sft_linemetrics(struct SFT *sft, double *ascent, double *descent, double *gap);
+int sft_char(struct SFT *sft, unsigned int charCode, struct SFT_Char *chr);
 
 #endif
 

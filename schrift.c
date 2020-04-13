@@ -147,11 +147,11 @@ sft_linemetrics(struct SFT *sft, double *ascent, double *descent, double *gap)
 int
 sft_char(struct SFT *sft, unsigned int charCode, struct SFT_Char *chr)
 {
-	double advanceWidth, leftSideBearing;
+	double leftSideBearing;
 	long glyph, glyf, offset, next;
 	if ((glyph = glyph_id(sft->font, charCode)) < 0)
 		return -1;
-	if (hor_metrics(sft, glyph, &advanceWidth, &leftSideBearing) < 0)
+	if (hor_metrics(sft, glyph, &chr->advance, &leftSideBearing) < 0)
 		return -1;
 	if ((glyf = gettable(sft->font, "glyf")) < 0)
 		return -1;
@@ -170,10 +170,6 @@ sft_char(struct SFT *sft, unsigned int charCode, struct SFT_Char *chr)
 		/* Glyph has an outline. */
 		if (proc_outline(sft, glyf + offset, leftSideBearing, chr) < 0)
 			return -1;
-	}
-	/* Advance into position for the next character (if requested). */
-	if (sft->flags & SFT_CHAR_ADVANCE) {
-		sft->x += advanceWidth;
 	}
 	return 0;
 }

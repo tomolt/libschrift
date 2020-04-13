@@ -41,16 +41,15 @@ draw(int width, int height)
 {
 	struct SFT_Char chr;
 	const char *c;
-
-	XRenderFillRectangle(dpy, PictOpSrc, pic, &bgcolor, 0, 0, width, height);
-
 	sft.x = 0.0;
 	sft.y = -50.0;
+	XRenderFillRectangle(dpy, PictOpSrc, pic, &bgcolor, 0, 0, width, height);
 	for (c = "Hello, World!"; *c; ++c) {
 		if (sft_char(&sft, *c, &chr) < 0)
 			die("Can't render character.");
 		XRenderComposite(dpy, PictOpOver, fgpic, None, pic, 0, 0, 0, 0,
 			chr.x, chr.y, chr.width, chr.height);
+		sft.x += chr.advance;
 	}
 }
 
@@ -132,7 +131,7 @@ main(int argc, char *argv[])
 	sft.font = font;
 	sft.xScale = size;
 	sft.yScale = size;
-	sft.flags = SFT_DOWNWARD_Y | SFT_CHAR_ADVANCE;
+	sft.flags = SFT_DOWNWARD_Y;
 
 	setupx();
 	runx();

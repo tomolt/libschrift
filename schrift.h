@@ -18,7 +18,6 @@
 #define SCHRIFT_H 1
 
 #define SFT_DOWNWARD_Y   0x01
-#define SFT_CHAR_ADVANCE 0x02
 #define SFT_CHAR_IMAGE   0x04
 
 struct SFT_Font;
@@ -35,6 +34,7 @@ struct SFT
 struct SFT_Char
 {
 	unsigned char *image;
+	double advance;
 	int x, y, width, height;
 };
 

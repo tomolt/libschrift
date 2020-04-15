@@ -29,11 +29,7 @@
 
 /* macros */
 #define AFFINE(affine, value) ((value) * (affine).scale + (affine).move)
-/* So as it turns out, these first three naive macros are actually
- * faster than any bit-tricks or specialized functions on amd64. */
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
-#define MAX(a, b) ((a) > (b) ? (a) : (b))
-#define ABS(x)  ((x) >= 0 ? (x) : -(x))
 #define SIGN(x) ((x) >= 0 ? 1 : -1)
 #define GRAIN 255
 
@@ -93,6 +89,7 @@ static double manhattan(struct point a, struct point b);
 static int  is_flat(struct curve curve, double flatness);
 static void draw_curve(struct buffer buf, struct curve curve);
 /* silhouette rasterization */
+static inline int quantize(double x);
 static void draw_dot(struct buffer buf, int px, int py, double xAvg, double yDiff);
 static void draw_line(struct buffer buf, struct line line);
 /* post-processing */
@@ -708,7 +705,7 @@ midpoint(struct point a, struct point b)
 static double
 manhattan(struct point a, struct point b)
 {
-	return ABS(a.x - b.x) + ABS(a.y - b.y);
+	return fabs(a.x - b.x) + fabs(a.y - b.y);
 }
 
 static int
@@ -748,13 +745,22 @@ draw_curve(struct buffer buf, struct curve curve)
 #undef STACK_SIZE
 }
 
+static inline int
+quantize(double x)
+{
+	// return round(x * GRAIN);
+	// return floor(x * GRAIN + 0.5);
+	double real = x * GRAIN + 0.5;
+	return (int) real - (real < 0.0);
+}
+
 static void
 draw_dot(struct buffer buf, int px, int py, double xAvg, double yDiff)
 {
 	struct cell * restrict ptr = &buf.cells[px + buf.width * py];
 	struct cell cell = *ptr;
-	cell.cover += round(yDiff * GRAIN);
-	cell.area += round((1.0 - xAvg) * yDiff * GRAIN);
+	cell.cover += quantize(yDiff);
+	cell.area += quantize((1.0 - xAvg) * yDiff);
 	*ptr = cell;
 }
 
@@ -775,7 +781,7 @@ draw_line(struct buffer buf, struct line line)
 	deltaX = goalX - originX;
 	pixelX = floor(originX);
 	if (deltaX != 0.0) {
-		crossingGapX = ABS(1.0 / deltaX);
+		crossingGapX = fabs(1.0 / deltaX);
 		if (deltaX > 0.0) {
 			nextCrossingX = (floor(originX) + 1.0 - originX) * crossingGapX;
 		} else {
@@ -788,7 +794,7 @@ draw_line(struct buffer buf, struct line line)
 	deltaY = goalY - originY;
 	pixelY = floor(originY);
 	if (deltaY != 0.0) {
-		crossingGapY = ABS(1.0 / deltaY);
+		crossingGapY = fabs(1.0 / deltaY);
 		if (deltaY > 0.0) {
 			nextCrossingY = (floor(originY) + 1.0 - originY) * crossingGapY;
 		} else {
@@ -796,7 +802,7 @@ draw_line(struct buffer buf, struct line line)
 		}
 	}
 
-	// numIters = ABS(floor(goalX) - floor(originX)) + ABS(floor(goalY) - floor(originY));
+	// numIters = abs(floor(goalX) - floor(originX)) + abs(floor(goalY) - floor(originY));
 	// for (iter = 0; iter < numIters; ++iter) {
 	while (!(pixelX == floor(goalX) && pixelY == floor(goalY))) {
 		if (nextCrossingX < nextCrossingY) {
@@ -831,7 +837,7 @@ post_process(struct buffer buf, uint8_t *image)
 		accum = 0;
 		for (x = 0; x < buf.width; ++x) {
 			cell = buf.cells[idx];
-			image[idx] = MIN(ABS(accum + cell.area), 255);
+			image[idx] = MIN(abs(accum + cell.area), 255);
 			accum += cell.cover;
 			++idx;
 		}

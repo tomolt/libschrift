@@ -11,8 +11,8 @@ X11LIB = /usr/lib/X11
 
 # flags
 CPPFLAGS = -I./
-CFLAGS = -g -std=c99 -pedantic -Wall -Wextra
-LDFLAGS = -g -lm
+CFLAGS = -g -Og -std=c99 -pedantic -Wall -Wextra
+LDFLAGS = -g -Og -lm
 
 # installation paths
 PREFIX = /usr/local

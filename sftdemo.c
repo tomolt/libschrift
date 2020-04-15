@@ -48,9 +48,6 @@ loadglyph(struct SFT *sft, unsigned int charCode)
 
 	if (sft_char(sft, charCode, &chr) < 0)
 		return;
-	/* FIXME Properly handle this case! */
-	if (chr.image == NULL)
-		return;
 
 	glyph = charCode;
 	info.x = -chr.x;

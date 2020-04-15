@@ -89,6 +89,7 @@ static double manhattan(struct point a, struct point b);
 static int  is_flat(struct curve curve, double flatness);
 static void draw_curve(struct buffer buf, struct curve curve);
 /* silhouette rasterization */
+static inline int ifloor(double x);
 static inline int quantize(double x);
 static void draw_dot(struct buffer buf, int px, int py, double xAvg, double yDiff);
 static void draw_line(struct buffer buf, struct line line);
@@ -532,7 +533,7 @@ draw_contours(struct buffer buf, int numContours, struct contour *contours, uint
 {
 #define DRAW_SEGMENT(end) do { \
 		if (gotCtrl) draw_curve(buf, (struct curve) { beg, ctrl, (end) }); \
-		else draw_line(buf, (struct line) { beg, (end) }); \
+		else if (beg.y != (end).y) draw_line(buf, (struct line) { beg, (end) }); \
 	} while (0)
 	struct point looseEnd, beg, ctrl, center;
 	int c, f, l, firstOn, lastOn, gotCtrl, i;
@@ -746,12 +747,15 @@ draw_curve(struct buffer buf, struct curve curve)
 }
 
 static inline int
+ifloor(double x)
+{
+	return (int) x - (x < 0.0);
+}
+
+static inline int
 quantize(double x)
 {
-	// return round(x * GRAIN);
-	// return floor(x * GRAIN + 0.5);
-	double real = x * GRAIN + 0.5;
-	return (int) real - (real < 0.0);
+	return ifloor(x * GRAIN + 0.5);
 }
 
 static void
@@ -774,12 +778,12 @@ draw_line(struct buffer buf, struct line line)
 	double crossingGapX = 0.0, crossingGapY = 0.0;
 	double prevDistance = 0.0;
 	int pixelX, pixelY;
-	// int iter, numIters;
+	int iter, numIters;
 
 	originX = line.beg.x;
 	goalX = line.end.x;
 	deltaX = goalX - originX;
-	pixelX = floor(originX);
+	pixelX = ifloor(originX);
 	if (deltaX != 0.0) {
 		crossingGapX = fabs(1.0 / deltaX);
 		if (deltaX > 0.0) {
@@ -792,7 +796,7 @@ draw_line(struct buffer buf, struct line line)
 	originY = line.beg.y;
 	goalY = line.end.y;
 	deltaY = goalY - originY;
-	pixelY = floor(originY);
+	pixelY = ifloor(originY);
 	if (deltaY != 0.0) {
 		crossingGapY = fabs(1.0 / deltaY);
 		if (deltaY > 0.0) {
@@ -802,9 +806,8 @@ draw_line(struct buffer buf, struct line line)
 		}
 	}
 
-	// numIters = abs(floor(goalX) - floor(originX)) + abs(floor(goalY) - floor(originY));
-	// for (iter = 0; iter < numIters; ++iter) {
-	while (!(pixelX == floor(goalX) && pixelY == floor(goalY))) {
+	numIters = abs(ifloor(goalX) - ifloor(originX)) + abs(ifloor(goalY) - ifloor(originY));
+	for (iter = 0; iter < numIters; ++iter) {
 		if (nextCrossingX < nextCrossingY) {
 			double deltaDistance = nextCrossingX - prevDistance;
 			double averageX = (deltaX > 0) - 0.5 * deltaX * deltaDistance;

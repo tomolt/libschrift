@@ -666,6 +666,7 @@ proc_outline(struct SFT *sft, unsigned long offset, double leftSideBearing, stru
 			}
 			free(rowBuf);
 		}
+
 		if ((chr->image = calloc(buf.width * buf.height, 1)) == NULL) {
 			free(buf.cells);
 			return -1;
@@ -674,7 +675,7 @@ proc_outline(struct SFT *sft, unsigned long offset, double leftSideBearing, stru
 		free(buf.cells);
 	}
 	if (sft->flags & SFT_DOWNWARD_Y) {
-		chr->y = -(chr->y + chr->height);
+		// chr->y = -(chr->y + chr->height);
 	}
 	return 0;
 }
@@ -744,47 +745,57 @@ draw_dot(struct buffer buf, int px, int py, double xAvg, double yDiff)
 static void
 draw_line(struct buffer buf, struct line line)
 {
-	double xOrigin, xDelta, xDeltaDistance = 0.0, xSideDistance = 1.0;
-	int xStep;
-	xOrigin = line.beg.x;
-	xDelta = line.end.x - xOrigin;
-	xStep = SIGN(xDelta);
-	if (xDelta != 0.0) {
-		xDeltaDistance = ABS(1.0 / xDelta);
-		xSideDistance = xDeltaDistance * (ceil(xStep * xOrigin) - xStep * xOrigin);
-	}
-	double yOrigin, yDelta, yDeltaDistance = 0.0, ySideDistance = 1.0;
-	int yStep;
-	yOrigin = line.beg.y;
-	yDelta = line.end.y - yOrigin;
-	yStep = SIGN(yDelta);
-	if (yDelta != 0.0) {
-		yDeltaDistance = ABS(1.0 / yDelta);
-		ySideDistance = yDeltaDistance * (ceil(yStep * yOrigin) - yStep * yOrigin);
-	}
-	int xPixel = floor(xOrigin), yPixel = floor(yOrigin);
+	double originX, originY;
+	double goalX, goalY;
+	double deltaX, deltaY;
+	double nextCrossingX = 100.0, nextCrossingY = 100.0;
+	double crossingGapX = 0.0, crossingGapY = 0.0;
 	double prevDistance = 0.0;
-	while (xSideDistance < 1.0 || ySideDistance < 1.0) {
-		if (xSideDistance <= ySideDistance) {
-			double deltaDistance = xSideDistance - prevDistance;
-			double xAvg = (xStep > 0) - 0.5 * xDelta * deltaDistance;
-			draw_dot(buf, xPixel, yPixel, xAvg, yDelta * deltaDistance);
-			prevDistance = xSideDistance;
-			xPixel += xStep;
-			xSideDistance += xDeltaDistance;
+	int pixelX, pixelY;
+	// int iter, numIters;
+
+	originX = line.beg.x;
+	goalX = line.end.x;
+	deltaX = goalX - originX;
+	pixelX = floor(originX);
+	if (deltaX != 0.0) {
+		crossingGapX = ABS(1.0 / deltaX);
+		nextCrossingX = (ABS(originX - pixelX) + (deltaX > 0.0)) * crossingGapX;
+	}
+
+	originY = line.beg.y;
+	goalY = line.end.y;
+	deltaY = goalY - originY;
+	pixelY = floor(originY);
+	if (deltaY != 0.0) {
+		crossingGapY = ABS(1.0 / deltaY);
+		nextCrossingY = (ABS(originY - pixelY) + (deltaY > 0.0)) * crossingGapY;
+	}
+
+	// numIters = ABS(floor(goalX) - floor(originX)) + ABS(floor(goalY) - floor(originY));
+	// for (iter = 0; iter < numIters; ++iter) {
+	while (!(pixelX == floor(goalX) && pixelY == floor(goalY))) {
+		if (nextCrossingX < nextCrossingY) {
+			double deltaDistance = nextCrossingX - prevDistance;
+			double averageX = (deltaX > 0) - 0.5 * deltaX * deltaDistance;
+			draw_dot(buf, pixelX, pixelY, averageX, deltaY * deltaDistance);
+			pixelX += SIGN(deltaX);
+			prevDistance = nextCrossingX;
+			nextCrossingX += crossingGapX;
 		} else {
-			double deltaDistance = ySideDistance - prevDistance;
-			double x = xOrigin - xPixel + ySideDistance * xDelta;
-			double xAvg = x - 0.5 * xDelta * deltaDistance;
-			draw_dot(buf, xPixel, yPixel, xAvg, yDelta * deltaDistance);
-			prevDistance = ySideDistance;
-			yPixel += yStep;
-			ySideDistance += yDeltaDistance;
+			double deltaDistance = nextCrossingY - prevDistance;
+			double x = originX - pixelX + nextCrossingY * deltaX;
+			double averageX = x - 0.5 * deltaX * deltaDistance;
+			draw_dot(buf, pixelX, pixelY, averageX, deltaY * deltaDistance);
+			pixelY += SIGN(deltaY);
+			prevDistance = nextCrossingY;
+			nextCrossingY += crossingGapY;
 		}
 	}
+
 	double deltaDistance = 1.0 - prevDistance;
-	double xAvg = (line.end.x - xPixel) - 0.5 * xDelta * deltaDistance;
-	draw_dot(buf, xPixel, yPixel, xAvg, yDelta * deltaDistance);
+	double averageX = (line.end.x - pixelX) - 0.5 * deltaX * deltaDistance;
+	draw_dot(buf, pixelX, pixelY, averageX, deltaY * deltaDistance);
 }
 
 static void

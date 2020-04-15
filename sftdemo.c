@@ -14,6 +14,7 @@
 
 char *argv0;
 
+static const char *message;
 static XRenderColor fgcolor, bgcolor;
 static Display *dpy;
 static int screen;
@@ -34,7 +35,7 @@ static void
 usage(void)
 {
 	fprintf(stderr,
-		"usage: %s [-f font file] [-s size in px]\n", argv0);
+		"usage: %s [-f font file] [-s size in px] [message]\n", argv0);
 }
 
 static void
@@ -75,7 +76,7 @@ loadglyphset(const char *filename, double size)
 	struct SFT sft = { 0 };
 	SFT_Font *font;
 	XRenderPictFormat *format;
-	unsigned int i;
+	unsigned char c;
 
 	format = XRenderFindStandardFormat(dpy, PictStandardA8);
 	glyphset = XRenderCreateGlyphSet(dpy, format);
@@ -88,9 +89,8 @@ loadglyphset(const char *filename, double size)
 	sft.yScale = size;
 	sft.flags = SFT_DOWNWARD_Y | SFT_CHAR_IMAGE;
 
-	char *str = ",!HWdelor";
-	for (i = 0; str[i]; ++i)
-		loadglyph(&sft, str[i]);
+	for (c = 32; c < 128; ++c)
+		loadglyph(&sft, c);
 
 	XSync(dpy, 0);
 	sft_freefont(font);
@@ -110,7 +110,7 @@ draw(int width, int height)
 		pic, &bgcolor, 0, 0, width, height);
 	XRenderCompositeString8(dpy, PictOpOver,
 		fgpic, pic, NULL,
-		glyphset, 0, 0, 20, 50, "Hello,World!", 12);
+		glyphset, 0, 0, 20, 50, message, strlen(message));
 }
 
 static void
@@ -171,6 +171,7 @@ main(int argc, char *argv[])
 	const char *filename;
 	double size;
 
+	message = "Hello, World!";
 	filename = "resources/Ubuntu-R.ttf";
 	size = 16.0;
 	bgcolor = (XRenderColor) { 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF };
@@ -187,6 +188,10 @@ main(int argc, char *argv[])
 		usage();
 		exit(1);
 	} ARGEND
+	if (argc) {
+		message = *argv;
+		--argc, ++argv;
+	}
 	if (argc) {
 		usage();
 		exit(1);

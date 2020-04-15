@@ -650,6 +650,22 @@ proc_outline(struct SFT *sft, unsigned long offset, double leftSideBearing, stru
 			free(buf.cells);
 			return -1;
 		}
+#if 0
+		printf("COVER:\n");
+		for (int y = 0; y < buf.height; ++y) {
+			for (int x = 0; x < buf.width; ++x) {
+				printf("% 04d ", buf.cells[x + y * buf.width].cover);
+			}
+			printf("\n");
+		}
+		printf("AREA:\n");
+		for (int y = 0; y < buf.height; ++y) {
+			for (int x = 0; x < buf.width; ++x) {
+				printf("% 04d ", buf.cells[x + y * buf.width].area);
+			}
+			printf("\n");
+		}
+#endif
 		if (sft->flags & SFT_DOWNWARD_Y) {
 			size_t rowSize = buf.width * sizeof(buf.cells[0]);
 			struct cell *rowBuf, *row1, *row2;
@@ -760,7 +776,11 @@ draw_line(struct buffer buf, struct line line)
 	pixelX = floor(originX);
 	if (deltaX != 0.0) {
 		crossingGapX = ABS(1.0 / deltaX);
-		nextCrossingX = (ABS(originX - pixelX) + (deltaX > 0.0)) * crossingGapX;
+		if (deltaX > 0.0) {
+			nextCrossingX = (floor(originX) + 1.0 - originX) * crossingGapX;
+		} else {
+			nextCrossingX = (originX - floor(originX)) * crossingGapX;
+		}
 	}
 
 	originY = line.beg.y;
@@ -769,7 +789,11 @@ draw_line(struct buffer buf, struct line line)
 	pixelY = floor(originY);
 	if (deltaY != 0.0) {
 		crossingGapY = ABS(1.0 / deltaY);
-		nextCrossingY = (ABS(originY - pixelY) + (deltaY > 0.0)) * crossingGapY;
+		if (deltaY > 0.0) {
+			nextCrossingY = (floor(originY) + 1.0 - originY) * crossingGapY;
+		} else {
+			nextCrossingY = (originY - floor(originY)) * crossingGapY;
+		}
 	}
 
 	// numIters = ABS(floor(goalX) - floor(originX)) + ABS(floor(goalY) - floor(originY));

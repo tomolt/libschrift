@@ -52,24 +52,12 @@ loadglyph(struct SFT *sft, unsigned int charCode)
 		return;
 
 	glyph = charCode;
-	info.x = chr.x;
-	info.y = chr.y + chr.height;
+	info.x = -chr.x;
+	info.y = -chr.y;
 	info.width = chr.width;
 	info.height = chr.height;
 	info.xOff = (int) (chr.advance + 0.5); /* You *should* use round() here instead. */
 	info.yOff = 0;
-
-#if 0
-	if (charCode == 'H') {
-		fprintf(stderr, "P2\n%d\n%d\n255\n", chr.width, chr.height);
-		for (int y = 0; y < chr.height; ++y) {
-			for (int x = 0; x < chr.width; ++x) {
-				fprintf(stderr, "%03u ", (unsigned char) chr.image[x + y * chr.width]);
-			}
-			fprintf(stderr, "\n");
-		}
-	}
-#endif
 
 	stride = (chr.width + 3) & ~3;
 	char bitmap[stride * chr.height];
@@ -98,9 +86,9 @@ loadglyphset(const char *filename, double size)
 	sft.font = font;
 	sft.xScale = size;
 	sft.yScale = size;
-	sft.flags = /* SFT_DOWNWARD_Y | */ SFT_CHAR_IMAGE;
+	sft.flags = SFT_DOWNWARD_Y | SFT_CHAR_IMAGE;
 
-	char *str = "H";
+	char *str = ",!HWdelor";
 	for (i = 0; str[i]; ++i)
 		loadglyph(&sft, str[i]);
 

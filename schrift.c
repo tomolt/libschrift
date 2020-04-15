@@ -691,7 +691,7 @@ proc_outline(struct SFT *sft, unsigned long offset, double leftSideBearing, stru
 		free(buf.cells);
 	}
 	if (sft->flags & SFT_DOWNWARD_Y) {
-		// chr->y = -(chr->y + chr->height);
+		chr->y = -(chr->y + chr->height);
 	}
 	return 0;
 }

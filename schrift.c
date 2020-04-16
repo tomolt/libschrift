@@ -31,7 +31,6 @@
 #define AFFINE(affine, value) ((value) * (affine).scale + (affine).move)
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define SIGN(x) ((x) >= 0 ? 1 : -1)
-#define GRAIN 255
 #define STACK_ALLOC(var, len, thresh) \
 	uint8_t var##_stack_[thresh]; \
 	var = (len) <= (thresh) ? (void *) var##_stack_ : malloc(len);
@@ -90,7 +89,6 @@ static int  draw_simple(struct SFT *sft, long offset, int numContours, struct bu
 static int  proc_outline(struct SFT *sft, unsigned long offset, double leftSideBearing, struct SFT_Char *chr);
 /* tesselation */
 static struct point midpoint(struct point a, struct point b);
-static double manhattan(struct point a, struct point b);
 static int  is_flat(struct curve curve, double flatness);
 static void draw_curve(struct buffer buf, struct curve curve);
 /* silhouette rasterization */
@@ -710,18 +708,13 @@ midpoint(struct point a, struct point b)
 	};
 }
 
-static double
-manhattan(struct point a, struct point b)
-{
-	return fabs(a.x - b.x) + fabs(a.y - b.y);
-}
-
 static int
 is_flat(struct curve curve, double flatness)
 {
 	struct point mid = midpoint(curve.beg, curve.end);
-	double dist = manhattan(curve.ctrl, mid);
-	return dist <= flatness;
+	double x = curve.ctrl.x - mid.x;
+	double y = curve.ctrl.y - mid.y;
+	return x * x + y * y <= flatness * flatness;
 }
 
 static void
@@ -738,7 +731,7 @@ draw_curve(struct buffer buf, struct curve curve)
 	struct point ctrl0, ctrl1, pivot;
 	int top = 0;
 	for (;;) {
-		if (is_flat(curve, 0.75) || top + 1 > STACK_SIZE) {
+		if (is_flat(curve, 0.5) || top + 1 > STACK_SIZE) {
 			draw_line(buf, (struct line) { curve.beg, curve.end });
 			if (top == 0) return;
 			curve = stack[--top];
@@ -762,7 +755,7 @@ ifloor(double x)
 static inline int
 quantize(double x)
 {
-	return ifloor(x * GRAIN + 0.5);
+	return ifloor(x * 255 + 0.5);
 }
 
 static void

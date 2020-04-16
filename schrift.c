@@ -32,6 +32,11 @@
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define SIGN(x) ((x) >= 0 ? 1 : -1)
 #define GRAIN 255
+#define STACK_ALLOC(var, len, thresh) \
+	uint8_t var##_stack_[thresh]; \
+	var = (len) <= (thresh) ? (void *) var##_stack_ : malloc(len);
+#define STACK_FREE(var) \
+	if ((void *) var != (void *) var##_stack_) free(var);
 
 enum { SrcMapping, SrcUser };
 
@@ -581,7 +586,8 @@ draw_simple(struct SFT *sft, long offset, int numContours, struct buffer buf, st
 	memLen  = numPts * sizeof(points[0]);
 	memLen += numContours * sizeof(contours[0]);
 	memLen += numPts * sizeof(flags[0]);
-	if ((memory = malloc(memLen)) == NULL)
+	STACK_ALLOC(memory, memLen, 2048) ;
+	if (memory == NULL)
 		goto failure;
 	points = (struct point *) memory;
 	contours = (struct contour *) (points + numPts);
@@ -602,10 +608,10 @@ draw_simple(struct SFT *sft, long offset, int numContours, struct buffer buf, st
 	transform_points(numPts, points, xAffine, yAffine);
 	draw_contours(buf, numContours, contours, flags, points);
 
-	free(memory);
+	STACK_FREE(memory) ;
 	return 0;
 failure:
-	free(memory);
+	STACK_FREE(memory) ;
 	return -1;
 }
 
@@ -667,7 +673,8 @@ proc_outline(struct SFT *sft, unsigned long offset, double leftSideBearing, stru
 		if (sft->flags & SFT_DOWNWARD_Y) {
 			size_t rowSize = buf.width * sizeof(buf.cells[0]);
 			struct cell *rowBuf, *row1, *row2;
-			if ((rowBuf = malloc(rowSize)) == NULL) {
+			STACK_ALLOC(rowBuf, rowSize, 512) ;
+			if (rowBuf == NULL) {
 				free(buf.cells);
 				return -1;
 			}
@@ -678,7 +685,7 @@ proc_outline(struct SFT *sft, unsigned long offset, double leftSideBearing, stru
 				memcpy(row1, row2, rowSize);
 				memcpy(row2, rowBuf, rowSize);
 			}
-			free(rowBuf);
+			STACK_FREE(rowBuf) ;
 		}
 
 		if ((chr->image = calloc(buf.width * buf.height, 1)) == NULL) {

@@ -6,24 +6,28 @@ include config.mk
 
 .PHONY: all clean install uninstall
 
-all: libschrift.a sftdemo
+all: libschrift.a sftdemo stress
 
 libschrift.a: schrift.o
 	$(AR) rc $@ $^$>
 	$(RANLIB) $@
+schrift.o: schrift.h
 
 sftdemo: sftdemo.o libschrift.a
 	$(LD) $(LDFLAGS) $< -o $@ -L$(X11LIB) -L. -lX11 -lXrender -lschrift
-
 sftdemo.o: sftdemo.c schrift.h arg.h
 	$(CC) -c $(CFLAGS) $< -o $@ $(CPPFLAGS) -I$(X11INC)
 
-schrift.o: schrift.h
+stress: stress.o libschrift.a
+	$(LD) $(LDFLAGS) $< -o $@ -L. -lschrift
+stress.o: stress.c schrift.h arg.h
+	$(CC) -c $(CFLAGS) $< -o $@ $(CPPFLAGS)
 
 clean:
 	rm -f *.o
 	rm -f libschrift.a
 	rm -f sftdemo
+	rm -f stress
 
 install: libschrift.a schrift.h schrift.3
 	# libschrift.a
@@ -34,7 +38,7 @@ install: libschrift.a schrift.h schrift.3
 	mkdir -p "$(DESTDIR)$(PREFIX)/include"
 	cp -f schrift.h "$(DESTDIR)$(PREFIX)/include"
 	chmod 644 "$(DESTDIR)$(PREFIX)/include/schrift.h"
-	#schrift.3
+	# schrift.3
 	mkdir -p "$(DESTDIR)$(MANPREFIX)/man3"
 	cp schrift.3 "$(DESTDIR)$(MANPREFIX)/man3"
 	chmod 644 "$(DESTDIR)$(MANPREFIX)/man3/schrift.3"

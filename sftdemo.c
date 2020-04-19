@@ -167,7 +167,6 @@ main(int argc, char *argv[])
 {
 	const char *filename;
 	double size;
-	int profiling = 0;
 
 	message = "Hello, World!";
 	filename = "resources/Ubuntu-R.ttf";
@@ -182,9 +181,6 @@ main(int argc, char *argv[])
 	case 's':
 		size = atof(EARGF(usage()));
 		break;
-	case 'P':
-		profiling = 1;
-		break;
 	default:
 		usage();
 		exit(1);
@@ -198,30 +194,9 @@ main(int argc, char *argv[])
 		exit(1);
 	}
 
-	if (profiling) {
-		struct SFT sft;
-		struct SFT_Char chr;
-		SFT_Font *font;
-		int i, c;
-		font = sft_loadfile(filename);
-		if (font == NULL)
-			die("Can't load font file.");
-		sft.font = font;
-		sft.xScale = size;
-		sft.yScale = size;
-		sft.flags = SFT_DOWNWARD_Y | SFT_CHAR_IMAGE;
-		for (i = 0; i < 1000; ++i) {
-			for (c = 32; c < 128; ++c) {
-				if (sft_char(&sft, c, &chr) < 0) continue;
-				free(chr.image);
-			}
-		}
-		sft_freefont(font);
-	} else {
-		setupx();
-		loadglyphset(filename, size);
-		runx();
-	}
+	setupx();
+	loadglyphset(filename, size);
+	runx();
 	return 0;
 }
 

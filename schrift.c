@@ -65,15 +65,15 @@ static int  units_per_em(SFT_Font *font);
 static long cmap_fmt4(SFT_Font *font, unsigned long table, unsigned int charCode);
 static long glyph_id(SFT_Font *font, unsigned int charCode);
 static int  num_long_hmtx(SFT_Font *font);
-static int  hor_metrics(struct SFT *sft, long glyph, double *advanceWidth, double *leftSideBearing);
+static int  hor_metrics(const struct SFT *sft, long glyph, double *advanceWidth, double *leftSideBearing);
 static int  loca_format(SFT_Font *font);
 static long outline_offset(SFT_Font *font, long glyph);
 static long simple_flags(SFT_Font *font, unsigned long offset, int numPts, uint8_t *flags);
 static int  simple_points(SFT_Font *font, long offset, int numPts, uint8_t *flags, struct point *points);
 static void transform_points(int numPts, struct point *points, struct affine xAffine, struct affine yAffine);
 static void draw_contours(struct buffer buf, int numContours, struct contour *contours, uint8_t *flags, struct point *points);
-static int  draw_simple(struct SFT *sft, long offset, int numContours, struct buffer buf, struct affine xAffine, struct affine yAffine);
-static int  proc_outline(struct SFT *sft, unsigned long offset, double leftSideBearing, struct SFT_Char *chr);
+static int  draw_simple(const struct SFT *sft, long offset, int numContours, struct buffer buf, struct affine xAffine, struct affine yAffine);
+static int  proc_outline(const struct SFT *sft, unsigned long offset, double leftSideBearing, struct SFT_Char *chr);
 /* tesselation */
 static struct point midpoint(struct point a, struct point b);
 static int  is_flat(struct curve curve, double flatness);
@@ -139,7 +139,7 @@ sft_freefont(SFT_Font *font)
 }
 
 int
-sft_linemetrics(struct SFT *sft, double *ascent, double *descent, double *gap)
+sft_linemetrics(const struct SFT *sft, double *ascent, double *descent, double *gap)
 {
 	double factor;
 	long hhea;
@@ -157,7 +157,7 @@ sft_linemetrics(struct SFT *sft, double *ascent, double *descent, double *gap)
 }
 
 int
-sft_char(struct SFT *sft, unsigned int charCode, struct SFT_Char *chr)
+sft_char(const struct SFT *sft, unsigned int charCode, struct SFT_Char *chr)
 {
 	double leftSideBearing;
 	long glyph, glyf, offset, next;
@@ -392,7 +392,7 @@ num_long_hmtx(SFT_Font *font)
 }
 
 static int
-hor_metrics(struct SFT *sft, long glyph, double *advanceWidth, double *leftSideBearing)
+hor_metrics(const struct SFT *sft, long glyph, double *advanceWidth, double *leftSideBearing)
 {
 	double factor;
 	unsigned long offset, shmtx;
@@ -556,7 +556,7 @@ draw_contours(struct buffer buf, int numContours, struct contour *contours, uint
 }
 
 static int
-draw_simple(struct SFT *sft, long offset, int numContours, struct buffer buf, struct affine xAffine, struct affine yAffine)
+draw_simple(const struct SFT *sft, long offset, int numContours, struct buffer buf, struct affine xAffine, struct affine yAffine)
 {
 	struct point *points;
 	struct contour *contours = NULL;
@@ -601,7 +601,7 @@ failure:
 }
 
 static int
-proc_outline(struct SFT *sft, unsigned long offset, double leftSideBearing, struct SFT_Char *chr)
+proc_outline(const struct SFT *sft, unsigned long offset, double leftSideBearing, struct SFT_Char *chr)
 {
 	struct affine xAffine, yAffine;
 	struct buffer buf;
@@ -748,7 +748,7 @@ quantize(double x)
 static void
 draw_dot(struct buffer buf, int px, int py, double xAvg, double yDiff)
 {
-	struct cell * restrict ptr = &buf.cells[px + buf.width * py];
+	struct cell *restrict ptr = &buf.cells[px + buf.width * py];
 	struct cell cell = *ptr;
 	cell.cover += quantize(yDiff);
 	cell.area += quantize((1.0 - xAvg) * yDiff);
@@ -821,15 +821,17 @@ draw_line(struct buffer buf, struct line line)
 static void
 post_process(struct buffer buf, uint8_t *image)
 {
-	struct cell cell;
-	int x, y, idx = 0, accum;
+	struct cell *restrict in, cell;
+	uint8_t *restrict out;
+	int x, y, accum;
+	in = buf.cells;
+	out = image;
 	for (y = 0; y < buf.height; ++y) {
 		accum = 0;
 		for (x = 0; x < buf.width; ++x) {
-			cell = buf.cells[idx];
-			image[idx] = MIN(abs(accum + cell.area), 255);
+			cell = *in++;
+			*out++ = MIN(abs(accum + cell.area), 255);
 			accum += cell.cover;
-			++idx;
 		}
 	}
 }

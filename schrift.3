@@ -19,9 +19,9 @@
 .Fn sft_freefont "SFT_Font *font"
 
 .Ft int
-.Fn sft_linemetrics "struct SFT *sft" "double *ascent" "double *descent" "double *gap"
+.Fn sft_linemetrics "const struct SFT *sft" "double *ascent" "double *descent" "double *gap"
 .Ft int
-.Fn sft_char "struct SFT *sft" "unsigned int charCode" "struct SFT_Char *chr"
+.Fn sft_char "const struct SFT *sft" "unsigned int charCode" "struct SFT_Char *chr"
 
 .Sh DESCRIPTION
 
@@ -69,7 +69,7 @@ return 0 on success or -1 on error.
 .Sh EXAMPLES
 
 See the source code of
-.Xr sftdemo 1
+.Sy sftdemo
 for a detailed example of real-world usage of schrift.
 
 .Sh CAVEATS

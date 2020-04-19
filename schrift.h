@@ -47,8 +47,8 @@ SFT_Font *sft_loadmem(const void *mem, unsigned long size);
 SFT_Font *sft_loadfile(const char *filename);
 void sft_freefont(SFT_Font *font);
 
-int sft_linemetrics(struct SFT *sft, double *ascent, double *descent, double *gap);
-int sft_char(struct SFT *sft, unsigned int charCode, struct SFT_Char *chr);
+int sft_linemetrics(const struct SFT *sft, double *ascent, double *descent, double *gap);
+int sft_char(const struct SFT *sft, unsigned int charCode, struct SFT_Char *chr);
 
 #endif
 

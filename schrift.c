@@ -63,6 +63,7 @@ static inline uint32_t getu32(SFT_Font *font, unsigned long offset);
 static long gettable(SFT_Font *font, char tag[4]);
 static int  units_per_em(SFT_Font *font);
 static long cmap_fmt4(SFT_Font *font, unsigned long table, unsigned int charCode);
+static long cmap_fmt6(SFT_Font *font, unsigned long table, unsigned int charCode);
 static long glyph_id(SFT_Font *font, unsigned int charCode);
 static int  num_long_hmtx(SFT_Font *font);
 static int  hor_metrics(const struct SFT *sft, long glyph, double *advanceWidth, double *leftSideBearing);
@@ -343,6 +344,24 @@ cmap_fmt4(SFT_Font *font, unsigned long table, unsigned int charCode)
 }
 
 static long
+cmap_fmt6(SFT_Font *font, unsigned long table, unsigned int charCode)
+{
+	unsigned int firstCode, entryCount;
+	if (font->size < table + 4)
+		return -1;
+	firstCode = getu16(font, table);
+	entryCount = getu16(font, table + 2);
+	if (font->size < table + 4 + 2 * entryCount)
+		return -1;
+	if (charCode < firstCode)
+		return -1;
+	charCode -= firstCode;
+	if (!(charCode < entryCount))
+		return -1;
+	return getu16(font, table + 4 + 2 * charCode);
+}
+
+static long
 glyph_id(SFT_Font *font, unsigned int charCode)
 {
 	unsigned long entry, table;
@@ -371,6 +390,8 @@ glyph_id(SFT_Font *font, unsigned int charCode)
 			switch (getu16(font, table)) {
 			case 4:
 				return cmap_fmt4(font, table + 6, charCode);
+			case 6:
+				return cmap_fmt6(font, table + 6, charCode);
 			default:
 				return -1;
 			}

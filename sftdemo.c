@@ -61,7 +61,7 @@ loadglyph(struct SFT *sft, unsigned int charCode)
 	char bitmap[stride * chr.height];
 	memset(bitmap, 0, stride * chr.height);
 	for (i = 0; i < chr.height; ++i)
-		memcpy(bitmap + i * stride, chr.image + i * chr.width, chr.width);
+		memcpy(bitmap + i * stride, (char *) chr.image + i * chr.width, chr.width);
 	free(chr.image);
 
 	XRenderAddGlyphs(dpy, glyphset, &glyph, &info, 1, bitmap, stride * chr.height);

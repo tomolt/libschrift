@@ -17,8 +17,8 @@
 #ifndef SCHRIFT_H
 #define SCHRIFT_H 1
 
-#define SFT_DOWNWARD_Y   0x01
-#define SFT_CHAR_IMAGE   0x04
+#define SFT_DOWNWARD_Y 0x01
+#define SFT_CHAR_IMAGE 0x02
 
 struct SFT_Font;
 typedef struct SFT_Font SFT_Font;
@@ -26,16 +26,21 @@ typedef struct SFT_Font SFT_Font;
 struct SFT
 {
 	SFT_Font *font;
-	double xScale, yScale;
-	double x, y;
+	double xScale;
+	double yScale;
+	double x;
+	double y;
 	unsigned int flags;
 };
 
 struct SFT_Char
 {
-	unsigned char *image;
+	void *image;
 	double advance;
-	int x, y, width, height;
+	int x;
+	int y;
+	int width;
+	int height;
 };
 
 SFT_Font *sft_loadmem(const void *mem, unsigned long size);

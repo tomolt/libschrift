@@ -1,17 +1,5 @@
 /* See LICENSE file for copyright and license details. */
 
-/**** TODOS ****
- * - Implement compound glyph support.
- * - Bound / clip / clamp coordinates that exceed extents.
- * - Port over cmap format 6 support from old libschrift.
- * - Port over kerning support.
- * - Grapheme Clusters?!
- * - Implement sub-pixel rendering.
- * - A scanline-based rasterizer might be faster than the current raycasting one.
- * - Write a man page.
- * - Special case draw_line() for common cases (vertical lines etc.)
- */
-
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>

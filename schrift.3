@@ -1,0 +1,112 @@
+.Dd April 19, 2020
+.Dt SCHRIFT 3
+.Os suckless.org
+.Sh NAME
+.Nm schrift
+.Nd Lightweight TrueType font rendering library
+
+.Sh SYNOPSIS
+
+.Lb libschrift
+
+.In schrift.h
+
+.Ft SFT_Font *
+.Fn sft_loadmem "const void *mem" "unsigned long size"
+.Ft SFT_Font *
+.Fn sft_loadfile "const char *filename"
+.Ft void
+.Fn sft_freefont "SFT_Font *font"
+
+.Ft int
+.Fn sft_linemetrics "struct SFT *sft" "double *ascent" "double *descent" "double *gap"
+.Ft int
+.Fn sft_char "struct SFT *sft" "unsigned int charCode" "struct SFT_Char *chr"
+
+.Sh DESCRIPTION
+
+.Ss The SFT structure
+
+.Bd -literal
+
+struct SFT {
+	SFT_Font *font;
+	double xScale;
+	double yScale;
+	double x;
+	double y;
+	unsigned int flags;
+};
+
+.El
+
+.Ss The SFT_Char structure
+
+.Bl -literal
+
+struct SFT_Char {
+	void *image;
+	double advance;
+	int x;
+	int y;
+	int width;
+	int height;
+};
+
+.El
+
+.Sh RETURN VALUES
+
+.Fn sft_loadmem
+and
+.Fn sft_loadfile
+return NULL on error.
+.Fn sft_linemetrics
+and
+.Fn sft_char
+return 0 on success or -1 on error.
+
+.Sh EXAMPLES
+
+See the source code of
+.Xr sftdemo 1
+for a detailed example of real-world usage of schrift.
+
+.Sh CAVEATS
+
+The only text encoding that
+.Nm
+understands is Unicode.
+Similarly, the only kind of font file supported right now
+are TrueType (.ttf) fonts (Some OpenType fonts might work too,
+as OpenType is effectively a superset of TrueType).
+.Nm
+currently does not implement font hinting and probably never will.
+
+.Sh FUTURE DIRECTIONS
+
+In no particular order:
+.Bl -dash
+.It
+Implement compound glyph support.
+.It
+Bound / clip / clamp coordinates that exceed extents.
+.It
+Port over cmap format 6 support from old libschrift.
+.It
+Port over kerning support.
+.It
+Instead of Unicode code points,
+.Nm
+really should operate on grapheme clusters.
+.It
+Implement sub-pixel rendering.
+.It
+Supply an API for iterating over all characters a font provides.
+This is needed for UTF-8 text rendering over XRender.
+.El
+
+Expect major ABI & API breaking changes in future versions.
+
+.Sh AUTHORS
+.An Thomas Oltmann Aq Mt thomas.oltmann.hhg@gmail.com

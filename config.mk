@@ -6,14 +6,16 @@ LD = cc
 AR = ar
 RANLIB = ranlib
 
+# installation paths
+PREFIX = /usr/local
+MANPREFIX = $(PREFIX)/share/man
+
+# X11 API installation paths (needed by sftdemo)
 X11INC = /usr/include/X11
 X11LIB = /usr/lib/X11
 
 # flags
 CPPFLAGS = -I./
-CFLAGS = -g -Og -std=c99 -pedantic -Wall -Wextra
-LDFLAGS = -g -Og -lm
-
-# installation paths
-PREFIX = /usr/local
+CFLAGS = -Os -std=c99 -pedantic -Wall -Wextra
+LDFLAGS = -Os -lm
 

@@ -15,7 +15,6 @@
 #include "schrift.h"
 
 /* macros */
-#define AFFINE(affine, value) ((value) * (affine).scale + (affine).move)
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define SIGN(x) ((x) >= 0 ? 1 : -1)
 #define STACK_ALLOC(var, len, thresh) \
@@ -30,7 +29,6 @@ enum { SrcMapping, SrcUser };
 struct point   { double x, y; };
 struct line    { struct point beg, end; };
 struct curve   { struct point beg, ctrl, end; };
-struct affine  { double scale, move; };
 struct contour { int first, last; };
 struct cell    { int16_t area, cover; };
 
@@ -71,9 +69,9 @@ static int  loca_format(SFT_Font *font);
 static long outline_offset(SFT_Font *font, long glyph);
 static long simple_flags(SFT_Font *font, unsigned long offset, int numPts, uint8_t *flags);
 static int  simple_points(SFT_Font *font, long offset, int numPts, uint8_t *flags, struct point *points);
-static void transform_points(int numPts, struct point *points, struct affine xAffine, struct affine yAffine);
+static void transform_points(int numPts, struct point *points, double trf[6]);
 static void draw_contours(struct buffer buf, int numContours, struct contour *contours, uint8_t *flags, struct point *points);
-static int  draw_simple(const struct SFT *sft, long offset, int numContours, struct buffer buf, struct affine xAffine, struct affine yAffine);
+static int  draw_simple(const struct SFT *sft, long offset, int numContours, struct buffer buf, double transform[6]);
 static int  proc_outline(const struct SFT *sft, unsigned long offset, double leftSideBearing, struct SFT_Char *chr);
 /* tesselation */
 static struct point midpoint(struct point a, struct point b);
@@ -530,12 +528,16 @@ simple_points(SFT_Font *font, long offset, int numPts, uint8_t *flags, struct po
 }
 
 static void
-transform_points(int numPts, struct point *points, struct affine xAffine, struct affine yAffine)
+transform_points(int numPts, struct point *points, double trf[6])
 {
+	struct point *restrict pt;
 	int i;
 	for (i = 0; i < numPts; ++i) {
-		points[i].x = AFFINE(xAffine, points[i].x);
-		points[i].y = AFFINE(yAffine, points[i].y);
+		pt = &points[i];
+		*pt = (struct point) {
+			pt->x * trf[0] + pt->y * trf[1] + trf[2],
+			pt->x * trf[3] + pt->y * trf[4] + trf[5]
+		};
 	}
 }
 
@@ -577,7 +579,7 @@ draw_contours(struct buffer buf, int numContours, struct contour *contours, uint
 }
 
 static int
-draw_simple(const struct SFT *sft, long offset, int numContours, struct buffer buf, struct affine xAffine, struct affine yAffine)
+draw_simple(const struct SFT *sft, long offset, int numContours, struct buffer buf, double transform[6])
 {
 	struct point *points;
 	struct contour *contours = NULL;
@@ -611,7 +613,7 @@ draw_simple(const struct SFT *sft, long offset, int numContours, struct buffer b
 		goto failure;
 	if (simple_points(sft->font, offset, numPts, flags, points) < 0)
 		goto failure;
-	transform_points(numPts, points, xAffine, yAffine);
+	transform_points(numPts, points, transform);
 	draw_contours(buf, numContours, contours, flags, points);
 
 	STACK_FREE(memory) ;
@@ -624,25 +626,34 @@ failure:
 static int
 proc_outline(const struct SFT *sft, unsigned long offset, double leftSideBearing, struct SFT_Char *chr)
 {
-	struct affine xAffine, yAffine;
+	double transform[6];
 	struct buffer buf;
+	struct point corners[2];
 	int unitsPerEm, numContours;
 	if ((unitsPerEm = units_per_em(sft->font)) < 0)
 		return -1;
 	numContours = geti16(sft->font, offset);
-	/* Set up linear transformations. */
-	xAffine = (struct affine) { sft->xScale / unitsPerEm, sft->x + leftSideBearing };
-	yAffine = (struct affine) { sft->yScale / unitsPerEm, sft->y };
+	/* Set up the linear transformation. */
+	transform[0] = sft->xScale / unitsPerEm;
+	transform[1] = 0.0;
+	transform[2] = sft->x + leftSideBearing;
+	transform[3] = 0.0;
+	transform[4] = sft->yScale / unitsPerEm;
+	transform[5] = sft->y;
 	/* Calculate outline extents. */
-	chr->x = (int) floor(AFFINE(xAffine, geti16(sft->font, offset + 2))) - 1;
-	chr->y = (int) floor(AFFINE(yAffine, geti16(sft->font, offset + 4))) - 1;
-	chr->width  = (int) ceil(AFFINE(xAffine, geti16(sft->font, offset + 6))) + 1 - chr->x;
-	chr->height = (int) ceil(AFFINE(yAffine, geti16(sft->font, offset + 8))) + 1 - chr->y;
+	corners[0] = (struct point) { geti16(sft->font, offset + 2), geti16(sft->font, offset + 4) };
+	corners[1] = (struct point) { geti16(sft->font, offset + 6), geti16(sft->font, offset + 8) };
+	transform_points(2, corners, transform);
+	/* Important: the following lines assume transform is an affine diagonal matrix at this point! */
+	chr->x = (int) floor(corners[0].x) - 1;
+	chr->y = (int) floor(corners[0].y) - 1;
+	chr->width  = (int) ceil(corners[1].x) + 1 - chr->x;
+	chr->height = (int) ceil(corners[1].y) + 1 - chr->y;
 	/* Render the outline (if requested). */
 	if (sft->flags & SFT_CHAR_IMAGE) {
-		/* Make transformations relative to min corner. */
-		xAffine.move -= chr->x;
-		yAffine.move -= chr->y;
+		/* Make transformation relative to min corner. */
+		transform[2] -= chr->x;
+		transform[5] -= chr->y;
 		/* Allocate internal buffer for drawing into. */
 		buf.width = chr->width;
 		buf.height = chr->height;
@@ -650,7 +661,7 @@ proc_outline(const struct SFT *sft, unsigned long offset, double leftSideBearing
 			return -1;
 		if (numContours >= 0) {
 			/* Glyph has a 'simple' outline consisting of a number of contours. */
-			if (draw_simple(sft, offset + 10, numContours, buf, xAffine, yAffine) < 0) {
+			if (draw_simple(sft, offset + 10, numContours, buf, transform) < 0) {
 				free(buf.cells);
 				return -1;
 			}

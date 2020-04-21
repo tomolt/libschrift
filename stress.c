@@ -1,3 +1,4 @@
+/* A stress testing program. Useful for profiling hot spots in libschrift. */
 /* See LICENSE file for copyright and license details. */
 
 #include <stdlib.h>

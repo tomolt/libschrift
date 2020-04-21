@@ -1,3 +1,4 @@
+/* A simple command line application that shows how to use libschrift with X11 via XRender. */
 /* See LICENSE file for copyright and license details. */
 
 #include <stdio.h>
@@ -67,6 +68,7 @@ loadglyph(struct SFT *sft, unsigned int charCode)
 	XRenderAddGlyphs(dpy, glyphset, &glyph, &info, 1, bitmap, stride * chr.height);
 }
 
+/* Renders all glyphs and uploads them to the X11 server ahead of time. */
 static void
 loadglyphset(const char *filename, double size)
 {
@@ -86,6 +88,8 @@ loadglyphset(const char *filename, double size)
 	sft.yScale = size;
 	sft.flags = SFT_DOWNWARD_Y | SFT_CHAR_IMAGE;
 
+	/* Right now, this demo program only handles ASCII strings.
+	 * This is not a limitation of the library itself. */
 	for (c = 32; c < 128; ++c)
 		loadglyph(&sft, c);
 
@@ -133,6 +137,8 @@ setupx(void)
 	if (!(dpy = XOpenDisplay(NULL)))
 		die("Can't open X display\n");
 	screen = DefaultScreen(dpy);
+
+	/* TODO We probably should check here that the X11 server actually supports XRender. */
 
 	win = XCreateWindow(dpy, DefaultRootWindow(dpy), 0, 0, 200, 100, 0,
 	                    DefaultDepth(dpy, screen), InputOutput,

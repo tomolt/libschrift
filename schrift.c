@@ -17,6 +17,7 @@
 /* macros */
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define SIGN(x) ((x) >= 0 ? 1 : -1)
+/* Allocate values on the stack if they are small enough, else spill to heap. */
 #define STACK_ALLOC(var, len, thresh) \
 	uint8_t var##_stack_[thresh]; \
 	var = (len) <= (thresh) ? (void *) var##_stack_ : malloc(len);
@@ -87,6 +88,7 @@ static void post_process(struct buffer buf, uint8_t *image);
 
 /* function implementations */
 
+/* Loads a font from a user-supplied memory range. */
 SFT_Font *
 sft_loadmem(const void *mem, unsigned long size)
 {
@@ -107,6 +109,7 @@ sft_loadmem(const void *mem, unsigned long size)
 	return font;
 }
 
+/* Loads a font from the file system. To do so, it has to map the entire font into memory. */
 SFT_Font *
 sft_loadfile(char const *filename)
 {
@@ -132,6 +135,7 @@ void
 sft_freefont(SFT_Font *font)
 {
 	if (font == NULL) return;
+	/* Only unmap if we mapped it ourselves. */
 	if (font->source == SrcMapping)
 		unmap_file(font);
 	free(font);
@@ -235,12 +239,14 @@ csearch(const void *key, const void *base,
 	return (uint8_t *) bytes + low * size;
 }
 
+/* Used as a comparison function for [bc]search(). */
 static int
 cmpu16(const void *a, const void *b)
 {
 	return memcmp(a, b, 2);
 }
 
+/* Used as a comparison function for [bc]search(). */
 static int
 cmpu32(const void *a, const void *b)
 {
@@ -359,6 +365,7 @@ cmap_fmt6(SFT_Font *font, unsigned long table, unsigned int charCode)
 	return getu16(font, table + 4 + 2 * charCode);
 }
 
+/* Maps Unicode code points to glyph indices. */
 static long
 glyph_id(SFT_Font *font, unsigned int charCode)
 {
@@ -456,6 +463,7 @@ loca_format(SFT_Font *font)
 	return geti16(font, head + 50);
 }
 
+/* Returns the offset into the font that the glyph's outline is stored at. */
 static long
 outline_offset(SFT_Font *font, long glyph)
 {
@@ -472,6 +480,7 @@ outline_offset(SFT_Font *font, long glyph)
 	}
 }
 
+/* For a 'simple' outline, determines each point of the outline with a set of flags. */
 static long
 simple_flags(SFT_Font *font, unsigned long offset, int numPts, uint8_t *flags)
 {
@@ -494,6 +503,7 @@ simple_flags(SFT_Font *font, unsigned long offset, int numPts, uint8_t *flags)
 	return offset;
 }
 
+/* For a 'simple' outline, decodes both X and Y coordinates for each point of the outline. */
 static int
 simple_points(SFT_Font *font, long offset, int numPts, uint8_t *flags, struct point *points)
 {
@@ -527,6 +537,7 @@ simple_points(SFT_Font *font, long offset, int numPts, uint8_t *flags, struct po
 	return 0;
 }
 
+/* Applies an affine linear transformation matrix to a set of points. */
 static void
 transform_points(int numPts, struct point *points, double trf[6])
 {
@@ -727,6 +738,7 @@ midpoint(struct point a, struct point b)
 	};
 }
 
+/* A heuristic to tell whether a given curve can be approximated closely enough by a line. */
 static int
 is_flat(struct curve curve, double flatness)
 {
@@ -736,6 +748,7 @@ is_flat(struct curve curve, double flatness)
 	return x * x + y * y <= flatness * flatness;
 }
 
+/* Draws a curve into a buffer by tesselating it into many smaller lines. */
 static void
 draw_curve(struct buffer buf, struct curve curve)
 {
@@ -765,12 +778,15 @@ draw_curve(struct buffer buf, struct curve curve)
 #undef STACK_SIZE
 }
 
+/* Much faster than the builtin floor() function (because it doesn't check infinities etc.). 
+ * Since it's called in a very hot loop, the speed difference is worth it. */
 static inline int
 ifloor(double x)
 {
 	return (int) x - (x < 0.0);
 }
 
+/* [0, 1] --> { 0, ..., 255 } */
 static inline int
 quantize(double x)
 {
@@ -787,6 +803,7 @@ draw_dot(struct buffer buf, int px, int py, double xAvg, double yDiff)
 	*ptr = cell;
 }
 
+/* Draws a line into the buffer. Uses a custom 2D raycasting algorithm to do so. */
 static void
 draw_line(struct buffer buf, struct line line)
 {
@@ -850,6 +867,7 @@ draw_line(struct buffer buf, struct line line)
 	draw_dot(buf, pixelX, pixelY, averageX, deltaY * deltaDistance);
 }
 
+/* Integrate the values in the buffer to arrive at the final grayscale image. */
 static void
 post_process(struct buffer buf, uint8_t *image)
 {

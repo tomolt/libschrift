@@ -27,3 +27,10 @@ For documentation on how to use *libschrift* in your own programs,
 refer to the (currently incomplete) *schrift(3)* man page,
 the source code of the bundled example program *sftdemo*,
 as well as the header file *schrift.h*.
+
+Progress
+--------
+You shouldn't use libschrift for anything serious quite yet.
+Most notably, compound glyph support is still missing,
+so some characters like Umlauts or accents will likely not work yet.
+Also, there's still a lot of documentation missing.

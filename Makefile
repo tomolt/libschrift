@@ -14,12 +14,12 @@ libschrift.a: schrift.o
 schrift.o: schrift.h
 
 sftdemo: sftdemo.o libschrift.a
-	$(LD) $(LDFLAGS) $< -o $@ -L$(X11LIB) -L. -lX11 -lXrender -lschrift
+	$(LD) $(LDFLAGS) $< -o $@ -L$(X11LIB) -L. -lX11 -lXrender -lschrift -lm
 sftdemo.o: sftdemo.c schrift.h arg.h
 	$(CC) -c $(CFLAGS) $< -o $@ $(CPPFLAGS) -I$(X11INC)
 
 stress: stress.o libschrift.a
-	$(LD) $(LDFLAGS) $< -o $@ -L. -lschrift
+	$(LD) $(LDFLAGS) $< -o $@ -L. -lschrift -lm
 stress.o: stress.c schrift.h arg.h
 	$(CC) -c $(CFLAGS) $< -o $@ $(CPPFLAGS)
 

@@ -56,6 +56,7 @@ static void *csearch(const void *key, const void *base,
 static int  cmpu16(const void *a, const void *b);
 static int  cmpu32(const void *a, const void *b);
 static inline uint8_t  getu8 (SFT_Font *font, unsigned long offset);
+static inline int8_t   geti8 (SFT_Font *font, unsigned long offset);
 static inline uint16_t getu16(SFT_Font *font, unsigned long offset);
 static inline int16_t  geti16(SFT_Font *font, unsigned long offset);
 static inline uint32_t getu32(SFT_Font *font, unsigned long offset);
@@ -73,6 +74,7 @@ static int  simple_points(SFT_Font *font, long offset, int numPts, uint8_t *flag
 static void transform_points(int numPts, struct point *points, double trf[6]);
 static void draw_contours(struct buffer buf, int numContours, struct contour *contours, uint8_t *flags, struct point *points);
 static int  draw_simple(const struct SFT *sft, long offset, int numContours, struct buffer buf, double transform[6]);
+static int  draw_compound(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6]);
 static int  proc_outline(const struct SFT *sft, unsigned long offset, double leftSideBearing, struct SFT_Char *chr);
 /* tesselation */
 static struct point midpoint(struct point a, struct point b);
@@ -258,6 +260,12 @@ getu8(SFT_Font *font, unsigned long offset)
 {
 	assert(offset + 1 <= font->size);
 	return *(font->memory + offset);
+}
+
+static inline int8_t
+geti8(SFT_Font *font, unsigned long offset)
+{
+	return (int8_t) getu8(font, offset);
 }
 
 static inline uint16_t
@@ -635,6 +643,55 @@ failure:
 }
 
 static int
+draw_compound(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6])
+{
+	(void) buf, (void) transform;
+	unsigned int flags, glyph;
+	int xOffset, yOffset;
+	int i = 0;
+	do {
+		if (sft->font->size < offset + 4)
+			return -1;
+		flags = getu16(sft->font, offset);
+		glyph = getu16(sft->font, offset + 2);
+		offset += 4;
+		if (!(flags & 0x002))
+			return -1;
+		if (flags & 0x01) {
+			if (sft->font->size < offset + 4)
+				return -1;
+			xOffset = geti16(sft->font, offset);
+			yOffset = geti16(sft->font, offset + 2);
+			offset += 4;
+		} else {
+			if (sft->font->size < offset + 2)
+				return -1;
+			xOffset = geti8(sft->font, offset);
+			yOffset = geti8(sft->font, offset + 1);
+			offset += 2;
+		}
+		if (flags & 0x008) {
+			offset += 2;
+		} else if (flags & 0x040) {
+			offset += 4;
+		} else if (flags & 0x80) {
+			offset += 8;
+		}
+#if 0
+		fprintf(stderr, "Compound component #%d is: %u\n", i, glyph);
+		fprintf(stderr, "The component's flags are: 0x%03x\n", flags);
+		fprintf(stderr, "The component's X offset is: %d FUnits\n", xOffset);
+		fprintf(stderr, "The component's Y offset is: %d FUnits\n", yOffset);
+#else
+		(void) glyph, (void) xOffset, (void) yOffset, (void) i;
+#endif
+		++i;
+	} while (flags & 0x020);
+
+	return -1;
+}
+
+static int
 proc_outline(const struct SFT *sft, unsigned long offset, double leftSideBearing, struct SFT_Char *chr)
 {
 	double transform[6];
@@ -678,9 +735,10 @@ proc_outline(const struct SFT *sft, unsigned long offset, double leftSideBearing
 			}
 		} else {
 			/* Glyph has a compound outline combined from mutiple other outlines. */
-			/* TODO Implement this path! */
-			free(buf.cells);
-			return -1;
+			if (draw_compound(sft, offset + 10, buf, transform) < 0) {
+				free(buf.cells);
+				return -1;
+			}
 		}
 #if 0
 		printf("COVER:\n");

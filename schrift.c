@@ -75,7 +75,7 @@ static void transform_points(int numPts, struct point *points, double trf[6]);
 static void draw_contours(struct buffer buf, int numContours, struct contour *contours, uint8_t *flags, struct point *points);
 static int  draw_simple(const struct SFT *sft, long offset, int numContours, struct buffer buf, double transform[6]);
 static int  draw_compound(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6]);
-static int  draw_outline(const struct SFT *sft, unsigned long offset, int numContours, struct buffer buf, double transform[6]);
+static int  draw_outline(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6]);
 static int  proc_outline(const struct SFT *sft, unsigned long offset, double leftSideBearing, struct SFT_Char *chr);
 /* tesselation */
 static struct point midpoint(struct point a, struct point b);
@@ -693,14 +693,18 @@ draw_compound(const struct SFT *sft, unsigned long offset, struct buffer buf, do
 }
 
 static int
-draw_outline(const struct SFT *sft, unsigned long offset, int numContours, struct buffer buf, double transform[6])
+draw_outline(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6])
 {
+	int numContours;
+	if (sft->font->size < offset + 10)
+		return -1;
+	numContours = geti16(sft->font, offset);
 	if (numContours >= 0) {
 		/* Glyph has a 'simple' outline consisting of a number of contours. */
-		return draw_simple(sft, offset, numContours, buf, transform);
+		return draw_simple(sft, offset + 10, numContours, buf, transform);
 	} else {
 		/* Glyph has a compound outline combined from mutiple other outlines. */
-		return draw_compound(sft, offset, buf, transform);
+		return draw_compound(sft, offset + 10, buf, transform);
 	}
 }
 
@@ -710,10 +714,9 @@ proc_outline(const struct SFT *sft, unsigned long offset, double leftSideBearing
 	double transform[6];
 	struct buffer buf;
 	struct point corners[2];
-	int unitsPerEm, numContours;
+	int unitsPerEm;
 	if ((unitsPerEm = units_per_em(sft->font)) < 0)
 		return -1;
-	numContours = geti16(sft->font, offset);
 	/* Set up the linear transformation. */
 	transform[0] = sft->xScale / unitsPerEm;
 	transform[1] = 0.0;
@@ -740,7 +743,7 @@ proc_outline(const struct SFT *sft, unsigned long offset, double leftSideBearing
 		buf.height = chr->height;
 		if ((buf.cells = calloc(buf.width * buf.height, sizeof(buf.cells[0]))) == NULL)
 			return -1;
-		if (draw_outline(sft, offset + 10, numContours, buf, transform) < 0) {
+		if (draw_outline(sft, offset, buf, transform) < 0) {
 			free(buf.cells);
 			return -1;
 		}

@@ -546,8 +546,8 @@ transform_points(int numPts, struct point *points, double trf[6])
 	for (i = 0; i < numPts; ++i) {
 		pt = &points[i];
 		*pt = (struct point) {
-			pt->x * trf[0] + pt->y * trf[1] + trf[2],
-			pt->x * trf[3] + pt->y * trf[4] + trf[5]
+			pt->x * trf[0] + pt->y * trf[2] + trf[4],
+			pt->x * trf[1] + pt->y * trf[3] + trf[5]
 		};
 	}
 }
@@ -647,9 +647,9 @@ proc_outline(const struct SFT *sft, unsigned long offset, double leftSideBearing
 	/* Set up the linear transformation. */
 	transform[0] = sft->xScale / unitsPerEm;
 	transform[1] = 0.0;
-	transform[2] = sft->x + leftSideBearing;
-	transform[3] = 0.0;
-	transform[4] = sft->yScale / unitsPerEm;
+	transform[2] = 0.0;
+	transform[3] = sft->yScale / unitsPerEm;
+	transform[4] = sft->x + leftSideBearing;
 	transform[5] = sft->y;
 	/* Calculate outline extents. */
 	corners[0] = (struct point) { geti16(sft->font, offset + 2), geti16(sft->font, offset + 4) };
@@ -663,7 +663,7 @@ proc_outline(const struct SFT *sft, unsigned long offset, double leftSideBearing
 	/* Render the outline (if requested). */
 	if (sft->flags & SFT_CHAR_IMAGE) {
 		/* Make transformation relative to min corner. */
-		transform[2] -= chr->x;
+		transform[4] -= chr->x;
 		transform[5] -= chr->y;
 		/* Allocate internal buffer for drawing into. */
 		buf.width = chr->width;

@@ -72,6 +72,7 @@ static long outline_offset(SFT_Font *font, long glyph);
 static long simple_flags(SFT_Font *font, unsigned long offset, int numPts, uint8_t *flags);
 static int  simple_points(SFT_Font *font, long offset, int numPts, uint8_t *flags, struct point *points);
 static void transform_points(int numPts, struct point *points, double trf[6]);
+static void clip_points(int numPts, struct point *points, struct buffer buf);
 static void draw_contours(struct buffer buf, int numContours, struct contour *contours, uint8_t *flags, struct point *points);
 static int  draw_simple(const struct SFT *sft, long offset, int numContours, struct buffer buf, double transform[6]);
 static int  draw_compound(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6]);
@@ -562,6 +563,34 @@ transform_points(int numPts, struct point *points, double trf[6])
 }
 
 static void
+clip_points(int numPts, struct point *points, struct buffer buf)
+{
+	struct point *restrict pt;
+	double dv;
+	uint64_t *ip = (void *) &dv;
+	int i;
+	for (i = 0; i < numPts; ++i) {
+		pt = &points[i];
+		if (pt->x < 0) {
+			pt->x = 0;
+		}
+		if (pt->x >= buf.width) {
+			dv = buf.width;
+			--*ip;
+			pt->x = dv;
+		}
+		if (pt->y < 0) {
+			pt->y = 0;
+		}
+		if (pt->y >= buf.height) {
+			dv = buf.height;
+			--*ip;
+			pt->y = dv;
+		}
+	}
+}
+
+static void
 draw_contours(struct buffer buf, int numContours, struct contour *contours, uint8_t *flags, struct point *points)
 {
 #define DRAW_SEGMENT(end) do { \
@@ -634,6 +663,7 @@ draw_simple(const struct SFT *sft, long offset, int numContours, struct buffer b
 	if (simple_points(sft->font, offset, numPts, flags, points) < 0)
 		goto failure;
 	transform_points(numPts, points, transform);
+	clip_points(numPts, points, buf);
 	draw_contours(buf, numContours, contours, flags, points);
 
 	STACK_FREE(memory) ;

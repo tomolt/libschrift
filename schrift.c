@@ -35,7 +35,7 @@ struct cell    { int16_t area, cover; };
 
 struct buffer
 {
-	struct cell *cells;
+	struct cell **rows;
 	int width, height;
 };
 
@@ -771,54 +771,38 @@ proc_outline(const struct SFT *sft, unsigned long offset, double leftSideBearing
 		transform[4] -= chr->x;
 		transform[5] -= chr->y;
 		/* Allocate internal buffer for drawing into. */
+		struct cell *cells;
 		buf.width = chr->width;
 		buf.height = chr->height;
-		if ((buf.cells = calloc(buf.width * buf.height, sizeof(buf.cells[0]))) == NULL)
+		if ((cells = calloc(buf.width * buf.height, sizeof(cells[0]))) == NULL)
 			return -1;
+		if ((buf.rows = malloc(buf.height * sizeof(buf.rows[0]))) == NULL)
+			return -1;
+		struct cell *ptr = cells;
+		for (int y = 0; y < buf.height; ++y) {
+			buf.rows[y] = ptr;
+			ptr += buf.width;
+		}
 		if (draw_outline(sft, offset, buf, transform) < 0) {
-			free(buf.cells);
+			free(cells);
+			free(buf.rows);
 			return -1;
 		}
-#if 0
-		printf("COVER:\n");
-		for (int y = 0; y < buf.height; ++y) {
-			for (int x = 0; x < buf.width; ++x) {
-				printf("% 04d ", buf.cells[x + y * buf.width].cover);
-			}
-			printf("\n");
-		}
-		printf("AREA:\n");
-		for (int y = 0; y < buf.height; ++y) {
-			for (int x = 0; x < buf.width; ++x) {
-				printf("% 04d ", buf.cells[x + y * buf.width].area);
-			}
-			printf("\n");
-		}
-#endif
 		if (sft->flags & SFT_DOWNWARD_Y) {
-			size_t rowSize = buf.width * sizeof(buf.cells[0]);
-			struct cell *rowBuf, *row1, *row2;
-			STACK_ALLOC(rowBuf, rowSize, 512) ;
-			if (rowBuf == NULL) {
-				free(buf.cells);
-				return -1;
+			ptr = cells + buf.width * buf.height;
+			for (int y = 0; y < buf.height; ++y) {
+				ptr -= buf.width;
+				buf.rows[y] = ptr;
 			}
-			for (int y = 0; y < buf.height / 2; ++y) {
-				row1 = buf.cells + y * buf.width;
-				row2 = buf.cells + (buf.height - 1 - y) * buf.width;
-				memcpy(rowBuf, row1, rowSize);
-				memcpy(row1, row2, rowSize);
-				memcpy(row2, rowBuf, rowSize);
-			}
-			STACK_FREE(rowBuf) ;
 		}
-
 		if ((chr->image = calloc(buf.width * buf.height, 1)) == NULL) {
-			free(buf.cells);
+			free(cells);
+			free(buf.rows);
 			return -1;
 		}
 		post_process(buf, chr->image);
-		free(buf.cells);
+		free(cells);
+		free(buf.rows);
 	}
 	if (sft->flags & SFT_DOWNWARD_Y) {
 		chr->y = -(chr->y + chr->height);
@@ -893,7 +877,7 @@ quantize(double x)
 static void
 draw_dot(struct buffer buf, int px, int py, double xAvg, double yDiff)
 {
-	struct cell *restrict ptr = &buf.cells[px + buf.width * py];
+	struct cell *restrict ptr = &buf.rows[py][px];
 	struct cell cell = *ptr;
 	cell.cover += quantize(yDiff);
 	cell.area += quantize((1.0 - xAvg) * yDiff);
@@ -971,10 +955,10 @@ post_process(struct buffer buf, uint8_t *image)
 	struct cell *restrict in, cell;
 	uint8_t *restrict out;
 	int x, y, accum;
-	in = buf.cells;
 	out = image;
 	for (y = 0; y < buf.height; ++y) {
 		accum = 0;
+		in = buf.rows[y];
 		for (x = 0; x < buf.width; ++x) {
 			cell = *in++;
 			*out++ = MIN(abs(accum + cell.area), 255);

@@ -653,6 +653,8 @@ draw_simple(const struct SFT *sft, long offset, int numContours, struct buffer b
 	for (top = i = 0; i < numContours; ++i) {
 		contours[i].first = top;
 		contours[i].last = getu16(sft->font, offset);
+		if (contours[i].first > contours[i].last)
+			goto failure;
 		top = contours[i].last + 1;
 		offset += 2;
 	}

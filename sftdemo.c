@@ -47,8 +47,10 @@ loadglyph(struct SFT *sft, unsigned int charCode)
 	Glyph glyph;
 	int stride, i;
 
-	if (sft_char(sft, charCode, &chr) < 0)
+	if (sft_char(sft, charCode, &chr) < 0) {
+		printf("Couldn't load character '%c' (0x%02X).\n", charCode, charCode);
 		return;
+	}
 
 	glyph = charCode;
 	info.x = -chr.x;

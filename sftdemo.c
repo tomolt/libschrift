@@ -24,6 +24,8 @@ static Window win;
 static Pixmap fgpix;
 static Picture pic, fgpic;
 static GlyphSet glyphset;
+static struct SFT sft;
+static XRenderPictFormat *format;
 
 static void
 die(const char *msg)
@@ -72,38 +74,29 @@ loadglyph(struct SFT *sft, unsigned int charCode)
 
 /* Renders all glyphs and uploads them to the X11 server ahead of time. */
 static void
-loadglyphset(const char *filename, double size)
+loadglyphset(void)
 {
-	struct SFT sft = { 0 };
-	SFT_Font *font;
-	XRenderPictFormat *format;
-	unsigned char c;
-
-	format = XRenderFindStandardFormat(dpy, PictStandardA8);
-	glyphset = XRenderCreateGlyphSet(dpy, format);
-
-	if ((font = sft_loadfile(filename)) == NULL)
-		die("Can't load font file.");
-
-	sft.font = font;
-	sft.xScale = size;
-	sft.yScale = size;
-	sft.flags = SFT_DOWNWARD_Y | SFT_CHAR_IMAGE;
-
 	/* Right now, this demo program only handles ASCII strings.
 	 * This is not a limitation of the library itself. */
+	unsigned char c;
 	for (c = 32; c < 128; ++c)
 		loadglyph(&sft, c);
-
-	XSync(dpy, 0);
-	sft_freefont(font);
 }
 
 static void
-teardownx(void)
+teardown(void)
 {
+	sft_freefont(sft.font);
 	XCloseDisplay(dpy);
 	exit(0);
+}
+
+static void
+drawtext(int x, int y, const char *text)
+{
+	XRenderCompositeString8(dpy, PictOpOver,
+		fgpic, pic, NULL,
+		glyphset, 0, 0, x, y, text, strlen(text));
 }
 
 static void
@@ -111,9 +104,7 @@ draw(int width, int height)
 {
 	XRenderFillRectangle(dpy, PictOpOver,
 		pic, &bgcolor, 0, 0, width, height);
-	XRenderCompositeString8(dpy, PictOpOver,
-		fgpic, pic, NULL,
-		glyphset, 0, 0, 20, 50, message, strlen(message));
+	drawtext(20, 50, message);
 }
 
 static void
@@ -125,7 +116,7 @@ handleevent(XEvent *ev)
 		break;
 	case ClientMessage:
 		if ((Atom) ev->xclient.data.l[0] == wmDeleteWindow)
-			teardownx();
+			teardown();
 		break;
 	}
 }
@@ -203,7 +194,17 @@ main(int argc, char *argv[])
 	}
 
 	setupx();
-	loadglyphset(filename, size);
+
+	format = XRenderFindStandardFormat(dpy, PictStandardA8);
+	glyphset = XRenderCreateGlyphSet(dpy, format);
+
+	if ((sft.font = sft_loadfile(filename)) == NULL)
+		die("Can't load font file.");
+	sft.xScale = size;
+	sft.yScale = size;
+	sft.flags = SFT_DOWNWARD_Y | SFT_CHAR_IMAGE;
+
+	loadglyphset();
 	runx();
 	return 0;
 }

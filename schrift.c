@@ -62,9 +62,9 @@ static inline int16_t  geti16(SFT_Font *font, unsigned long offset);
 static inline uint32_t getu32(SFT_Font *font, unsigned long offset);
 static long gettable(SFT_Font *font, char tag[4]);
 static int  units_per_em(SFT_Font *font);
-static long cmap_fmt4(SFT_Font *font, unsigned long table, unsigned int charCode);
-static long cmap_fmt6(SFT_Font *font, unsigned long table, unsigned int charCode);
-static long glyph_id(SFT_Font *font, unsigned int charCode);
+static long cmap_fmt4(SFT_Font *font, unsigned long table, unsigned long charCode);
+static long cmap_fmt6(SFT_Font *font, unsigned long table, unsigned long charCode);
+static long glyph_id(SFT_Font *font, unsigned long charCode);
 static int  num_long_hmtx(SFT_Font *font);
 static int  hor_metrics(const struct SFT *sft, long glyph, double *advanceWidth, double *leftSideBearing);
 static int  loca_format(SFT_Font *font);
@@ -164,7 +164,7 @@ sft_linemetrics(const struct SFT *sft, double *ascent, double *descent, double *
 }
 
 int
-sft_char(const struct SFT *sft, unsigned int charCode, struct SFT_Char *chr)
+sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 {
 	double leftSideBearing;
 	long glyph, glyf, offset, next;
@@ -321,13 +321,15 @@ units_per_em(SFT_Font *font)
 }
 
 static long
-cmap_fmt4(SFT_Font *font, unsigned long table, unsigned int charCode)
+cmap_fmt4(SFT_Font *font, unsigned long table, unsigned long charCode)
 {
 	unsigned long endCodes, startCodes, idDeltas, idRangeOffsets, idOffset;
 	unsigned int segCountX2, segIdxX2, startCode, idRangeOffset, id;
 	int idDelta;
 	uint8_t key[2] = { charCode >> 8, charCode };
-	/* TODO Guard against too big charCode. */
+	/* cmap format 4 only supports the Unicode BMP. */
+	if (charCode > 0xFFFF)
+		return 0;
 	if (font->size < table + 8)
 		return -1;
 	segCountX2 = getu16(font, table);
@@ -358,9 +360,12 @@ cmap_fmt4(SFT_Font *font, unsigned long table, unsigned int charCode)
 }
 
 static long
-cmap_fmt6(SFT_Font *font, unsigned long table, unsigned int charCode)
+cmap_fmt6(SFT_Font *font, unsigned long table, unsigned long charCode)
 {
 	unsigned int firstCode, entryCount;
+	/* cmap format 6 only supports the Unicode BMP. */
+	if (charCode > 0xFFFF)
+		return 0;
 	if (font->size < table + 4)
 		return -1;
 	firstCode = getu16(font, table);
@@ -377,7 +382,7 @@ cmap_fmt6(SFT_Font *font, unsigned long table, unsigned int charCode)
 
 /* Maps Unicode code points to glyph indices. */
 static long
-glyph_id(SFT_Font *font, unsigned int charCode)
+glyph_id(SFT_Font *font, unsigned long charCode)
 {
 	unsigned long entry, table;
 	long cmap;

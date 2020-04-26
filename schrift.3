@@ -28,7 +28,6 @@
 .Ss The SFT structure
 
 .Bd -literal
-
 struct SFT {
 	SFT_Font *font;
 	double xScale;
@@ -37,13 +36,12 @@ struct SFT {
 	double y;
 	unsigned int flags;
 };
-
-.El
+.Ed
 
 .Ss The SFT_Char structure
-
-.Bl -literal
-
+.Fn sft_char
+returns all relevant information except status code in a struct SFT_Char.
+.Bd -literal
 struct SFT_Char {
 	void *image;
 	double advance;
@@ -52,7 +50,37 @@ struct SFT_Char {
 	int width;
 	int height;
 };
+.Ed
 
+The fields are as follows:
+.Bl -tag -width 8
+.It Va image
+An 8-bit grayscale image without any padding, so each byte corresponds to one pixel.
+The colors are inverse to what you would expect: Text is always drawn white on black.
+That's because this way it's really convenient to use the image as an alpha mask.
+This is also the reason why the image isn't gamma corrected.
+This field only gets set if the flag
+.Dv SFT_CHAR_IMAGE
+was set.
+In this case, it is the caller's duty to later release the image's memory again by calling
+.Fn free .
+.It Va x
+The X offset in pixels that should be applied to the image.
+.It Va y
+The Y offset in pixels that should be applied to the image.
+The flag
+.Dv SFT_DOWNWARD_Y
+controls the orientation of the coordinate system that this field is relative to.
+.It Va width
+The width of the image in pixels.
+This field gets set even if
+.Dv SFT_CHAR_IMAGE
+was not set.
+.It Va height
+The height of the image in pixels.
+This field gets set even if
+.Dv SFT_CHAR_IMAGE
+was not set.
 .El
 
 .Sh RETURN VALUES
@@ -70,7 +98,8 @@ return 0 on success or -1 on error.
 
 See the source code of
 .Sy sftdemo
-for a detailed example of real-world usage of schrift.
+for a detailed example of real-world usage of
+.Nm .
 
 .Sh CAVEATS
 
@@ -97,9 +126,6 @@ Instead of Unicode code points,
 really should operate on grapheme clusters.
 .It
 Implement sub-pixel rendering.
-.It
-Supply an API for iterating over all characters a font provides.
-This is needed for UTF-8 text rendering over XRender.
 .El
 
 Expect major ABI & API breaking changes in future versions.

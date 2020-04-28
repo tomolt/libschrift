@@ -77,7 +77,6 @@ static void draw_contours(struct buffer buf, int numContours, struct contour *co
 static int  draw_simple(const struct SFT *sft, long offset, int numContours, struct buffer buf, double transform[6]);
 static int  draw_compound(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6]);
 static int  draw_outline(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6]);
-static int  proc_outline(const struct SFT *sft, unsigned long offset, double leftSideBearing, struct SFT_Char *chr);
 /* tesselation */
 static struct point midpoint(struct point a, struct point b);
 static int  is_flat(struct curve curve, double flatness);
@@ -166,13 +165,17 @@ sft_linemetrics(const struct SFT *sft, double *ascent, double *descent, double *
 int
 sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 {
+	double transform[6];
+	struct point corners[2];
+	struct buffer buf;
+	struct cell *cells, *ptr;
 	double leftSideBearing;
 	long glyph, glyf, offset, next;
+	int unitsPerEm, x, y, w, h, i;
+
 	if ((glyph = glyph_id(sft->font, charCode)) < 0)
 		return -1;
 	if (hor_metrics(sft, glyph, &chr->advance, &leftSideBearing) < 0)
-		return -1;
-	if ((glyf = gettable(sft->font, "glyf")) < 0)
 		return -1;
 	if ((offset = outline_offset(sft->font, glyph)) < 0)
 		return -1;
@@ -183,11 +186,74 @@ sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 		chr->x = chr->y = 0;
 		chr->width = chr->height = 0;
 		chr->image = NULL;
-	} else {
-		/* Glyph has an outline. */
-		if (proc_outline(sft, glyf + offset, leftSideBearing, chr) < 0)
-			return -1;
+		return 0;
 	}
+	/* Glyph has an outline. */
+	if ((glyf = gettable(sft->font, "glyf")) < 0)
+		return -1;
+	offset += glyf;
+	if ((unitsPerEm = units_per_em(sft->font)) < 0)
+		return -1;
+	/* Set up the linear transformation. */
+	transform[0] = sft->xScale / unitsPerEm;
+	transform[1] = 0.0;
+	transform[2] = 0.0;
+	transform[3] = sft->yScale / unitsPerEm;
+	transform[4] = sft->x + leftSideBearing;
+	transform[5] = sft->y;
+	/* Calculate outline extents. */
+	if (sft->font->size < (unsigned long) offset + 10)
+		return -1;
+	corners[0] = (struct point) { geti16(sft->font, offset + 2), geti16(sft->font, offset + 4) };
+	corners[1] = (struct point) { geti16(sft->font, offset + 6), geti16(sft->font, offset + 8) };
+	transform_points(2, corners, transform);
+	/* Important: the following lines assume transform is an affine diagonal matrix at this point! */
+	x = (int) floor(corners[0].x) - 1;
+	y = (int) floor(corners[0].y) - 1;
+	w = (int) ceil(corners[1].x) + 1 - x;
+	h = (int) ceil(corners[1].y) + 1 - y;
+	chr->x = x;
+	chr->y = sft->flags & SFT_DOWNWARD_Y ? -(y + h) : y;
+	chr->width = w;
+	chr->height = h;
+	/* Render the outline (if requested). */
+	if (!(sft->flags & SFT_CHAR_IMAGE))
+		return 0;
+	/* Make transformation relative to min corner. */
+	transform[4] -= x;
+	transform[5] -= y;
+	/* Allocate internal buffer for drawing into. */
+	buf.width = w;
+	buf.height = h;
+	if ((cells = calloc(w * h, sizeof(cells[0]))) == NULL)
+		return -1;
+	if ((buf.rows = malloc(h * sizeof(buf.rows[0]))) == NULL)
+		return -1;
+	ptr = cells;
+	for (i = 0; i < h; ++i) {
+		buf.rows[i] = ptr;
+		ptr += w;
+	}
+	if (draw_outline(sft, offset, buf, transform) < 0) {
+		free(cells);
+		free(buf.rows);
+		return -1;
+	}
+	if (sft->flags & SFT_DOWNWARD_Y) {
+		ptr = cells + w * h;
+		for (i = 0; i < h; ++i) {
+			ptr -= w;
+			buf.rows[i] = ptr;
+		}
+	}
+	if ((chr->image = calloc(w * h, 1)) == NULL) {
+		free(cells);
+		free(buf.rows);
+		return -1;
+	}
+	post_process(buf, chr->image);
+	free(cells);
+	free(buf.rows);
 	return 0;
 }
 
@@ -741,78 +807,6 @@ draw_outline(const struct SFT *sft, unsigned long offset, struct buffer buf, dou
 		/* Glyph has a compound outline combined from mutiple other outlines. */
 		return draw_compound(sft, offset + 10, buf, transform);
 	}
-}
-
-static int
-proc_outline(const struct SFT *sft, unsigned long offset, double leftSideBearing, struct SFT_Char *chr)
-{
-	double transform[6];
-	struct buffer buf;
-	struct point corners[2];
-	int unitsPerEm;
-	if ((unitsPerEm = units_per_em(sft->font)) < 0)
-		return -1;
-	/* Set up the linear transformation. */
-	transform[0] = sft->xScale / unitsPerEm;
-	transform[1] = 0.0;
-	transform[2] = 0.0;
-	transform[3] = sft->yScale / unitsPerEm;
-	transform[4] = sft->x + leftSideBearing;
-	transform[5] = sft->y;
-	/* Calculate outline extents. */
-	if (sft->font->size < (unsigned long) offset + 10)
-		return -1;
-	corners[0] = (struct point) { geti16(sft->font, offset + 2), geti16(sft->font, offset + 4) };
-	corners[1] = (struct point) { geti16(sft->font, offset + 6), geti16(sft->font, offset + 8) };
-	transform_points(2, corners, transform);
-	/* Important: the following lines assume transform is an affine diagonal matrix at this point! */
-	chr->x = (int) floor(corners[0].x) - 1;
-	chr->y = (int) floor(corners[0].y) - 1;
-	chr->width  = (int) ceil(corners[1].x) + 1 - chr->x;
-	chr->height = (int) ceil(corners[1].y) + 1 - chr->y;
-	/* Render the outline (if requested). */
-	if (sft->flags & SFT_CHAR_IMAGE) {
-		/* Make transformation relative to min corner. */
-		transform[4] -= chr->x;
-		transform[5] -= chr->y;
-		/* Allocate internal buffer for drawing into. */
-		struct cell *cells;
-		buf.width = chr->width;
-		buf.height = chr->height;
-		if ((cells = calloc(buf.width * buf.height, sizeof(cells[0]))) == NULL)
-			return -1;
-		if ((buf.rows = malloc(buf.height * sizeof(buf.rows[0]))) == NULL)
-			return -1;
-		struct cell *ptr = cells;
-		for (int y = 0; y < buf.height; ++y) {
-			buf.rows[y] = ptr;
-			ptr += buf.width;
-		}
-		if (draw_outline(sft, offset, buf, transform) < 0) {
-			free(cells);
-			free(buf.rows);
-			return -1;
-		}
-		if (sft->flags & SFT_DOWNWARD_Y) {
-			ptr = cells + buf.width * buf.height;
-			for (int y = 0; y < buf.height; ++y) {
-				ptr -= buf.width;
-				buf.rows[y] = ptr;
-			}
-		}
-		if ((chr->image = calloc(buf.width * buf.height, 1)) == NULL) {
-			free(cells);
-			free(buf.rows);
-			return -1;
-		}
-		post_process(buf, chr->image);
-		free(cells);
-		free(buf.rows);
-	}
-	if (sft->flags & SFT_DOWNWARD_Y) {
-		chr->y = -(chr->y + chr->height);
-	}
-	return 0;
 }
 
 static struct point

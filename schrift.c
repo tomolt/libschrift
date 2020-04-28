@@ -88,6 +88,8 @@ static void draw_dot(struct buffer buf, int px, int py, double xAvg, double yDif
 static void draw_line(struct buffer buf, struct line line);
 /* post-processing */
 static void post_process(struct buffer buf, uint8_t *image);
+static double min4(double a, double b, double c, double d);
+static double max4(double a, double b, double c, double d);
 
 /* function implementations */
 
@@ -166,12 +168,12 @@ int
 sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 {
 	double transform[6];
-	struct point corners[2];
+	struct point corners[4];
 	struct buffer buf;
 	struct cell *cells, *ptr;
 	double leftSideBearing;
 	long glyph, glyf, offset, next;
-	int unitsPerEm, x, y, w, h, i;
+	int unitsPerEm, x, y, w, h, i, r;
 
 	if ((glyph = glyph_id(sft->font, charCode)) < 0)
 		return -1;
@@ -201,17 +203,34 @@ sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 	transform[3] = sft->yScale / unitsPerEm;
 	transform[4] = sft->x + leftSideBearing;
 	transform[5] = sft->y;
+	/* Set up additional transformation specified by the user */
+	if (sft->transformation_hook) {
+		r = sft->transformation_hook(sft->hook_data, chr->advance, transform);
+		if (r)
+			return r;
+	}
 	/* Calculate outline extents. */
 	if (sft->font->size < (unsigned long) offset + 10)
 		return -1;
 	corners[0] = (struct point) { geti16(sft->font, offset + 2), geti16(sft->font, offset + 4) };
 	corners[1] = (struct point) { geti16(sft->font, offset + 6), geti16(sft->font, offset + 8) };
-	transform_points(2, corners, transform);
-	/* Important: the following lines assume transform is an affine diagonal matrix at this point! */
-	x = (int) floor(corners[0].x) - 1;
-	y = (int) floor(corners[0].y) - 1;
-	w = (int) ceil(corners[1].x) + 1 - x;
-	h = (int) ceil(corners[1].y) + 1 - y;
+	corners[2] = (struct point) { corners[0].x, corners[1].y };
+	corners[3] = (struct point) { corners[1].x, corners[0].y };
+	transform_points(4, corners, transform);
+	if (!sft->transformation_hook) {
+		/* With only scaling and translation we can assume that the original
+		 * upper left corner an lower right corners still are at these boundaries */
+		x = (int) floor(corners[0].x) - 1;
+		y = (int) floor(corners[0].y) - 1;
+		w = (int) ceil(corners[1].x) + 1 - x;
+		h = (int) ceil(corners[1].y) + 1 - y;
+	} else {
+		/* Glyph can have rotated, we need to check all corners */
+		x = (int) floor(min4(corners[0].x, corners[1].x, corners[2].x, corners[3].x)) - 1;
+		y = (int) floor(min4(corners[0].y, corners[1].y, corners[2].y, corners[3].y)) - 1;
+		w = (int) ceil(max4(corners[0].x, corners[1].x, corners[2].x, corners[3].x)) + 1 - x;
+		h = (int) ceil(max4(corners[0].y, corners[1].y, corners[2].y, corners[3].y)) + 1 - y;
+	}
 	chr->x = x;
 	chr->y = sft->flags & SFT_DOWNWARD_Y ? -(y + h) : y;
 	chr->width = w;
@@ -966,3 +985,18 @@ post_process(struct buffer buf, uint8_t *image)
 	}
 }
 
+static double
+min4(double a, double b, double c, double d)
+{
+	double ab = a < b ? a : b;
+	double cd = c < d ? c : d;
+	return ab < cd ? ab : cd;
+}
+
+static double
+max4(double a, double b, double c, double d)
+{
+	double ab = a > b ? a : b;
+	double cd = c > d ? c : d;
+	return ab > cd ? ab : cd;
+}

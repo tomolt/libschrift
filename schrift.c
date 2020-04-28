@@ -178,8 +178,6 @@ sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 		return -1;
 	if ((next = outline_offset(sft->font, glyph + 1)) < 0)
 		return -1;
-	if (sft->font->size < (unsigned long) glyf + 10)
-		return -1;
 	if (offset == next) {
 		/* Glyph has completely empty outline. This is allowed by the spec. */
 		chr->x = chr->y = 0;
@@ -762,6 +760,8 @@ proc_outline(const struct SFT *sft, unsigned long offset, double leftSideBearing
 	transform[4] = sft->x + leftSideBearing;
 	transform[5] = sft->y;
 	/* Calculate outline extents. */
+	if (sft->font->size < (unsigned long) offset + 10)
+		return -1;
 	corners[0] = (struct point) { geti16(sft->font, offset + 2), geti16(sft->font, offset + 4) };
 	corners[1] = (struct point) { geti16(sft->font, offset + 6), geti16(sft->font, offset + 8) };
 	transform_points(2, corners, transform);

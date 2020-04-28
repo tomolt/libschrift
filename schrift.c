@@ -194,7 +194,7 @@ sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 	offset += glyf;
 	if ((unitsPerEm = units_per_em(sft->font)) < 0)
 		return -1;
-	/* Set up the linear transformation. */
+	/* Set up the scaling and translation transformation. */
 	transform[0] = sft->xScale / unitsPerEm;
 	transform[1] = 0.0;
 	transform[2] = 0.0;

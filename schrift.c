@@ -24,7 +24,7 @@
 #define STACK_FREE(var) \
 	if ((void *) var != (void *) var##_stack_) free(var);
 #define INCREASE_ARRAY(arr, type) \
-	(arr).num < (arr).cap ? 0 : stretch_array(&(arr), sizeof(type))
+	((arr).num < (arr).cap ? 0 : stretch_array(&(arr), sizeof(type)))
 
 enum { SrcMapping, SrcUser };
 
@@ -90,7 +90,7 @@ static int  draw_outline(const struct SFT *sft, unsigned long offset, struct buf
 /* tesselation */
 static struct point midpoint(struct point a, struct point b);
 static int  is_flat(struct curve curve, double flatness);
-static void draw_curve(struct buffer buf, struct curve curve);
+static int  tesselate_curves(struct array curves, struct array *lines);
 /* silhouette rasterization */
 static inline int ifloor(double x);
 static inline int quantize(double x);
@@ -749,11 +749,10 @@ draw_contours(struct buffer buf, int numContours, struct contour *contours, uint
 		}
 	}
 
+	if (tesselate_curves(curves, &lines) < 0)
+		goto failure;
 	for (i = 0; i < lines.num; ++i) {
 		draw_line(buf, LINES[i]);
-	}
-	for (i = 0; i < curves.num; ++i) {
-		draw_curve(buf, CURVES[i]);
 	}
 
 	free(lines.elems);
@@ -901,9 +900,8 @@ is_flat(struct curve curve, double flatness)
 	return x * x + y * y <= flatness * flatness;
 }
 
-/* Draws a curve into a buffer by tesselating it into many smaller lines. */
-static void
-draw_curve(struct buffer buf, struct curve curve)
+static int
+tesselate_curves(struct array curves, struct array *lines)
 {
 	/*
 	From my tests I can conclude that this stack barely reaches a top height
@@ -912,23 +910,34 @@ draw_curve(struct buffer buf, struct curve curve)
 	more than enough.
 	*/
 #define STACK_SIZE 10
-	struct curve stack[STACK_SIZE];
+#define LINES  ((struct line  *) lines->elems)
+#define CURVES ((struct curve *) curves.elems)
+	struct curve stack[STACK_SIZE], curve;
 	struct point ctrl0, ctrl1, pivot;
-	int top = 0;
-	for (;;) {
-		if (is_flat(curve, 0.5) || top + 1 > STACK_SIZE) {
-			draw_line(buf, (struct line) { curve.beg, curve.end });
-			if (top == 0) return;
-			curve = stack[--top];
-		} else {
-			ctrl0 = midpoint(curve.beg, curve.ctrl);
-			ctrl1 = midpoint(curve.ctrl, curve.end);
-			pivot = midpoint(ctrl0, ctrl1);
-			stack[top++] = (struct curve) { curve.beg, ctrl0, pivot };
-			curve = (struct curve) { pivot, ctrl1, curve.end };
+	int top, i;
+	for (i = 0; i < curves.num; ++i) {
+		top = 0;
+		curve = CURVES[i];
+		for (;;) {
+			if (is_flat(curve, 0.5) || top >= STACK_SIZE) {
+				if (INCREASE_ARRAY(*lines, struct line) < 0)
+					return -1;
+				LINES[lines->num++] = (struct line) { curve.beg, curve.end };
+				if (top == 0) break;
+				curve = stack[--top];
+			} else {
+				ctrl0 = midpoint(curve.beg, curve.ctrl);
+				ctrl1 = midpoint(curve.ctrl, curve.end);
+				pivot = midpoint(ctrl0, ctrl1);
+				stack[top++] = (struct curve) { curve.beg, ctrl0, pivot };
+				curve = (struct curve) { pivot, ctrl1, curve.end };
+			}
 		}
 	}
+	return 0;
 #undef STACK_SIZE
+#undef LINES
+#undef CURVES
 }
 
 /* Much faster than the builtin floor() function (because it doesn't check infinities etc.). 

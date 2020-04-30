@@ -33,6 +33,12 @@ struct curve   { struct point beg, ctrl, end; };
 struct contour { int first, last; };
 struct cell    { int16_t area, cover; };
 
+struct array
+{
+	void *elems;
+	int cap, num;
+};
+
 struct buffer
 {
 	struct cell **rows;
@@ -51,6 +57,8 @@ struct SFT_Font
 static int  map_file(SFT_Font *font, const char *filename);
 static void unmap_file(SFT_Font *font);
 /* TTF parsing */
+static int  init_array(struct array *array, int esize, int count);
+static int  increase_array(struct array *array, int esize);
 static void *csearch(const void *key, const void *base,
 	size_t nmemb, size_t size, int (*compar)(const void *, const void *));
 static int  cmpu16(const void *a, const void *b);
@@ -73,7 +81,7 @@ static long simple_flags(SFT_Font *font, unsigned long offset, int numPts, uint8
 static int  simple_points(SFT_Font *font, long offset, int numPts, uint8_t *flags, struct point *points);
 static void transform_points(int numPts, struct point *points, double trf[6]);
 static void clip_points(int numPts, struct point *points, struct buffer buf);
-static void draw_contours(struct buffer buf, int numContours, struct contour *contours, uint8_t *flags, struct point *points);
+static int  draw_contours(struct buffer buf, int numContours, struct contour *contours, uint8_t *flags, struct point *points);
 static int  draw_simple(const struct SFT *sft, long offset, int numContours, struct buffer buf, double transform[6]);
 static int  draw_compound(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6]);
 static int  draw_outline(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6]);
@@ -283,6 +291,27 @@ unmap_file(SFT_Font *font)
 {
 	assert(font->memory != MAP_FAILED);
 	munmap((void *) font->memory, font->size);
+}
+
+static int
+init_array(struct array *array, int esize, int count)
+{
+	array->num = 0;
+	array->cap = count;
+	return (array->elems = malloc(count * esize)) == NULL ? -1 : 0;
+}
+
+static int
+increase_array(struct array *array, int esize)
+{
+	void *elems;
+	int cap = array->cap * 2;
+	/* TODO Use something safe like reallocarray() here! */
+	if ((elems = realloc(array->elems, cap * esize)) == NULL)
+		return -1;
+	array->cap = cap;
+	array->elems = elems;
+	return 0;
 }
 
 /* Like bsearch(), but returns the next highest element if key could not be found. */
@@ -659,15 +688,29 @@ clip_points(int numPts, struct point *points, struct buffer buf)
 	}
 }
 
-static void
+static int
 draw_contours(struct buffer buf, int numContours, struct contour *contours, uint8_t *flags, struct point *points)
 {
 #define DRAW_SEGMENT(end) do { \
-		if (gotCtrl) draw_curve(buf, (struct curve) { beg, ctrl, (end) }); \
-		else if (beg.y != (end).y) draw_line(buf, (struct line) { beg, (end) }); \
+		if (gotCtrl) { \
+			if (curves.num >= curves.cap && increase_array(&curves, sizeof(struct curve)) < 0) \
+				goto failure; \
+			((struct curve *) curves.elems)[curves.num++] = (struct curve) { beg, ctrl, (end) }; \
+		} else if (beg.y != (end).y) { \
+			if (lines.num >= lines.cap && increase_array(&lines, sizeof(struct line)) < 0) \
+				goto failure; \
+			((struct line *) lines.elems)[lines.num++] = (struct line) { beg, (end) }; \
+		} \
 	} while (0)
+	struct array lines, curves;
 	struct point looseEnd, beg, ctrl, center;
 	int c, f, l, firstOn, lastOn, gotCtrl, i;
+
+	if (init_array(&lines, sizeof(struct line), 128) < 0)
+		goto failure;
+	if (init_array(&curves, sizeof(struct curve), 32) < 0)
+		goto failure;
+
 	for (c = 0; c < numContours; ++c) {
 		f = contours[c].first;
 		l = contours[c].last;
@@ -693,6 +736,23 @@ draw_contours(struct buffer buf, int numContours, struct contour *contours, uint
 		}
 		DRAW_SEGMENT(looseEnd);
 	}
+
+	for (i = 0; i < lines.num; ++i) {
+		struct line line = ((struct line *) lines.elems)[i];
+		draw_line(buf, line);
+	}
+	for (i = 0; i < curves.num; ++i) {
+		struct curve curve = ((struct curve *) curves.elems)[i];
+		draw_curve(buf, curve);
+	}
+
+	free(lines.elems);
+	free(curves.elems);
+	return 0;
+failure:
+	free(lines.elems);
+	free(curves.elems);
+	return -1;
 #undef DRAW_SEGMENT
 }
 
@@ -735,7 +795,8 @@ draw_simple(const struct SFT *sft, long offset, int numContours, struct buffer b
 		goto failure;
 	transform_points(numPts, points, transform);
 	clip_points(numPts, points, buf);
-	draw_contours(buf, numContours, contours, flags, points);
+	if (draw_contours(buf, numContours, contours, flags, points) < 0)
+		goto failure;
 
 	STACK_FREE(memory) ;
 	return 0;

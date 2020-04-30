@@ -23,6 +23,8 @@
 	var = (len) <= (thresh) ? (void *) var##_stack_ : malloc(len);
 #define STACK_FREE(var) \
 	if ((void *) var != (void *) var##_stack_) free(var);
+#define INCREASE_ARRAY(arr, type) \
+	(arr).num < (arr).cap ? 0 : stretch_array(&(arr), sizeof(type))
 
 enum { SrcMapping, SrcUser };
 
@@ -58,7 +60,7 @@ static int  map_file(SFT_Font *font, const char *filename);
 static void unmap_file(SFT_Font *font);
 /* TTF parsing */
 static int  init_array(struct array *array, int esize, int count);
-static int  increase_array(struct array *array, int esize);
+static int  stretch_array(struct array *array, int esize);
 static void *csearch(const void *key, const void *base,
 	size_t nmemb, size_t size, int (*compar)(const void *, const void *));
 static int  cmpu16(const void *a, const void *b);
@@ -302,7 +304,7 @@ init_array(struct array *array, int esize, int count)
 }
 
 static int
-increase_array(struct array *array, int esize)
+stretch_array(struct array *array, int esize)
 {
 	void *elems;
 	int cap = array->cap * 2;
@@ -691,17 +693,9 @@ clip_points(int numPts, struct point *points, struct buffer buf)
 static int
 draw_contours(struct buffer buf, int numContours, struct contour *contours, uint8_t *flags, struct point *points)
 {
-#define DRAW_SEGMENT(end) do { \
-		if (gotCtrl) { \
-			if (curves.num >= curves.cap && increase_array(&curves, sizeof(struct curve)) < 0) \
-				goto failure; \
-			((struct curve *) curves.elems)[curves.num++] = (struct curve) { beg, ctrl, (end) }; \
-		} else if (beg.y != (end).y) { \
-			if (lines.num >= lines.cap && increase_array(&lines, sizeof(struct line)) < 0) \
-				goto failure; \
-			((struct line *) lines.elems)[lines.num++] = (struct line) { beg, (end) }; \
-		} \
-	} while (0)
+#define LINES  ((struct line  *) lines.elems)
+#define CURVES ((struct curve *) curves.elems)
+
 	struct array lines, curves;
 	struct point looseEnd, beg, ctrl, center;
 	int c, f, l, firstOn, lastOn, gotCtrl, i;
@@ -721,29 +715,45 @@ draw_contours(struct buffer buf, int numContours, struct contour *contours, uint
 		gotCtrl = 0;
 		for (i = f; i <= l; ++i) {
 			if (flags[i] & 0x01) {
-				DRAW_SEGMENT(points[i]);
+				if (gotCtrl) {
+					if (INCREASE_ARRAY(curves, struct curve) < 0)
+						goto failure;
+					CURVES[curves.num++] = (struct curve) { beg, ctrl, points[i] };
+				} else if (beg.y != points[i].y) {
+					if (INCREASE_ARRAY(lines, struct line) < 0)
+						goto failure;
+					LINES[lines.num++] = (struct line) { beg, points[i] };
+				}
 				beg = points[i];
 				gotCtrl = 0;
 			} else {
 				if (gotCtrl) {
 					center = midpoint(ctrl, points[i]);
-					DRAW_SEGMENT(center);
+					if (INCREASE_ARRAY(curves, struct curve) < 0)
+						goto failure;
+					CURVES[curves.num++] = (struct curve) { beg, ctrl, center };
 					beg = center;
 				}
 				ctrl = points[i];
 				gotCtrl = 1;
 			}
 		}
-		DRAW_SEGMENT(looseEnd);
+		if (gotCtrl) {
+			if (INCREASE_ARRAY(curves, struct curve) < 0)
+				goto failure;
+			CURVES[curves.num++] = (struct curve) { beg, ctrl, looseEnd };
+		} else if (beg.y != looseEnd.y) {
+			if (INCREASE_ARRAY(lines, struct line) < 0)
+				goto failure;
+			LINES[lines.num++] = (struct line) { beg, looseEnd };
+		}
 	}
 
 	for (i = 0; i < lines.num; ++i) {
-		struct line line = ((struct line *) lines.elems)[i];
-		draw_line(buf, line);
+		draw_line(buf, LINES[i]);
 	}
 	for (i = 0; i < curves.num; ++i) {
-		struct curve curve = ((struct curve *) curves.elems)[i];
-		draw_curve(buf, curve);
+		draw_curve(buf, CURVES[i]);
 	}
 
 	free(lines.elems);
@@ -753,7 +763,9 @@ failure:
 	free(lines.elems);
 	free(curves.elems);
 	return -1;
-#undef DRAW_SEGMENT
+	
+#undef LINES
+#undef CURVES
 }
 
 static int

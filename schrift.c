@@ -23,8 +23,6 @@
 	var = (len) <= (thresh) ? (void *) var##_stack_ : malloc(len);
 #define STACK_FREE(var) \
 	if ((void *) var != (void *) var##_stack_) free(var);
-#define INCREASE_ARRAY(arr, type) \
-	((arr).num < (arr).cap ? 0 : stretch_array(&(arr), sizeof(type)))
 
 enum { SrcMapping, SrcUser };
 
@@ -34,10 +32,12 @@ struct line    { struct point beg, end; };
 struct curve   { struct point beg, ctrl, end; };
 struct cell    { int16_t area, cover; };
 
-struct array
+struct outline
 {
-	void *elems;
-	int cap, num;
+	struct curve *curves;
+	struct line *lines;
+	int numCurves, numLines;
+	int capCurves, capLines;
 };
 
 struct buffer
@@ -58,8 +58,11 @@ struct SFT_Font
 static int  map_file(SFT_Font *font, const char *filename);
 static void unmap_file(SFT_Font *font);
 /* TTF parsing */
-static int  init_array(struct array *array, int esize, int count);
-static int  stretch_array(struct array *array, int esize);
+static int  init_outline(struct outline *outl);
+static int  grow_curves(struct outline *outl);
+static int  grow_lines(struct outline *outl);
+static inline int  push_curve(struct outline *outl, struct curve curve);
+static inline int  push_line(struct outline *outl, struct line line);
 static void *csearch(const void *key, const void *base,
 	size_t nmemb, size_t size, int (*compar)(const void *, const void *));
 static int  cmpu16(const void *a, const void *b);
@@ -89,7 +92,7 @@ static int  draw_outline(const struct SFT *sft, unsigned long offset, struct buf
 /* tesselation */
 static struct point midpoint(struct point a, struct point b);
 static int  is_flat(struct curve curve, double flatness);
-static int  tesselate_curves(struct array curves, struct array *lines);
+static int  tesselate_curves(struct outline *outl);
 /* silhouette rasterization */
 static inline int ifloor(double x);
 static inline int quantize(double x);
@@ -295,23 +298,58 @@ unmap_file(SFT_Font *font)
 }
 
 static int
-init_array(struct array *array, int esize, int count)
+init_outline(struct outline *outl)
 {
-	array->num = 0;
-	array->cap = count;
-	return (array->elems = malloc(count * esize)) == NULL ? -1 : 0;
+	outl->numCurves = 0;
+	outl->capCurves = 64;
+	if ((outl->curves = malloc(outl->capCurves * sizeof(outl->curves[0]))) == NULL)
+		return -1;
+	outl->numLines = 0;
+	outl->capLines = 64;
+	if ((outl->lines = malloc(outl->capLines * sizeof(outl->lines[0]))) == NULL)
+		return -1;
+	return 0;
 }
 
 static int
-stretch_array(struct array *array, int esize)
+grow_curves(struct outline *outl)
 {
-	void *elems;
-	int cap = array->cap * 2;
-	/* TODO Use something safe like reallocarray() here! */
-	if ((elems = realloc(array->elems, cap * esize)) == NULL)
+	void *mem;
+	int cap = outl->capCurves * 2;
+	if ((mem = realloc(outl->curves, cap * sizeof(outl->curves[0]))) == NULL)
 		return -1;
-	array->cap = cap;
-	array->elems = elems;
+	outl->capCurves = cap;
+	outl->curves = mem;
+	return 0;
+}
+
+static int
+grow_lines(struct outline *outl)
+{
+	void *mem;
+	int cap = outl->capLines * 2;
+	if ((mem = realloc(outl->lines, cap * sizeof(outl->lines[0]))) == NULL)
+		return -1;
+	outl->capLines = cap;
+	outl->lines = mem;
+	return 0;
+}
+
+static inline int
+push_curve(struct outline *outl, struct curve curve)
+{
+	if (outl->numCurves >= outl->capCurves && grow_curves(outl) < 0)
+		return -1;
+	outl->curves[outl->numCurves++] = curve;
+	return 0;
+}
+
+static inline int
+push_line(struct outline *outl, struct line line)
+{
+	if (outl->numLines >= outl->capLines && grow_lines(outl) < 0)
+		return -1;
+	outl->lines[outl->numLines++] = line;
 	return 0;
 }
 
@@ -692,16 +730,13 @@ clip_points(int numPts, struct point *points, struct buffer buf)
 static int
 draw_contours(struct buffer buf, int numContours, unsigned int *endPts, uint8_t *flags, struct point *points)
 {
-#define LINES  ((struct line  *) lines.elems)
-#define CURVES ((struct curve *) curves.elems)
-
-	struct array lines, curves;
+	struct outline outline;
+	struct curve curve;
+	struct line line;
 	struct point looseEnd, beg, ctrl, center;
 	int nextPt, c, f, l, gotCtrl, i;
 
-	if (init_array(&lines, sizeof(struct line), 128) < 0)
-		goto failure;
-	if (init_array(&curves, sizeof(struct curve), 32) < 0)
+	if (init_outline(&outline) < 0)
 		goto failure;
 
 	nextPt = 0;
@@ -717,22 +752,22 @@ draw_contours(struct buffer buf, int numContours, unsigned int *endPts, uint8_t 
 		for (i = f; i <= l; ++i) {
 			if (flags[i] & 0x01) {
 				if (gotCtrl) {
-					if (INCREASE_ARRAY(curves, struct curve) < 0)
+					curve = (struct curve) { beg, ctrl, points[i] };
+					if (push_curve(&outline, curve) < 0)
 						goto failure;
-					CURVES[curves.num++] = (struct curve) { beg, ctrl, points[i] };
 				} else if (beg.y != points[i].y) {
-					if (INCREASE_ARRAY(lines, struct line) < 0)
+					line = (struct line) { beg, points[i] };
+					if (push_line(&outline, line) < 0)
 						goto failure;
-					LINES[lines.num++] = (struct line) { beg, points[i] };
 				}
 				beg = points[i];
 				gotCtrl = 0;
 			} else {
 				if (gotCtrl) {
 					center = midpoint(ctrl, points[i]);
-					if (INCREASE_ARRAY(curves, struct curve) < 0)
+					curve = (struct curve) { beg, ctrl, center };
+					if (push_curve(&outline, curve) < 0)
 						goto failure;
-					CURVES[curves.num++] = (struct curve) { beg, ctrl, center };
 					beg = center;
 				}
 				ctrl = points[i];
@@ -740,32 +775,29 @@ draw_contours(struct buffer buf, int numContours, unsigned int *endPts, uint8_t 
 			}
 		}
 		if (gotCtrl) {
-			if (INCREASE_ARRAY(curves, struct curve) < 0)
+			curve = (struct curve) { beg, ctrl, looseEnd };
+			if (push_curve(&outline, curve) < 0)
 				goto failure;
-			CURVES[curves.num++] = (struct curve) { beg, ctrl, looseEnd };
 		} else if (beg.y != looseEnd.y) {
-			if (INCREASE_ARRAY(lines, struct line) < 0)
+			line = (struct line) { beg, looseEnd };
+			if (push_line(&outline, line) < 0)
 				goto failure;
-			LINES[lines.num++] = (struct line) { beg, looseEnd };
 		}
 	}
 
-	if (tesselate_curves(curves, &lines) < 0)
+	if (tesselate_curves(&outline) < 0)
 		goto failure;
-	for (i = 0; i < lines.num; ++i) {
-		draw_line(buf, LINES[i]);
+	for (i = 0; i < outline.numLines; ++i) {
+		draw_line(buf, outline.lines[i]);
 	}
 
-	free(lines.elems);
-	free(curves.elems);
+	free(outline.lines);
+	free(outline.curves);
 	return 0;
 failure:
-	free(lines.elems);
-	free(curves.elems);
+	free(outline.lines);
+	free(outline.curves);
 	return -1;
-	
-#undef LINES
-#undef CURVES
 }
 
 static int
@@ -902,7 +934,7 @@ is_flat(struct curve curve, double flatness)
 }
 
 static int
-tesselate_curves(struct array curves, struct array *lines)
+tesselate_curves(struct outline *outl)
 {
 	/*
 	From my tests I can conclude that this stack barely reaches a top height
@@ -911,19 +943,18 @@ tesselate_curves(struct array curves, struct array *lines)
 	more than enough.
 	*/
 #define STACK_SIZE 10
-#define LINES  ((struct line  *) lines->elems)
-#define CURVES ((struct curve *) curves.elems)
 	struct curve stack[STACK_SIZE], curve;
+	struct line line;
 	struct point ctrl0, ctrl1, pivot;
 	int top, i;
-	for (i = 0; i < curves.num; ++i) {
+	for (i = 0; i < outl->numCurves; ++i) {
 		top = 0;
-		curve = CURVES[i];
+		curve = outl->curves[i];
 		for (;;) {
 			if (is_flat(curve, 0.5) || top >= STACK_SIZE) {
-				if (INCREASE_ARRAY(*lines, struct line) < 0)
+				line = (struct line) { curve.beg, curve.end };
+				if (push_line(outl, line) < 0)
 					return -1;
-				LINES[lines->num++] = (struct line) { curve.beg, curve.end };
 				if (top == 0) break;
 				curve = stack[--top];
 			} else {
@@ -937,8 +968,6 @@ tesselate_curves(struct array curves, struct array *lines)
 	}
 	return 0;
 #undef STACK_SIZE
-#undef LINES
-#undef CURVES
 }
 
 /* Much faster than the builtin floor() function (because it doesn't check infinities etc.). 

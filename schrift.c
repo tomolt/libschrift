@@ -32,7 +32,6 @@ enum { SrcMapping, SrcUser };
 struct point   { double x, y; };
 struct line    { struct point beg, end; };
 struct curve   { struct point beg, ctrl, end; };
-struct contour { int first, last; };
 struct cell    { int16_t area, cover; };
 
 struct array
@@ -83,7 +82,7 @@ static long simple_flags(SFT_Font *font, unsigned long offset, int numPts, uint8
 static int  simple_points(SFT_Font *font, long offset, int numPts, uint8_t *flags, struct point *points);
 static void transform_points(int numPts, struct point *points, double trf[6]);
 static void clip_points(int numPts, struct point *points, struct buffer buf);
-static int  draw_contours(struct buffer buf, int numContours, struct contour *contours, uint8_t *flags, struct point *points);
+static int  draw_contours(struct buffer buf, int numContours, unsigned int *endPts, uint8_t *flags, struct point *points);
 static int  draw_simple(const struct SFT *sft, long offset, int numContours, struct buffer buf, double transform[6]);
 static int  draw_compound(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6]);
 static int  draw_outline(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6]);
@@ -691,26 +690,28 @@ clip_points(int numPts, struct point *points, struct buffer buf)
 }
 
 static int
-draw_contours(struct buffer buf, int numContours, struct contour *contours, uint8_t *flags, struct point *points)
+draw_contours(struct buffer buf, int numContours, unsigned int *endPts, uint8_t *flags, struct point *points)
 {
 #define LINES  ((struct line  *) lines.elems)
 #define CURVES ((struct curve *) curves.elems)
 
 	struct array lines, curves;
 	struct point looseEnd, beg, ctrl, center;
-	int c, f, l, firstOn, lastOn, gotCtrl, i;
+	int nextPt, c, f, l, gotCtrl, i;
 
 	if (init_array(&lines, sizeof(struct line), 128) < 0)
 		goto failure;
 	if (init_array(&curves, sizeof(struct curve), 32) < 0)
 		goto failure;
 
+	nextPt = 0;
 	for (c = 0; c < numContours; ++c) {
-		f = contours[c].first;
-		l = contours[c].last;
-		firstOn = flags[f] & 0x01;
-		lastOn = flags[l] & 0x01;
-		looseEnd = firstOn ? points[f++] : lastOn ? points[l--] : midpoint(points[f], points[l]);
+		f = nextPt;
+		l = endPts[c];
+		nextPt = l + 1;
+		looseEnd = flags[f] & 0x01 ? points[f++] :
+			flags[l] & 0x01 ? points[l--] :
+			midpoint(points[f], points[l]);
 		beg = looseEnd;
 		gotCtrl = 0;
 		for (i = f; i <= l; ++i) {
@@ -771,32 +772,32 @@ static int
 draw_simple(const struct SFT *sft, long offset, int numContours, struct buffer buf, double transform[6])
 {
 	struct point *points;
-	struct contour *contours = NULL;
+	unsigned int *endPts;
 	uint8_t *memory = NULL, *flags;
 	unsigned long memLen;
-	int i, numPts, top;
+	int i, numPts;
 
 	if (sft->font->size < (unsigned long) offset + numContours * 2 + 2)
 		goto failure;
 	numPts = getu16(sft->font, offset + (numContours - 1) * 2) + 1;
 	
 	memLen  = numPts * sizeof(points[0]);
-	memLen += numContours * sizeof(contours[0]);
+	memLen += numContours * sizeof(endPts[0]);
 	memLen += numPts * sizeof(flags[0]);
 	STACK_ALLOC(memory, memLen, 2048) ;
 	if (memory == NULL)
 		goto failure;
 	points = (struct point *) memory;
-	contours = (struct contour *) (points + numPts);
-	flags = (uint8_t *) (contours + numContours);
+	endPts = (unsigned int *) (points + numPts);
+	flags = (uint8_t *) (endPts + numContours);
 
-	for (top = i = 0; i < numContours; ++i) {
-		contours[i].first = top;
-		contours[i].last = getu16(sft->font, offset);
-		if (contours[i].first > contours[i].last)
-			goto failure;
-		top = contours[i].last + 1;
+	for (i = 0; i < numContours; ++i) {
+		endPts[i] = getu16(sft->font, offset);
 		offset += 2;
+	}
+	for (i = 0; i < numContours - 1; ++i) {
+		if (endPts[i] > endPts[i + 1])
+			goto failure;
 	}
 	offset += 2 + getu16(sft->font, offset);
 
@@ -806,7 +807,7 @@ draw_simple(const struct SFT *sft, long offset, int numContours, struct buffer b
 		goto failure;
 	transform_points(numPts, points, transform);
 	clip_points(numPts, points, buf);
-	if (draw_contours(buf, numContours, contours, flags, points) < 0)
+	if (draw_contours(buf, numContours, endPts, flags, points) < 0)
 		goto failure;
 
 	STACK_FREE(memory) ;

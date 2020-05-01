@@ -61,8 +61,6 @@ static void unmap_file(SFT_Font *font);
 static int  init_outline(struct outline *outl);
 static int  grow_curves(struct outline *outl);
 static int  grow_lines(struct outline *outl);
-static inline int  push_curve(struct outline *outl, struct curve curve);
-static inline int  push_line(struct outline *outl, struct line line);
 static void *csearch(const void *key, const void *base,
 	size_t nmemb, size_t size, int (*compar)(const void *, const void *));
 static int  cmpu16(const void *a, const void *b);
@@ -332,24 +330,6 @@ grow_lines(struct outline *outl)
 		return -1;
 	outl->capLines = cap;
 	outl->lines = mem;
-	return 0;
-}
-
-static inline int
-push_curve(struct outline *outl, struct curve curve)
-{
-	if (outl->numCurves >= outl->capCurves && grow_curves(outl) < 0)
-		return -1;
-	outl->curves[outl->numCurves++] = curve;
-	return 0;
-}
-
-static inline int
-push_line(struct outline *outl, struct line line)
-{
-	if (outl->numLines >= outl->capLines && grow_lines(outl) < 0)
-		return -1;
-	outl->lines[outl->numLines++] = line;
 	return 0;
 }
 
@@ -753,12 +733,14 @@ draw_contours(struct buffer buf, int numContours, unsigned int *endPts, uint8_t 
 			if (flags[i] & 0x01) {
 				if (gotCtrl) {
 					curve = (struct curve) { beg, ctrl, points[i] };
-					if (push_curve(&outline, curve) < 0)
+					if (outline.numCurves >= outline.capCurves && grow_curves(&outline) < 0)
 						goto failure;
+					outline.curves[outline.numCurves++] = curve;
 				} else if (beg.y != points[i].y) {
 					line = (struct line) { beg, points[i] };
-					if (push_line(&outline, line) < 0)
+					if (outline.numLines >= outline.capLines && grow_lines(&outline) < 0)
 						goto failure;
+					outline.lines[outline.numLines++] = line;
 				}
 				beg = points[i];
 				gotCtrl = 0;
@@ -766,8 +748,9 @@ draw_contours(struct buffer buf, int numContours, unsigned int *endPts, uint8_t 
 				if (gotCtrl) {
 					center = midpoint(ctrl, points[i]);
 					curve = (struct curve) { beg, ctrl, center };
-					if (push_curve(&outline, curve) < 0)
+					if (outline.numCurves >= outline.capCurves && grow_curves(&outline) < 0)
 						goto failure;
+					outline.curves[outline.numCurves++] = curve;
 					beg = center;
 				}
 				ctrl = points[i];
@@ -776,12 +759,14 @@ draw_contours(struct buffer buf, int numContours, unsigned int *endPts, uint8_t 
 		}
 		if (gotCtrl) {
 			curve = (struct curve) { beg, ctrl, looseEnd };
-			if (push_curve(&outline, curve) < 0)
+			if (outline.numCurves >= outline.capCurves && grow_curves(&outline) < 0)
 				goto failure;
+			outline.curves[outline.numCurves++] = curve;
 		} else if (beg.y != looseEnd.y) {
 			line = (struct line) { beg, looseEnd };
-			if (push_line(&outline, line) < 0)
+			if (outline.numLines >= outline.capLines && grow_lines(&outline) < 0)
 				goto failure;
+			outline.lines[outline.numLines++] = line;
 		}
 	}
 
@@ -953,8 +938,9 @@ tesselate_curves(struct outline *outl)
 		for (;;) {
 			if (is_flat(curve, 0.5) || top >= STACK_SIZE) {
 				line = (struct line) { curve.beg, curve.end };
-				if (push_line(outl, line) < 0)
+				if (outl->numLines >= outl->capLines && grow_lines(outl) < 0)
 					return -1;
+				outl->lines[outl->numLines++] = line;
 				if (top == 0) break;
 				curve = stack[--top];
 			} else {

@@ -31,6 +31,8 @@ struct SFT
 	double x;
 	double y;
 	unsigned int flags;
+	int (*transformation_hook)(void *hook_data, double advance, double transform[6]);
+	void *hook_data;
 };
 
 struct SFT_Char

@@ -49,6 +49,7 @@ void sft_freefont(SFT_Font *font);
 
 int sft_linemetrics(const struct SFT *sft, double *ascent, double *descent, double *gap);
 int sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr);
+int sft_glyph(const struct SFT *sft, long glyph, struct SFT_Char *chr);
 
 #endif
 

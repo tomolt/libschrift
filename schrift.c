@@ -175,16 +175,23 @@ sft_linemetrics(const struct SFT *sft, double *ascent, double *descent, double *
 int
 sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 {
+	long glyph;
+	if ((glyph = glyph_id(sft->font, charCode)) < 0)
+		return -1;
+	return sft_glyph(sft, glyph, chr);
+}
+
+int
+sft_glyph(const struct SFT *sft, long glyph, struct SFT_Char *chr)
+{
 	double transform[6];
 	struct point corners[2];
 	struct buffer buf;
 	struct cell *cells, *ptr;
 	double leftSideBearing;
-	long glyph, glyf, offset, next;
+	long glyf, offset, next;
 	int unitsPerEm, x, y, w, h, i;
 
-	if ((glyph = glyph_id(sft->font, charCode)) < 0)
-		return -1;
 	if (hor_metrics(sft, glyph, &chr->advance, &leftSideBearing) < 0)
 		return -1;
 	if ((offset = outline_offset(sft->font, glyph)) < 0)

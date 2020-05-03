@@ -1000,7 +1000,7 @@ draw_line(struct buffer buf, struct line line)
 	pixelX = ifloor(originX);
 	if (deltaX != 0.0) {
 		double signedGapX = 1.0 / deltaX;
-		nextCrossingX = floor(originX) - originX;
+		nextCrossingX = (int) originX - originX;
 		nextCrossingX += deltaX > 0.0;
 		nextCrossingX *= signedGapX;
 		crossingGapX = fabs(signedGapX);
@@ -1012,7 +1012,7 @@ draw_line(struct buffer buf, struct line line)
 	pixelY = ifloor(originY);
 	if (deltaY != 0.0) {
 		double signedGapY = 1.0 / deltaY;
-		nextCrossingY = floor(originY) - originY;
+		nextCrossingY = (int) originY - originY;
 		nextCrossingY += deltaY > 0.0;
 		nextCrossingY *= signedGapY;
 		crossingGapY = fabs(signedGapY);

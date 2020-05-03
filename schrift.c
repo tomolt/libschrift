@@ -999,12 +999,11 @@ draw_line(struct buffer buf, struct line line)
 	deltaX = goalX - originX;
 	pixelX = ifloor(originX);
 	if (deltaX != 0.0) {
-		crossingGapX = fabs(1.0 / deltaX);
-		if (deltaX > 0.0) {
-			nextCrossingX = (floor(originX) + 1.0 - originX) * crossingGapX;
-		} else {
-			nextCrossingX = (originX - floor(originX)) * crossingGapX;
-		}
+		double signedGapX = 1.0 / deltaX;
+		nextCrossingX = floor(originX) - originX;
+		nextCrossingX += deltaX > 0.0;
+		nextCrossingX *= signedGapX;
+		crossingGapX = fabs(signedGapX);
 	}
 
 	originY = line.beg.y;
@@ -1012,12 +1011,11 @@ draw_line(struct buffer buf, struct line line)
 	deltaY = goalY - originY;
 	pixelY = ifloor(originY);
 	if (deltaY != 0.0) {
-		crossingGapY = fabs(1.0 / deltaY);
-		if (deltaY > 0.0) {
-			nextCrossingY = (floor(originY) + 1.0 - originY) * crossingGapY;
-		} else {
-			nextCrossingY = (originY - floor(originY)) * crossingGapY;
-		}
+		double signedGapY = 1.0 / deltaY;
+		nextCrossingY = floor(originY) - originY;
+		nextCrossingY += deltaY > 0.0;
+		nextCrossingY *= signedGapY;
+		crossingGapY = fabs(signedGapY);
 	}
 
 	numIters = abs(ifloor(goalX) - ifloor(originX)) + abs(ifloor(goalY) - ifloor(originY));

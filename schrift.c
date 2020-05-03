@@ -83,7 +83,7 @@ static long simple_flags(SFT_Font *font, unsigned long offset, int numPts, uint8
 static int  simple_points(SFT_Font *font, long offset, int numPts, uint8_t *flags, struct point *points);
 static void transform_points(int numPts, struct point *points, double trf[6]);
 static void clip_points(int numPts, struct point *points, struct buffer buf);
-static int  draw_contours(struct buffer buf, int numContours, unsigned int *endPts, uint8_t *flags, struct point *points);
+static int  decode_contours(int numContours, unsigned int *endPts, uint8_t *flags, struct point *points, struct outline *outl);
 static int  draw_simple(const struct SFT *sft, long offset, int numContours, struct buffer buf, double transform[6]);
 static int  draw_compound(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6]);
 static int  draw_outline(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6]);
@@ -708,16 +708,12 @@ clip_points(int numPts, struct point *points, struct buffer buf)
 }
 
 static int
-draw_contours(struct buffer buf, int numContours, unsigned int *endPts, uint8_t *flags, struct point *points)
+decode_contours(int numContours, unsigned int *endPts, uint8_t *flags, struct point *points, struct outline *outl)
 {
-	struct outline outline;
 	struct curve curve;
 	struct line line;
 	struct point looseEnd, beg, ctrl, center;
 	int nextPt, c, f, l, gotCtrl, i;
-
-	if (init_outline(&outline) < 0)
-		goto failure;
 
 	nextPt = 0;
 	for (c = 0; c < numContours; ++c) {
@@ -733,14 +729,14 @@ draw_contours(struct buffer buf, int numContours, unsigned int *endPts, uint8_t 
 			if (flags[i] & 0x01) {
 				if (gotCtrl) {
 					curve = (struct curve) { beg, ctrl, points[i] };
-					if (outline.numCurves >= outline.capCurves && grow_curves(&outline) < 0)
-						goto failure;
-					outline.curves[outline.numCurves++] = curve;
+					if (outl->numCurves >= outl->capCurves && grow_curves(outl) < 0)
+						return -1;
+					outl->curves[outl->numCurves++] = curve;
 				} else if (beg.y != points[i].y) {
 					line = (struct line) { beg, points[i] };
-					if (outline.numLines >= outline.capLines && grow_lines(&outline) < 0)
-						goto failure;
-					outline.lines[outline.numLines++] = line;
+					if (outl->numLines >= outl->capLines && grow_lines(outl) < 0)
+						return -1;
+					outl->lines[outl->numLines++] = line;
 				}
 				beg = points[i];
 				gotCtrl = 0;
@@ -748,9 +744,9 @@ draw_contours(struct buffer buf, int numContours, unsigned int *endPts, uint8_t 
 				if (gotCtrl) {
 					center = midpoint(ctrl, points[i]);
 					curve = (struct curve) { beg, ctrl, center };
-					if (outline.numCurves >= outline.capCurves && grow_curves(&outline) < 0)
-						goto failure;
-					outline.curves[outline.numCurves++] = curve;
+					if (outl->numCurves >= outl->capCurves && grow_curves(outl) < 0)
+						return -1;
+					outl->curves[outl->numCurves++] = curve;
 					beg = center;
 				}
 				ctrl = points[i];
@@ -759,35 +755,23 @@ draw_contours(struct buffer buf, int numContours, unsigned int *endPts, uint8_t 
 		}
 		if (gotCtrl) {
 			curve = (struct curve) { beg, ctrl, looseEnd };
-			if (outline.numCurves >= outline.capCurves && grow_curves(&outline) < 0)
-				goto failure;
-			outline.curves[outline.numCurves++] = curve;
+			if (outl->numCurves >= outl->capCurves && grow_curves(outl) < 0)
+				return -1;
+			outl->curves[outl->numCurves++] = curve;
 		} else if (beg.y != looseEnd.y) {
 			line = (struct line) { beg, looseEnd };
-			if (outline.numLines >= outline.capLines && grow_lines(&outline) < 0)
-				goto failure;
-			outline.lines[outline.numLines++] = line;
+			if (outl->numLines >= outl->capLines && grow_lines(outl) < 0)
+				return -1;
+			outl->lines[outl->numLines++] = line;
 		}
 	}
-
-	if (tesselate_curves(&outline) < 0)
-		goto failure;
-	for (i = 0; i < outline.numLines; ++i) {
-		draw_line(buf, outline.lines[i]);
-	}
-
-	free(outline.lines);
-	free(outline.curves);
 	return 0;
-failure:
-	free(outline.lines);
-	free(outline.curves);
-	return -1;
 }
 
 static int
 draw_simple(const struct SFT *sft, long offset, int numContours, struct buffer buf, double transform[6])
 {
+	struct outline outl;
 	struct point *points;
 	unsigned int *endPts;
 	uint8_t *memory = NULL, *flags;
@@ -824,13 +808,24 @@ draw_simple(const struct SFT *sft, long offset, int numContours, struct buffer b
 		goto failure;
 	transform_points(numPts, points, transform);
 	clip_points(numPts, points, buf);
-	if (draw_contours(buf, numContours, endPts, flags, points) < 0)
+	if (init_outline(&outl) < 0)
 		goto failure;
+	if (decode_contours(numContours, endPts, flags, points, &outl) < 0)
+		goto failure;
+	if (tesselate_curves(&outl) < 0)
+		goto failure;
+	for (i = 0; i < outl.numLines; ++i) {
+		draw_line(buf, outl.lines[i]);
+	}
 
 	STACK_FREE(memory) ;
+	free(outl.curves);
+	free(outl.lines);
 	return 0;
 failure:
 	STACK_FREE(memory) ;
+	free(outl.curves);
+	free(outl.lines);
 	return -1;
 }
 

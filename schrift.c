@@ -85,6 +85,7 @@ static void transform_points(int numPts, struct point *points, double trf[6]);
 static void clip_points(int numPts, struct point *points, struct buffer buf);
 static int  decode_contours(int numContours, unsigned int *endPts, uint8_t *flags, struct point *points, struct outline *outl);
 static int  draw_simple(const struct SFT *sft, long offset, int numContours, struct buffer buf, double transform[6]);
+static void compose_transforms(double out[6], double left[6], double right[6]);
 static int  draw_compound(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6]);
 static int  draw_outline(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6]);
 /* tesselation */
@@ -829,21 +830,33 @@ failure:
 	return -1;
 }
 
+static void
+compose_transforms(double out[6], double left[6], double right[6])
+{
+	int j;
+	for (j = 0; j < 6; j += 2) {
+		out[j+0] = left[0] * right[j+0] + left[2] * right[j+1];
+		out[j+1] = left[1] * right[j+0] + left[3] * right[j+1];
+	}
+	out[4] += left[4];
+	out[5] += left[5];
+}
+
 static int
 draw_compound(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6])
 {
-	(void) buf, (void) transform;
 	unsigned int flags, glyph;
 	int xOffset, yOffset;
-	int i = 0;
 	do {
 		if (sft->font->size < offset + 4)
 			return -1;
 		flags = getu16(sft->font, offset);
 		glyph = getu16(sft->font, offset + 2);
 		offset += 4;
+		/* We don't implement point matching, and neither does stb_truetype for that matter. */
 		if (!(flags & 0x002))
 			return -1;
+		/* Read additional X and Y offsets (in FUnits) of this component. */
 		if (flags & 0x01) {
 			if (sft->font->size < offset + 4)
 				return -1;
@@ -864,18 +877,28 @@ draw_compound(const struct SFT *sft, unsigned long offset, struct buffer buf, do
 		} else if (flags & 0x80) {
 			offset += 8;
 		}
-#if 0
-		fprintf(stderr, "Compound component #%d is: %u\n", i, glyph);
-		fprintf(stderr, "The component's flags are: 0x%03x\n", flags);
-		fprintf(stderr, "The component's X offset is: %d FUnits\n", xOffset);
-		fprintf(stderr, "The component's Y offset is: %d FUnits\n", yOffset);
-#else
-		(void) glyph, (void) xOffset, (void) yOffset, (void) i;
-#endif
-		++i;
+
+		long glyf, offset, next;
+		if ((offset = outline_offset(sft->font, glyph)) < 0)
+			return -1;
+		if ((next = outline_offset(sft->font, glyph + 1)) < 0)
+			return -1;
+		if (offset == next)
+			return -1;
+		if ((glyf = gettable(sft->font, "glyf")) < 0)
+			return -1;
+		double local[6], comptrf[6];
+		memset(local, 0, sizeof(local));
+		local[0] = 1.0;
+		local[3] = 1.0;
+		local[4] = xOffset;
+		local[5] = yOffset;
+		compose_transforms(comptrf, transform, local);
+		if (draw_outline(sft, glyf + offset, buf, comptrf) < 0)
+			return -1;
 	} while (flags & 0x020);
 
-	return -1;
+	return 0;
 }
 
 static int

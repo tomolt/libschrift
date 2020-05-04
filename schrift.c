@@ -86,8 +86,8 @@ static void clip_points(int numPts, struct point *points, struct buffer buf);
 static int  decode_contours(int numContours, unsigned int *endPts, uint8_t *flags, struct point *points, struct outline *outl);
 static int  draw_simple(const struct SFT *sft, long offset, int numContours, struct buffer buf, double transform[6]);
 static void compose_transforms(double out[6], double left[6], double right[6]);
-static int  draw_compound(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6]);
-static int  draw_outline(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6]);
+static int  draw_compound(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6], int recDepth);
+static int  draw_outline(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6], int recDepth);
 /* tesselation */
 static struct point midpoint(struct point a, struct point b);
 static int  is_flat(struct curve curve, double flatness);
@@ -245,7 +245,7 @@ sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 		buf.rows[i] = ptr;
 		ptr += w;
 	}
-	if (draw_outline(sft, offset, buf, transform) < 0) {
+	if (draw_outline(sft, offset, buf, transform, 0) < 0) {
 		free(cells);
 		free(buf.rows);
 		return -1;
@@ -843,10 +843,13 @@ compose_transforms(double out[6], double left[6], double right[6])
 }
 
 static int
-draw_compound(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6])
+draw_compound(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6], int recDepth)
 {
 	unsigned int flags, glyph;
 	int xOffset, yOffset;
+	/* Guard against infinite recursion (compound glyphs that have themselves as component). */
+	if (recDepth >= 4)
+		return -1;
 	do {
 		if (sft->font->size < offset + 4)
 			return -1;
@@ -894,7 +897,7 @@ draw_compound(const struct SFT *sft, unsigned long offset, struct buffer buf, do
 		local[4] = xOffset;
 		local[5] = yOffset;
 		compose_transforms(comptrf, transform, local);
-		if (draw_outline(sft, glyf + offset, buf, comptrf) < 0)
+		if (draw_outline(sft, glyf + offset, buf, comptrf, recDepth + 1) < 0)
 			return -1;
 	} while (flags & 0x020);
 
@@ -902,7 +905,7 @@ draw_compound(const struct SFT *sft, unsigned long offset, struct buffer buf, do
 }
 
 static int
-draw_outline(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6])
+draw_outline(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6], int recDepth)
 {
 	int numContours;
 	if (sft->font->size < offset + 10)
@@ -913,7 +916,7 @@ draw_outline(const struct SFT *sft, unsigned long offset, struct buffer buf, dou
 		return draw_simple(sft, offset + 10, numContours, buf, transform);
 	} else {
 		/* Glyph has a compound outline combined from mutiple other outlines. */
-		return draw_compound(sft, offset + 10, buf, transform);
+		return draw_compound(sft, offset + 10, buf, transform, recDepth);
 	}
 }
 

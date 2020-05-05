@@ -14,6 +14,25 @@
 
 #include "schrift.h"
 
+#define FILE_MAGIC_ONE             0x00010000
+#define FILE_MAGIC_TWO             0x74727565
+
+#define POINT_IS_ON_CURVE          0x01
+#define X_CHANGE_IS_SMALL          0x02
+#define Y_CHANGE_IS_SMALL          0x04
+#define REPEAT_FLAG                0x08
+#define X_CHANGE_IS_ZERO           0x10
+#define X_CHANGE_IS_POSITIVE       0x10
+#define Y_CHANGE_IS_ZERO           0x20
+#define Y_CHANGE_IS_POSITIVE       0x20
+
+#define OFFSETS_ARE_LARGE          0x001
+#define ACTUAL_XY_OFFSETS          0x002
+#define GOT_A_SINGLE_SCALE         0x008
+#define THERE_ARE_MORE_COMPONENTS  0x020
+#define GOT_AN_X_AND_Y_SCALE       0x040
+#define GOT_A_SCALE_MATRIX         0x080
+
 /* macros */
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define SIGN(x) ((x) >= 0 ? 1 : -1)
@@ -116,7 +135,7 @@ sft_loadmem(const void *mem, unsigned long size)
 	font->source = SrcUser;
 	/* Check for a compatible scalerType (magic number). */
 	scalerType = getu32(font, 0);
-	if (scalerType != 0x00010000 && scalerType != 0x74727565) {
+	if (scalerType != FILE_MAGIC_ONE && scalerType != FILE_MAGIC_TWO) {
 		sft_freefont(font);
 		return NULL;
 	}
@@ -138,7 +157,7 @@ sft_loadfile(char const *filename)
 	}
 	/* Check for a compatible scalerType (magic number). */
 	scalerType = getu32(font, 0);
-	if (scalerType != 0x00010000 && scalerType != 0x74727565) {
+	if (scalerType != FILE_MAGIC_ONE && scalerType != FILE_MAGIC_TWO) {
 		sft_freefont(font);
 		return NULL;
 	}
@@ -620,7 +639,7 @@ simple_flags(SFT_Font *font, unsigned long offset, int numPts, uint8_t *flags)
 			if (font->size < offset + 1)
 				return -1;
 			value = getu8(font, offset++);
-			if (value & 0x08) {
+			if (value & REPEAT_FLAG) {
 				if (font->size < offset + 1)
 					return -1;
 				repeat = getu8(font, offset++);
@@ -638,25 +657,25 @@ simple_points(SFT_Font *font, long offset, int numPts, uint8_t *flags, struct po
 	long xBytes = 0, yBytes = 0, xOffset, yOffset, x = 0, y = 0;
 	int i;
 	for (i = 0; i < numPts; ++i) {
-		if (flags[i] & 0x02) xBytes += 1;
-		else if (!(flags[i] & 0x10)) xBytes += 2;
-		if (flags[i] & 0x04) yBytes += 1;
-		else if (!(flags[i] & 0x20)) yBytes += 2;
+		if (flags[i] & X_CHANGE_IS_SMALL) xBytes += 1;
+		else if (!(flags[i] & X_CHANGE_IS_ZERO)) xBytes += 2;
+		if (flags[i] & Y_CHANGE_IS_SMALL) yBytes += 1;
+		else if (!(flags[i] & Y_CHANGE_IS_ZERO)) yBytes += 2;
 	}
 	if (font->size < (unsigned long) offset + xBytes + yBytes)
 		return -1;
 	xOffset = offset;
 	yOffset = offset + xBytes;
 	for (i = 0; i < numPts; ++i) {
-		if (flags[i] & 0x02) {
-			x += (long) getu8(font, xOffset++) * (flags[i] & 0x10 ? 1 : -1);
-		} else if (!(flags[i] & 0x10)) {
+		if (flags[i] & X_CHANGE_IS_SMALL) {
+			x += (long) getu8(font, xOffset++) * (flags[i] & X_CHANGE_IS_POSITIVE ? 1 : -1);
+		} else if (!(flags[i] & X_CHANGE_IS_ZERO)) {
 			x += geti16(font, xOffset);
 			xOffset += 2;
 		}
-		if (flags[i] & 0x04) {
-			y += (long) getu8(font, yOffset++) * (flags[i] & 0x20 ? 1 : -1);
-		} else if (!(flags[i] & 0x20)) {
+		if (flags[i] & Y_CHANGE_IS_SMALL) {
+			y += (long) getu8(font, yOffset++) * (flags[i] & Y_CHANGE_IS_POSITIVE ? 1 : -1);
+		} else if (!(flags[i] & Y_CHANGE_IS_ZERO)) {
 			y += geti16(font, yOffset);
 			yOffset += 2;
 		}
@@ -721,13 +740,13 @@ decode_contours(int numContours, unsigned int *endPts, uint8_t *flags, struct po
 		f = nextPt;
 		l = endPts[c];
 		nextPt = l + 1;
-		looseEnd = flags[f] & 0x01 ? points[f++] :
-			flags[l] & 0x01 ? points[l--] :
+		looseEnd = flags[f] & POINT_IS_ON_CURVE ? points[f++] :
+			flags[l] & POINT_IS_ON_CURVE ? points[l--] :
 			midpoint(points[f], points[l]);
 		beg = looseEnd;
 		gotCtrl = 0;
 		for (i = f; i <= l; ++i) {
-			if (flags[i] & 0x01) {
+			if (flags[i] & POINT_IS_ON_CURVE) {
 				if (gotCtrl) {
 					curve = (struct curve) { beg, ctrl, points[i] };
 					if (outl->numCurves >= outl->capCurves && grow_curves(outl) < 0)
@@ -859,10 +878,10 @@ draw_compound(const struct SFT *sft, unsigned long offset, struct buffer buf, do
 		glyph = getu16(sft->font, offset + 2);
 		offset += 4;
 		/* We don't implement point matching, and neither does stb_truetype for that matter. */
-		if (!(flags & 0x002))
+		if (!(flags & ACTUAL_XY_OFFSETS))
 			return -1;
 		/* Read additional X and Y offsets (in FUnits) of this component. */
-		if (flags & 0x01) {
+		if (flags & OFFSETS_ARE_LARGE) {
 			if (sft->font->size < offset + 4)
 				return -1;
 			local[4] = geti16(sft->font, offset);
@@ -875,19 +894,19 @@ draw_compound(const struct SFT *sft, unsigned long offset, struct buffer buf, do
 			local[5] = geti8(sft->font, offset + 1);
 			offset += 2;
 		}
-		if (flags & 0x008) {
+		if (flags & GOT_A_SINGLE_SCALE) {
 			if (sft->font->size < offset + 2)
 				return -1;
 			local[0] = geti16(sft->font, offset) / 16384.0;
 			local[3] = local[0];
 			offset += 2;
-		} else if (flags & 0x040) {
+		} else if (flags & GOT_AN_X_AND_Y_SCALE) {
 			if (sft->font->size < offset + 4)
 				return -1;
 			local[0] = geti16(sft->font, offset + 0) / 16384.0;
 			local[3] = geti16(sft->font, offset + 2) / 16384.0;
 			offset += 4;
-		} else if (flags & 0x80) {
+		} else if (flags & GOT_A_SCALE_MATRIX) {
 			if (sft->font->size < offset + 8)
 				return -1;
 			local[0] = geti16(sft->font, offset + 0) / 16384.0;
@@ -915,7 +934,7 @@ draw_compound(const struct SFT *sft, unsigned long offset, struct buffer buf, do
 		compose_transforms(transform, local);
 		if (draw_outline(sft, glyf + offset, buf, local, recDepth + 1) < 0)
 			return -1;
-	} while (flags & 0x020);
+	} while (flags & THERE_ARE_MORE_COMPONENTS);
 
 	return 0;
 }

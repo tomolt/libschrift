@@ -85,7 +85,7 @@ static void transform_points(int numPts, struct point *points, double trf[6]);
 static void clip_points(int numPts, struct point *points, struct buffer buf);
 static int  decode_contours(int numContours, unsigned int *endPts, uint8_t *flags, struct point *points, struct outline *outl);
 static int  draw_simple(const struct SFT *sft, long offset, int numContours, struct buffer buf, double transform[6]);
-static void compose_transforms(double out[6], double left[6], double right[6]);
+static void compose_transforms(double left[6], double right[6]);
 static int  draw_compound(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6], int recDepth);
 static int  draw_outline(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6], int recDepth);
 /* tesselation */
@@ -831,26 +831,28 @@ failure:
 }
 
 static void
-compose_transforms(double out[6], double left[6], double right[6])
+compose_transforms(double left[6], double right[6])
 {
 	int j;
 	for (j = 0; j < 6; j += 2) {
-		out[j+0] = left[0] * right[j+0] + left[2] * right[j+1];
-		out[j+1] = left[1] * right[j+0] + left[3] * right[j+1];
+		double x = right[j + 0], y = right[j + 1];
+		right[j + 0] = left[0] * x + left[2] * y;
+		right[j + 1] = left[1] * x + left[3] * y;
 	}
-	out[4] += left[4];
-	out[5] += left[5];
+	right[4] += left[4];
+	right[5] += left[5];
 }
 
 static int
 draw_compound(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6], int recDepth)
 {
+	double local[6];
 	unsigned int flags, glyph;
-	int xOffset, yOffset;
 	/* Guard against infinite recursion (compound glyphs that have themselves as component). */
 	if (recDepth >= 4)
 		return -1;
 	do {
+		memset(local, 0, sizeof(local));
 		if (sft->font->size < offset + 4)
 			return -1;
 		flags = getu16(sft->font, offset);
@@ -863,24 +865,44 @@ draw_compound(const struct SFT *sft, unsigned long offset, struct buffer buf, do
 		if (flags & 0x01) {
 			if (sft->font->size < offset + 4)
 				return -1;
-			xOffset = geti16(sft->font, offset);
-			yOffset = geti16(sft->font, offset + 2);
+			local[4] = geti16(sft->font, offset);
+			local[5] = geti16(sft->font, offset + 2);
 			offset += 4;
 		} else {
 			if (sft->font->size < offset + 2)
 				return -1;
-			xOffset = geti8(sft->font, offset);
-			yOffset = geti8(sft->font, offset + 1);
+			local[4] = geti8(sft->font, offset);
+			local[5] = geti8(sft->font, offset + 1);
 			offset += 2;
 		}
 		if (flags & 0x008) {
+			if (sft->font->size < offset + 2)
+				return -1;
+			local[0] = geti16(sft->font, offset) / 16384.0;
+			local[3] = local[0];
 			offset += 2;
 		} else if (flags & 0x040) {
+			if (sft->font->size < offset + 4)
+				return -1;
+			local[0] = geti16(sft->font, offset + 0) / 16384.0;
+			local[3] = geti16(sft->font, offset + 2) / 16384.0;
 			offset += 4;
 		} else if (flags & 0x80) {
+			if (sft->font->size < offset + 8)
+				return -1;
+			local[0] = geti16(sft->font, offset + 0) / 16384.0;
+			local[1] = geti16(sft->font, offset + 2) / 16384.0;
+			local[2] = geti16(sft->font, offset + 4) / 16384.0;
+			local[3] = geti16(sft->font, offset + 6) / 16384.0;
 			offset += 8;
+		} else {
+			local[0] = 1.0;
+			local[3] = 1.0;
 		}
-
+		/* At this point, Apple's spec more or less tells you to scale the matrix by its own L1 norm.
+		 * But stb_truetype scales by the L2 norm. And FreeType2 doesn't scale at all.
+		 * Furthermore, Microsoft's spec doesn't even mention anything like this.
+		 * It's almost as if nobody ever uses this feature anyway. */
 		long glyf, offset, next;
 		if ((offset = outline_offset(sft->font, glyph)) < 0)
 			return -1;
@@ -890,14 +912,8 @@ draw_compound(const struct SFT *sft, unsigned long offset, struct buffer buf, do
 			return -1;
 		if ((glyf = gettable(sft->font, "glyf")) < 0)
 			return -1;
-		double local[6], comptrf[6];
-		memset(local, 0, sizeof(local));
-		local[0] = 1.0;
-		local[3] = 1.0;
-		local[4] = xOffset;
-		local[5] = yOffset;
-		compose_transforms(comptrf, transform, local);
-		if (draw_outline(sft, glyf + offset, buf, comptrf, recDepth + 1) < 0)
+		compose_transforms(transform, local);
+		if (draw_outline(sft, glyf + offset, buf, local, recDepth + 1) < 0)
 			return -1;
 	} while (flags & 0x020);
 

@@ -81,6 +81,8 @@ static void unmap_file(SFT_Font *font);
 /* TTF parsing */
 static int  init_buffer(struct buffer *buf, int width, int height);
 static void flip_buffer(struct buffer *buf);
+static int  global_transform(const struct SFT *sft, double leftSideBearing, double transform[6]);
+static int  glyph_extents(SFT_Font *font, unsigned long offset, double transform[6], int *x, int *y, int *w, int *h);
 static int  init_outline(struct outline *outl);
 static int  grow_curves(struct outline *outl);
 static int  grow_lines(struct outline *outl);
@@ -100,7 +102,6 @@ static long cmap_fmt6(SFT_Font *font, unsigned long table, unsigned long charCod
 static long glyph_id(SFT_Font *font, unsigned long charCode);
 static int  num_long_hmtx(SFT_Font *font);
 static int  hor_metrics(const struct SFT *sft, long glyph, double *advanceWidth, double *leftSideBearing);
-static int  loca_format(SFT_Font *font);
 static long outline_offset(SFT_Font *font, long glyph);
 static long simple_flags(SFT_Font *font, unsigned long offset, int numPts, uint8_t *flags);
 static int  simple_points(SFT_Font *font, long offset, int numPts, uint8_t *flags, struct point *points);
@@ -200,76 +201,59 @@ int
 sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 {
 	double transform[6];
-	struct point corners[2];
 	struct buffer buf;
 	double leftSideBearing;
-	long glyph, glyf, offset, next;
-	int unitsPerEm, x, y, w, h;
+	long glyph, outline;
+	int x, y, w, h;
 
 	if ((glyph = glyph_id(sft->font, charCode)) < 0)
 		return -1;
 	if (hor_metrics(sft, glyph, &chr->advance, &leftSideBearing) < 0)
 		return -1;
-	if ((offset = outline_offset(sft->font, glyph)) < 0)
+	if ((outline = outline_offset(sft->font, glyph)) < 0)
 		return -1;
-	if ((next = outline_offset(sft->font, glyph + 1)) < 0)
-		return -1;
-	if (offset == next) {
+	if (!outline) {
 		/* Glyph has completely empty outline. This is allowed by the spec. */
 		chr->x = chr->y = 0;
 		chr->width = chr->height = 0;
 		chr->image = NULL;
 		return 0;
 	}
-	/* Glyph has an outline. */
-	if ((glyf = gettable(sft->font, "glyf")) < 0)
-		return -1;
-	offset += glyf;
 	/* Set up the linear transformation. */
-	if ((unitsPerEm = units_per_em(sft->font)) < 0)
+	if (global_transform(sft, leftSideBearing, transform) < 0)
 		return -1;
-	transform[0] = sft->xScale / unitsPerEm;
-	transform[1] = 0.0;
-	transform[2] = 0.0;
-	transform[3] = sft->yScale / unitsPerEm;
-	transform[4] = sft->x + leftSideBearing;
-	transform[5] = sft->y;
 	/* Calculate outline extents. */
-	if (sft->font->size < (unsigned long) offset + 10)
+	if (glyph_extents(sft->font, outline, transform, &x, &y, &w, &h) < 0)
 		return -1;
-	corners[0] = (struct point) { geti16(sft->font, offset + 2), geti16(sft->font, offset + 4) };
-	corners[1] = (struct point) { geti16(sft->font, offset + 6), geti16(sft->font, offset + 8) };
-	transform_points(2, corners, transform);
-	/* Important: the following lines assume transform is an affine diagonal matrix at this point! */
-	x = (int) floor(corners[0].x) - 1;
-	y = (int) floor(corners[0].y) - 1;
-	w = (int) ceil(corners[1].x) + 1 - x;
-	h = (int) ceil(corners[1].y) + 1 - y;
+	if (w < 0 || h < 0)
+		return -1;
 	chr->x = x;
 	chr->y = sft->flags & SFT_DOWNWARD_Y ? -(y + h) : y;
 	chr->width = w;
 	chr->height = h;
 	/* Render the outline (if requested). */
-	if (!(sft->flags & SFT_CHAR_IMAGE))
-		return 0;
-	/* Make transformation relative to min corner. */
-	transform[4] -= x;
-	transform[5] -= y;
-	/* Allocate internal buffer for drawing into. */
-	if (init_buffer(&buf, w, h) < 0)
-		return -1;
-	if (draw_outline(sft, offset, buf, transform, 0) < 0) {
-		return -1;
-	}
-	if (sft->flags & SFT_DOWNWARD_Y) {
-		flip_buffer(&buf);
-	}
-	if ((chr->image = calloc(w * h, 1)) == NULL) {
+	if (sft->flags & SFT_CHAR_IMAGE) {
+		/* Make transformation relative to min corner. */
+		transform[4] -= x;
+		transform[5] -= y;
+		/* Allocate internal buffer for drawing into. */
+		if (init_buffer(&buf, w, h) < 0) {
+			return -1;
+		}
+		if (draw_outline(sft, outline, buf, transform, 0) < 0) {
+			free(buf.rows);
+			return -1;
+		}
+		if (sft->flags & SFT_DOWNWARD_Y) {
+			flip_buffer(&buf);
+		}
+		if ((chr->image = calloc(w * h, 1)) == NULL) {
+			free(buf.rows);
+			return -1;
+		}
+		post_process(buf, chr->image);
 		free(buf.rows);
-		return -1;
 	}
-	post_process(buf, chr->image);
-	free(buf.rows);
 	return 0;
 }
 
@@ -312,8 +296,8 @@ init_buffer(struct buffer *buf, int width, int height)
 	buf->width = width;
 	buf->height = height;
 
-	rowsSize = height * sizeof(buf->rows[0]);
-	cellsSize = width * height * sizeof(struct cell);
+	rowsSize = (size_t) height * sizeof(buf->rows[0]);
+	cellsSize = (size_t) width * height * sizeof(struct cell);
 	if ((buf->rows = calloc(rowsSize + cellsSize, 1)) == NULL)
 		return -1;
 
@@ -337,6 +321,38 @@ flip_buffer(struct buffer *buf)
 		buf->rows[back] = row;
 		++front, --back;
 	}
+}
+
+static int
+global_transform(const struct SFT *sft, double leftSideBearing, double transform[6])
+{
+	int unitsPerEm;
+	if ((unitsPerEm = units_per_em(sft->font)) < 0)
+		return -1;
+	transform[0] = sft->xScale / unitsPerEm;
+	transform[1] = 0.0;
+	transform[2] = 0.0;
+	transform[3] = sft->yScale / unitsPerEm;
+	transform[4] = sft->x + leftSideBearing;
+	transform[5] = sft->y;
+	return 0;
+}
+
+static int
+glyph_extents(SFT_Font *font, unsigned long offset, double transform[6], int *x, int *y, int *w, int *h)
+{
+	struct point corners[2];
+	if (font->size < offset + 10)
+		return -1;
+	corners[0] = (struct point) { geti16(font, offset + 2), geti16(font, offset + 4) };
+	corners[1] = (struct point) { geti16(font, offset + 6), geti16(font, offset + 8) };
+	transform_points(2, corners, transform);
+	/* Important: the following lines assume transform is an affine diagonal matrix at this point! */
+	*x = (int) floor(corners[0].x) - 1;
+	*y = (int) floor(corners[0].y) - 1;
+	*w = (int) ceil(corners[1].x) + 1 - *x;
+	*h = (int) ceil(corners[1].y) + 1 - *y;
+	return 0;
 }
 
 static int
@@ -623,32 +639,44 @@ hor_metrics(const struct SFT *sft, long glyph, double *advanceWidth, double *lef
 	}
 }
 
-static int
-loca_format(SFT_Font *font)
-{
-	long head;
-	if ((head = gettable(font, "head")) < 0)
-		return -1;
-	if (font->size < (unsigned long) head + 54)
-		return -1;
-	return geti16(font, head + 50);
-}
-
 /* Returns the offset into the font that the glyph's outline is stored at. */
 static long
 outline_offset(SFT_Font *font, long glyph)
 {
-	long loca;
+	unsigned long base, this, next;
+	long head, loca, glyf;
+	int format;
+
+	if ((head = gettable(font, "head")) < 0)
+		return -1;
 	if ((loca = gettable(font, "loca")) < 0)
 		return -1;
-	switch (loca_format(font)) {
-	case 0:
-		return getu16(font, loca + 2 * glyph) * 2L;
-	case 1:
-		return getu32(font, loca + 4 * glyph);
-	default:
+	if ((glyf = gettable(font, "glyf")) < 0)
 		return -1;
+
+	if (font->size < (unsigned long) head + 54)
+		return -1;
+	format = geti16(font, head + 50);
+	
+	if (format == 0) {
+		base = loca + 2 * glyph;
+
+		if (font->size < base + 4)
+			return -1;
+		
+		this = 2L * getu16(font, base);
+		next = 2L * getu16(font, base + 2);
+	} else {
+		base = loca + 4 * glyph;
+
+		if (font->size < base + 8)
+			return -1;
+
+		this = getu32(font, base);
+		next = getu32(font, base + 4);
 	}
+
+	return this == next ? 0 : glyf + this;
 }
 
 /* For a 'simple' outline, determines each point of the outline with a set of flags. */
@@ -815,7 +843,7 @@ decode_contours(int numContours, unsigned int *endPts, uint8_t *flags, struct po
 static int
 draw_simple(const struct SFT *sft, long offset, int numContours, struct buffer buf, double transform[6])
 {
-	struct outline outl;
+	struct outline outl = { 0 };
 	struct point *points;
 	unsigned int *endPts;
 	uint8_t *memory = NULL, *flags;
@@ -890,6 +918,7 @@ static int
 draw_compound(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6], int recDepth)
 {
 	double local[6];
+	long outline;
 	unsigned int flags, glyph;
 	/* Guard against infinite recursion (compound glyphs that have themselves as component). */
 	if (recDepth >= 4)
@@ -946,18 +975,13 @@ draw_compound(const struct SFT *sft, unsigned long offset, struct buffer buf, do
 		 * But stb_truetype scales by the L2 norm. And FreeType2 doesn't scale at all.
 		 * Furthermore, Microsoft's spec doesn't even mention anything like this.
 		 * It's almost as if nobody ever uses this feature anyway. */
-		long glyf, offset, next;
-		if ((offset = outline_offset(sft->font, glyph)) < 0)
+		if ((outline = outline_offset(sft->font, glyph)) < 0)
 			return -1;
-		if ((next = outline_offset(sft->font, glyph + 1)) < 0)
-			return -1;
-		if (offset == next)
-			return -1;
-		if ((glyf = gettable(sft->font, "glyf")) < 0)
-			return -1;
-		compose_transforms(transform, local);
-		if (draw_outline(sft, glyf + offset, buf, local, recDepth + 1) < 0)
-			return -1;
+		if (outline) {
+			compose_transforms(transform, local);
+			if (draw_outline(sft, outline, buf, local, recDepth + 1) < 0)
+				return -1;
+		}
 	} while (flags & THERE_ARE_MORE_COMPONENTS);
 
 	return 0;

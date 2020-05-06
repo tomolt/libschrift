@@ -295,7 +295,7 @@ unmap_file(SFT_Font *font)
 static inline int
 quantize(double x)
 {
-	return floor(x * 255 + 0.5);
+	return (int) (x * 255 + (x >= 0.0) - 0.5);
 }
 
 static struct point
@@ -786,29 +786,37 @@ simple_points(SFT_Font *font, long offset, int numPts, uint8_t *flags, struct po
 {
 	long xBytes = 0, yBytes = 0, xOffset, yOffset, x = 0, y = 0;
 	int i;
+
 	for (i = 0; i < numPts; ++i) {
+		
 		if (flags[i] & X_CHANGE_IS_SMALL) xBytes += 1;
 		else if (!(flags[i] & X_CHANGE_IS_ZERO)) xBytes += 2;
+
 		if (flags[i] & Y_CHANGE_IS_SMALL) yBytes += 1;
 		else if (!(flags[i] & Y_CHANGE_IS_ZERO)) yBytes += 2;
 	}
+
 	if (font->size < (unsigned long) offset + xBytes + yBytes)
 		return -1;
+
 	xOffset = offset;
 	yOffset = offset + xBytes;
 	for (i = 0; i < numPts; ++i) {
+
 		if (flags[i] & X_CHANGE_IS_SMALL) {
 			x += (long) getu8(font, xOffset++) * (flags[i] & X_CHANGE_IS_POSITIVE ? 1 : -1);
 		} else if (!(flags[i] & X_CHANGE_IS_ZERO)) {
 			x += geti16(font, xOffset);
 			xOffset += 2;
 		}
+
 		if (flags[i] & Y_CHANGE_IS_SMALL) {
 			y += (long) getu8(font, yOffset++) * (flags[i] & Y_CHANGE_IS_POSITIVE ? 1 : -1);
 		} else if (!(flags[i] & Y_CHANGE_IS_ZERO)) {
 			y += geti16(font, yOffset);
 			yOffset += 2;
 		}
+
 		points[i] = (struct point) { x, y };
 	}
 	return 0;

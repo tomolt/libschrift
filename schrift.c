@@ -72,20 +72,24 @@ struct SFT_Font
 	int source;
 };
 
-/* TODO Reorder functions! */
-
 /* function declarations */
 /* file loading */
 static int  map_file(SFT_Font *font, const char *filename);
 static void unmap_file(SFT_Font *font);
-/* TTF parsing */
+/* mathematical utilities */
+static inline int quantize(double x);
+static struct point midpoint(struct point a, struct point b);
+static void compose_transforms(double left[6], double right[6]);
+static void transform_points(int numPts, struct point *points, double trf[6]);
+static void clip_points(int numPts, struct point *points, struct buffer buf);
+/* 'buffer' data structure management */
 static int  init_buffer(struct buffer *buf, int width, int height);
 static void flip_buffer(struct buffer *buf);
-static int  global_transform(const struct SFT *sft, double leftSideBearing, double transform[6]);
-static int  glyph_extents(SFT_Font *font, unsigned long offset, double transform[6], int *x, int *y, int *w, int *h);
+/* 'outline' data structure management */
 static int  init_outline(struct outline *outl);
 static int  grow_curves(struct outline *outl);
 static int  grow_lines(struct outline *outl);
+/* TTF parsing utilities */
 static void *csearch(const void *key, const void *base,
 	size_t nmemb, size_t size, int (*compar)(const void *, const void *));
 static int  cmpu16(const void *a, const void *b);
@@ -96,29 +100,31 @@ static inline uint16_t getu16(SFT_Font *font, unsigned long offset);
 static inline int16_t  geti16(SFT_Font *font, unsigned long offset);
 static inline uint32_t getu32(SFT_Font *font, unsigned long offset);
 static long gettable(SFT_Font *font, char tag[4]);
+/* sft -> transform */
 static int  units_per_em(SFT_Font *font);
+static int  global_transform(const struct SFT *sft, double leftSideBearing, double transform[6]);
+/* codepoint -> glyph */
 static long cmap_fmt4(SFT_Font *font, unsigned long table, unsigned long charCode);
 static long cmap_fmt6(SFT_Font *font, unsigned long table, unsigned long charCode);
 static long glyph_id(SFT_Font *font, unsigned long charCode);
+/* glyph -> hmtx */
 static int  num_long_hmtx(SFT_Font *font);
 static int  hor_metrics(const struct SFT *sft, long glyph, double *advanceWidth, double *leftSideBearing);
+/* glyph -> outline */
 static long outline_offset(SFT_Font *font, long glyph);
+/* transform & outline -> extents */
+static int  glyph_extents(SFT_Font *font, unsigned long offset, double transform[6], int *x, int *y, int *w, int *h);
+/* drawing outlines */
 static long simple_flags(SFT_Font *font, unsigned long offset, int numPts, uint8_t *flags);
 static int  simple_points(SFT_Font *font, long offset, int numPts, uint8_t *flags, struct point *points);
-static void transform_points(int numPts, struct point *points, double trf[6]);
-static void clip_points(int numPts, struct point *points, struct buffer buf);
 static int  decode_contours(int numContours, unsigned int *endPts, uint8_t *flags, struct point *points, struct outline *outl);
 static int  draw_simple(const struct SFT *sft, long offset, int numContours, struct buffer buf, double transform[6]);
-static void compose_transforms(double left[6], double right[6]);
 static int  draw_compound(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6], int recDepth);
 static int  draw_outline(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6], int recDepth);
 /* tesselation */
-static struct point midpoint(struct point a, struct point b);
 static int  is_flat(struct curve curve, double flatness);
 static int  tesselate_curves(struct outline *outl);
 /* silhouette rasterization */
-static inline int ifloor(double x);
-static inline int quantize(double x);
 static void draw_dot(struct buffer buf, int px, int py, double xAvg, double yDiff);
 static void draw_line(struct buffer buf, struct line line);
 /* post-processing */
@@ -285,6 +291,78 @@ unmap_file(SFT_Font *font)
 	munmap((void *) font->memory, font->size);
 }
 
+/* [0, 1] --> { 0, ..., 255 } */
+static inline int
+quantize(double x)
+{
+	return floor(x * 255 + 0.5);
+}
+
+static struct point
+midpoint(struct point a, struct point b)
+{
+	return (struct point) {
+		0.5 * a.x + 0.5 * b.x,
+		0.5 * a.y + 0.5 * b.y
+	};
+}
+
+static void
+compose_transforms(double left[6], double right[6])
+{
+	int j;
+	for (j = 0; j < 6; j += 2) {
+		double x = right[j + 0], y = right[j + 1];
+		right[j + 0] = left[0] * x + left[2] * y;
+		right[j + 1] = left[1] * x + left[3] * y;
+	}
+	right[4] += left[4];
+	right[5] += left[5];
+}
+
+/* Applies an affine linear transformation matrix to a set of points. */
+static void
+transform_points(int numPts, struct point *points, double trf[6])
+{
+	struct point *restrict pt;
+	int i;
+	for (i = 0; i < numPts; ++i) {
+		pt = &points[i];
+		*pt = (struct point) {
+			pt->x * trf[0] + pt->y * trf[2] + trf[4],
+			pt->x * trf[1] + pt->y * trf[3] + trf[5]
+		};
+	}
+}
+
+static void
+clip_points(int numPts, struct point *points, struct buffer buf)
+{
+	struct point *restrict pt;
+	double dv;
+	uint64_t *ip = (void *) &dv;
+	int i;
+	for (i = 0; i < numPts; ++i) {
+		pt = &points[i];
+		if (pt->x < 0) {
+			pt->x = 0;
+		}
+		if (pt->x >= buf.width) {
+			dv = buf.width;
+			--*ip;
+			pt->x = dv;
+		}
+		if (pt->y < 0) {
+			pt->y = 0;
+		}
+		if (pt->y >= buf.height) {
+			dv = buf.height;
+			--*ip;
+			pt->y = dv;
+		}
+	}
+}
+
 static int
 init_buffer(struct buffer *buf, int width, int height)
 {
@@ -321,38 +399,6 @@ flip_buffer(struct buffer *buf)
 		buf->rows[back] = row;
 		++front, --back;
 	}
-}
-
-static int
-global_transform(const struct SFT *sft, double leftSideBearing, double transform[6])
-{
-	int unitsPerEm;
-	if ((unitsPerEm = units_per_em(sft->font)) < 0)
-		return -1;
-	transform[0] = sft->xScale / unitsPerEm;
-	transform[1] = 0.0;
-	transform[2] = 0.0;
-	transform[3] = sft->yScale / unitsPerEm;
-	transform[4] = sft->x + leftSideBearing;
-	transform[5] = sft->y;
-	return 0;
-}
-
-static int
-glyph_extents(SFT_Font *font, unsigned long offset, double transform[6], int *x, int *y, int *w, int *h)
-{
-	struct point corners[2];
-	if (font->size < offset + 10)
-		return -1;
-	corners[0] = (struct point) { geti16(font, offset + 2), geti16(font, offset + 4) };
-	corners[1] = (struct point) { geti16(font, offset + 6), geti16(font, offset + 8) };
-	transform_points(2, corners, transform);
-	/* Important: the following lines assume transform is an affine diagonal matrix at this point! */
-	*x = (int) floor(corners[0].x) - 1;
-	*y = (int) floor(corners[0].y) - 1;
-	*w = (int) ceil(corners[1].x) + 1 - *x;
-	*h = (int) ceil(corners[1].y) + 1 - *y;
-	return 0;
 }
 
 static int
@@ -490,6 +536,21 @@ units_per_em(SFT_Font *font)
 	if (font->size < (unsigned long) head + 54)
 		return -1;
 	return getu16(font, head + 18);
+}
+
+static int
+global_transform(const struct SFT *sft, double leftSideBearing, double transform[6])
+{
+	int unitsPerEm;
+	if ((unitsPerEm = units_per_em(sft->font)) < 0)
+		return -1;
+	transform[0] = sft->xScale / unitsPerEm;
+	transform[1] = 0.0;
+	transform[2] = 0.0;
+	transform[3] = sft->yScale / unitsPerEm;
+	transform[4] = sft->x + leftSideBearing;
+	transform[5] = sft->y;
+	return 0;
 }
 
 static long
@@ -679,6 +740,23 @@ outline_offset(SFT_Font *font, long glyph)
 	return this == next ? 0 : glyf + this;
 }
 
+static int
+glyph_extents(SFT_Font *font, unsigned long offset, double transform[6], int *x, int *y, int *w, int *h)
+{
+	struct point corners[2];
+	if (font->size < offset + 10)
+		return -1;
+	corners[0] = (struct point) { geti16(font, offset + 2), geti16(font, offset + 4) };
+	corners[1] = (struct point) { geti16(font, offset + 6), geti16(font, offset + 8) };
+	transform_points(2, corners, transform);
+	/* Important: the following lines assume transform is an affine diagonal matrix at this point! */
+	*x = (int) floor(corners[0].x) - 1;
+	*y = (int) floor(corners[0].y) - 1;
+	*w = (int) ceil(corners[1].x) + 1 - *x;
+	*h = (int) ceil(corners[1].y) + 1 - *y;
+	return 0;
+}
+
 /* For a 'simple' outline, determines each point of the outline with a set of flags. */
 static long
 simple_flags(SFT_Font *font, unsigned long offset, int numPts, uint8_t *flags)
@@ -734,49 +812,6 @@ simple_points(SFT_Font *font, long offset, int numPts, uint8_t *flags, struct po
 		points[i] = (struct point) { x, y };
 	}
 	return 0;
-}
-
-/* Applies an affine linear transformation matrix to a set of points. */
-static void
-transform_points(int numPts, struct point *points, double trf[6])
-{
-	struct point *restrict pt;
-	int i;
-	for (i = 0; i < numPts; ++i) {
-		pt = &points[i];
-		*pt = (struct point) {
-			pt->x * trf[0] + pt->y * trf[2] + trf[4],
-			pt->x * trf[1] + pt->y * trf[3] + trf[5]
-		};
-	}
-}
-
-static void
-clip_points(int numPts, struct point *points, struct buffer buf)
-{
-	struct point *restrict pt;
-	double dv;
-	uint64_t *ip = (void *) &dv;
-	int i;
-	for (i = 0; i < numPts; ++i) {
-		pt = &points[i];
-		if (pt->x < 0) {
-			pt->x = 0;
-		}
-		if (pt->x >= buf.width) {
-			dv = buf.width;
-			--*ip;
-			pt->x = dv;
-		}
-		if (pt->y < 0) {
-			pt->y = 0;
-		}
-		if (pt->y >= buf.height) {
-			dv = buf.height;
-			--*ip;
-			pt->y = dv;
-		}
-	}
 }
 
 static int
@@ -901,19 +936,6 @@ failure:
 	return -1;
 }
 
-static void
-compose_transforms(double left[6], double right[6])
-{
-	int j;
-	for (j = 0; j < 6; j += 2) {
-		double x = right[j + 0], y = right[j + 1];
-		right[j + 0] = left[0] * x + left[2] * y;
-		right[j + 1] = left[1] * x + left[3] * y;
-	}
-	right[4] += left[4];
-	right[5] += left[5];
-}
-
 static int
 draw_compound(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6], int recDepth)
 {
@@ -1003,15 +1025,6 @@ draw_outline(const struct SFT *sft, unsigned long offset, struct buffer buf, dou
 	}
 }
 
-static struct point
-midpoint(struct point a, struct point b)
-{
-	return (struct point) {
-		0.5 * a.x + 0.5 * b.x,
-		0.5 * a.y + 0.5 * b.y
-	};
-}
-
 /* A heuristic to tell whether a given curve can be approximated closely enough by a line. */
 static int
 is_flat(struct curve curve, double flatness)
@@ -1060,21 +1073,6 @@ tesselate_curves(struct outline *outl)
 #undef STACK_SIZE
 }
 
-/* Much faster than the builtin floor() function (because it doesn't check infinities etc.). 
- * Since it's called in a very hot loop, the speed difference is worth it. */
-static inline int
-ifloor(double x)
-{
-	return (int) x - (x < 0.0);
-}
-
-/* [0, 1] --> { 0, ..., 255 } */
-static inline int
-quantize(double x)
-{
-	return ifloor(x * 255 + 0.5);
-}
-
 static void
 draw_dot(struct buffer buf, int px, int py, double xAvg, double yDiff)
 {
@@ -1101,7 +1099,7 @@ draw_line(struct buffer buf, struct line line)
 	originX = line.beg.x;
 	goalX = line.end.x;
 	deltaX = goalX - originX;
-	pixelX = ifloor(originX);
+	pixelX = (int) originX;
 	if (deltaX != 0.0) {
 		double signedGapX = 1.0 / deltaX;
 		nextCrossingX = (int) originX - originX;
@@ -1113,7 +1111,7 @@ draw_line(struct buffer buf, struct line line)
 	originY = line.beg.y;
 	goalY = line.end.y;
 	deltaY = goalY - originY;
-	pixelY = ifloor(originY);
+	pixelY = (int) originY;
 	if (deltaY != 0.0) {
 		double signedGapY = 1.0 / deltaY;
 		nextCrossingY = (int) originY - originY;
@@ -1122,7 +1120,7 @@ draw_line(struct buffer buf, struct line line)
 		crossingGapY = fabs(signedGapY);
 	}
 
-	numIters = abs(ifloor(goalX) - ifloor(originX)) + abs(ifloor(goalY) - ifloor(originY));
+	numIters = abs((int) goalX - (int) originX) + abs((int) goalY - (int) originY);
 	for (iter = 0; iter < numIters; ++iter) {
 		if (nextCrossingX < nextCrossingY) {
 			double deltaDistance = nextCrossingX - prevDistance;

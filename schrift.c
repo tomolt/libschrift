@@ -72,11 +72,15 @@ struct SFT_Font
 	int source;
 };
 
+/* TODO Reorder functions! */
+
 /* function declarations */
 /* file loading */
 static int  map_file(SFT_Font *font, const char *filename);
 static void unmap_file(SFT_Font *font);
 /* TTF parsing */
+static int  init_buffer(struct buffer *buf, int width, int height);
+static void flip_buffer(struct buffer *buf);
 static int  init_outline(struct outline *outl);
 static int  grow_curves(struct outline *outl);
 static int  grow_lines(struct outline *outl);
@@ -198,10 +202,9 @@ sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 	double transform[6];
 	struct point corners[2];
 	struct buffer buf;
-	struct cell *cells, *ptr;
 	double leftSideBearing;
 	long glyph, glyf, offset, next;
-	int unitsPerEm, x, y, w, h, i;
+	int unitsPerEm, x, y, w, h;
 
 	if ((glyph = glyph_id(sft->font, charCode)) < 0)
 		return -1;
@@ -222,9 +225,9 @@ sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 	if ((glyf = gettable(sft->font, "glyf")) < 0)
 		return -1;
 	offset += glyf;
+	/* Set up the linear transformation. */
 	if ((unitsPerEm = units_per_em(sft->font)) < 0)
 		return -1;
-	/* Set up the linear transformation. */
 	transform[0] = sft->xScale / unitsPerEm;
 	transform[1] = 0.0;
 	transform[2] = 0.0;
@@ -253,36 +256,19 @@ sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 	transform[4] -= x;
 	transform[5] -= y;
 	/* Allocate internal buffer for drawing into. */
-	buf.width = w;
-	buf.height = h;
-	if ((cells = calloc(w * h, sizeof(cells[0]))) == NULL)
+	if (init_buffer(&buf, w, h) < 0)
 		return -1;
-	if ((buf.rows = malloc(h * sizeof(buf.rows[0]))) == NULL)
-		return -1;
-	ptr = cells;
-	for (i = 0; i < h; ++i) {
-		buf.rows[i] = ptr;
-		ptr += w;
-	}
 	if (draw_outline(sft, offset, buf, transform, 0) < 0) {
-		free(cells);
-		free(buf.rows);
 		return -1;
 	}
 	if (sft->flags & SFT_DOWNWARD_Y) {
-		ptr = cells + w * h;
-		for (i = 0; i < h; ++i) {
-			ptr -= w;
-			buf.rows[i] = ptr;
-		}
+		flip_buffer(&buf);
 	}
 	if ((chr->image = calloc(w * h, 1)) == NULL) {
-		free(cells);
 		free(buf.rows);
 		return -1;
 	}
 	post_process(buf, chr->image);
-	free(cells);
 	free(buf.rows);
 	return 0;
 }
@@ -313,6 +299,44 @@ unmap_file(SFT_Font *font)
 {
 	assert(font->memory != MAP_FAILED);
 	munmap((void *) font->memory, font->size);
+}
+
+static int
+init_buffer(struct buffer *buf, int width, int height)
+{
+	struct cell *ptr;
+	size_t rowsSize, cellsSize;
+	int i;
+
+	buf->rows = NULL;
+	buf->width = width;
+	buf->height = height;
+
+	rowsSize = height * sizeof(buf->rows[0]);
+	cellsSize = width * height * sizeof(struct cell);
+	if ((buf->rows = calloc(rowsSize + cellsSize, 1)) == NULL)
+		return -1;
+
+	ptr = (void *) (buf->rows + height);
+	for (i = 0; i < height; ++i) {
+		buf->rows[i] = ptr;
+		ptr += width;
+	}
+
+	return 0;
+}
+
+static void
+flip_buffer(struct buffer *buf)
+{
+	struct cell *row;
+	int front = 0, back = buf->height - 1;
+	while (front < back) {
+		row = buf->rows[front];
+		buf->rows[front] = buf->rows[back];
+		buf->rows[back] = row;
+		++front, --back;
+	}
 }
 
 static int

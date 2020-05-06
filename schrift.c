@@ -787,6 +787,8 @@ simple_points(SFT_Font *font, long offset, int numPts, uint8_t *flags, struct po
 	long xBytes = 0, yBytes = 0, xOffset, yOffset, x = 0, y = 0;
 	int i;
 
+	assert(numPts > 0);
+
 	for (i = 0; i < numPts; ++i) {
 		
 		if (flags[i] & X_CHANGE_IS_SMALL) xBytes += 1;
@@ -834,6 +836,7 @@ decode_contours(int numContours, unsigned int *endPts, uint8_t *flags, struct po
 	for (c = 0; c < numContours; ++c) {
 		f = nextPt;
 		l = endPts[c];
+		assert(l >= f + 2);
 		nextPt = l + 1;
 		looseEnd = flags[f] & POINT_IS_ON_CURVE ? points[f++] :
 			flags[l] & POINT_IS_ON_CURVE ? points[l--] :
@@ -912,7 +915,7 @@ draw_simple(const struct SFT *sft, long offset, int numContours, struct buffer b
 		offset += 2;
 	}
 	for (i = 0; i < numContours - 1; ++i) {
-		if (endPts[i] > endPts[i + 1])
+		if (!(endPts[i + 1] >= endPts[i] + 2))
 			goto failure;
 	}
 	offset += 2 + getu16(sft->font, offset);

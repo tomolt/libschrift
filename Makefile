@@ -15,12 +15,12 @@ schrift.o: schrift.h
 
 sftdemo: sftdemo.o libschrift.a
 	$(LD) $(LDFLAGS) $@.o -o $@ -L$(X11LIB) -L. -lX11 -lXrender -lschrift -lm
-sftdemo.o: sftdemo.c schrift.h arg.h
+sftdemo.o: sftdemo.c schrift.h util/arg.h
 	$(CC) -c $(CFLAGS) $(@:.o=.c) -o $@ $(CPPFLAGS) -I$(X11INC)
 
 stress: stress.o libschrift.a
 	$(LD) $(LDFLAGS) $@.o -o $@ -L. -lschrift -lm
-stress.o: stress.c schrift.h arg.h
+stress.o: stress.c schrift.h util/arg.h
 	$(CC) -c $(CFLAGS) $(@:.o=.c) -o $@ $(CPPFLAGS)
 
 clean:

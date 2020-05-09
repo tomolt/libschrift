@@ -9,7 +9,7 @@
 #include <X11/extensions/Xrender.h>
 #include <schrift.h>
 
-#include "arg.h"
+#include "util/arg.h"
 
 #define APP_NAME "sftdemo"
 

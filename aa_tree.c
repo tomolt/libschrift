@@ -52,7 +52,7 @@ aa_split(struct aa_node *node)
 		return node;
 	node->childs[1] = right1->childs[0];
 	right1->childs[0] = node;
-	right1->black = node->black;
+	right1->black = 0;
 	node->black = 1;
 	right2->black = 1;
 	return right1;

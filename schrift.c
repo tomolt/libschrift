@@ -669,7 +669,7 @@ static int
 hor_metrics(const struct SFT *sft, long glyph, double *advanceWidth, double *leftSideBearing)
 {
 	double factor;
-	unsigned long offset, shmtx;
+	unsigned long offset, boundary;
 	long hmtx;
 	int unitsPerEm, numLong;
 	if ((unitsPerEm = units_per_em(sft->font)) < 0)
@@ -689,12 +689,18 @@ hor_metrics(const struct SFT *sft, long glyph, double *advanceWidth, double *lef
 		return 0;
 	} else {
 		/* glyph is inside short metrics segment. */
-		if ((shmtx = hmtx + 4 * numLong) < 4)
+		boundary = hmtx + 4 * numLong;
+		if (boundary < 4)
 			return -1;
-		offset = shmtx + 2 + (glyph - numLong);
+		
+		offset = boundary - 4;
+		if (sft->font->size < offset + 4)
+			return -1;
+		*advanceWidth = getu16(sft->font, offset) * factor;
+		
+		offset = boundary + 2 * (glyph - numLong);
 		if (sft->font->size < offset + 2)
 			return -1;
-		*advanceWidth = getu16(sft->font, shmtx - 4) * factor;
 		*leftSideBearing = geti16(sft->font, offset) * factor;
 		return 0;
 	}

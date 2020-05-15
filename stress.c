@@ -27,7 +27,7 @@ usage(void)
 int
 main(int argc, char *argv[])
 {
-	struct SFT sft;
+	struct SFT sft = { 0 };
 	struct SFT_Char chr;
 	SFT_Font *font;
 	const char *filename;

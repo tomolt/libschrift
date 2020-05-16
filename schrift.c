@@ -842,7 +842,7 @@ decode_contours(int numContours, unsigned int *endPts, uint8_t *flags, struct po
 	for (c = 0; c < numContours; ++c) {
 		f = nextPt;
 		l = endPts[c];
-		assert(l >= f + 2);
+		assert(l > f);
 		nextPt = l + 1;
 		looseEnd = flags[f] & POINT_IS_ON_CURVE ? points[f++] :
 			flags[l] & POINT_IS_ON_CURVE ? points[l--] :
@@ -921,7 +921,7 @@ draw_simple(const struct SFT *sft, long offset, int numContours, struct buffer b
 		offset += 2;
 	}
 	for (i = 0; i < numContours - 1; ++i) {
-		if (!(endPts[i + 1] >= endPts[i] + 2))
+		if (!(endPts[i + 1] > endPts[i] + 1))
 			goto failure;
 	}
 	offset += 2 + getu16(sft->font, offset);

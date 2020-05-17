@@ -17,6 +17,11 @@
 #define FILE_MAGIC_ONE             0x00010000
 #define FILE_MAGIC_TWO             0x74727565
 
+#define HORIZONTAL_KERNING         0x01
+#define MINIMUM_KERNING            0x02
+#define CROSS_STREAM_KERNING       0x04
+#define OVERRIDE_KERNING           0x08
+
 #define POINT_IS_ON_CURVE          0x01
 #define X_CHANGE_IS_SMALL          0x02
 #define Y_CHANGE_IS_SMALL          0x04
@@ -200,6 +205,76 @@ sft_linemetrics(const struct SFT *sft, double *ascent, double *descent, double *
 	*ascent  = geti16(sft->font, hhea + 4) * factor;
 	*descent = geti16(sft->font, hhea + 6) * factor;
 	*gap     = geti16(sft->font, hhea + 8) * factor;
+	return 0;
+}
+
+int
+sft_kerning(const struct SFT *sft, unsigned long leftChar, unsigned long rightChar, double kerning[2])
+{
+	void *match;
+	unsigned long offset;
+	long kern;
+	unsigned int numTables, numPairs, length, format, flags, value;
+	int unitsPerEm;
+	uint8_t key[4];
+
+	kerning[0] = 0.0;
+	kerning[1] = 0.0;
+
+	if ((kern = gettable(sft->font, "kern")) < 0)
+		return 0;
+	offset = kern;
+
+	/* Read kern table header. */
+	if (sft->font->size < offset + 4)
+		return -1;
+	if (getu16(sft->font, offset) != 0)
+		return 0;
+	numTables = getu16(sft->font, offset + 2);
+	offset += 4;
+
+	while (numTables > 0) {
+		/* Read subtable header. */
+		if (sft->font->size < offset + 6)
+			return -1;
+		length = getu16(sft->font, offset + 2);
+		format = getu8 (sft->font, offset + 4);
+		flags  = getu8 (sft->font, offset + 5);
+		offset += 6;
+
+		if (format == 0 && (flags & HORIZONTAL_KERNING) && !(flags & MINIMUM_KERNING)) {
+			/* Read format 0 header. */
+			if (sft->font->size < offset + 8)
+				return -1;
+			numPairs = getu16(sft->font, offset);
+			offset += 8;
+			/* Look up character code pair via binary search. */
+			key[0] = (leftChar >> 8) & 0xFF;
+			key[1] = leftChar & 0xFF;
+			key[2] = (rightChar >> 8) & 0xFF;
+			key[3] = rightChar & 0xFF;
+			if ((match = bsearch(key, sft->font->memory + offset,
+				numPairs, 6, cmpu32)) != NULL) {
+				
+				value = geti16(sft->font, (uint8_t *) match - sft->font->memory + 4);
+				if (flags & CROSS_STREAM_KERNING) {
+					kerning[1] += value;
+				} else {
+					kerning[0] += value;
+				}
+			}
+
+		}
+
+		offset += length;
+		--numTables;
+	}
+
+	if ((unitsPerEm = units_per_em(sft->font)) < 0)
+		return -1;
+	kerning[0] = kerning[0] / unitsPerEm * sft->xScale;
+	kerning[1] = kerning[1] / unitsPerEm * sft->yScale;
+
 	return 0;
 }
 

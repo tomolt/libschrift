@@ -48,6 +48,7 @@ SFT_Font *sft_loadfile(const char *filename);
 void sft_freefont(SFT_Font *font);
 
 int sft_linemetrics(const struct SFT *sft, double *ascent, double *descent, double *gap);
+int sft_kerning(const struct SFT *sft, unsigned long leftChar, unsigned long rightChar, double kerning[2]);
 int sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr);
 
 #endif

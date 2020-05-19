@@ -23,9 +23,9 @@
 struct aa_node
 {
 	struct aa_node *childs[2];
-	unsigned long key   : 32;
-	unsigned long value : 31;
-	unsigned int  black :  1;
+	void *value;
+	unsigned char black; /* TODO pack memory more tightly */
+	void key[];
 };
 
 static struct aa_node *
@@ -59,17 +59,20 @@ aa_split(struct aa_node *node)
 }
 
 static struct aa_node *
-aa_put_rec(struct aa_node *node, unsigned long key, unsigned long value)
+aa_put_rec(struct aa_tree *tree, struct aa_node *node, const void *key, void *value)
 {
 	if (node == NULL) {
-		struct aa_node *new = calloc(1, sizeof(*new));
-		new->key = key;
+		struct aa_node *new = calloc(1, sizeof(*new) + tree->keysize);
+		memcpy(new->key, key, tree->keysize);
 		new->value = value;
 		return new;
 	} else {
-		if (key == node->key)
+		int cmp = tree->compare(key, node->key, tree->userdata);
+		if (cmp == 0) {
+			node->value = value;
 			return node;
-		node->childs[key > node->key] = aa_put_rec(node->childs[key > node->key], key, value);
+		}
+		node->childs[cmp > 0] = aa_put_rec(node->childs[cmp > 0], key, value);
 		node = aa_skew(node);
 		node = aa_split(node);
 		return node;
@@ -87,22 +90,32 @@ aa_free_rec(struct aa_node *node)
 }
 
 void
-aa_put(struct aa_tree *tree, unsigned long key, unsigned long value)
+aa_init(struct aa_tree *tree, int keysize, aa_compare_func compare, const void *userdata)
+{
+	tree->root = NULL;
+	tree->keysize = keysize;
+	tree->compare = compare;
+	tree->userdata = userdata;
+}
+
+void
+aa_put(struct aa_tree *tree, const void *key, void *value)
 {
 	tree->root = aa_put_rec(tree->root, key, value);
 }
 
 int
-aa_get(struct aa_tree *tree, unsigned long key, unsigned long *value)
+aa_get(struct aa_tree *tree, const void *key, void **value)
 {
 	struct aa_node *node = tree->root;
 	while (node != NULL) {
-		if (node->key == key) {
+		int cmp = tree->compare(key, node->key, tree->userdata);
+		if (cmp == 0) {
 			if (value != NULL)
 				*value = node->value;
 			return 1;
 		}
-		node = node->childs[key > node->key];
+		node = node->childs[cmp > 0];
 	}
 	return 0;
 }

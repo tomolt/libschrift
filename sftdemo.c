@@ -4,11 +4,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
 #include <X11/Xlib.h>
 #include <X11/extensions/Xrender.h>
 #include <schrift.h>
 
+#include "util/utf8_to_utf32.h"
 #include "util/arg.h"
 
 #define APP_NAME "sftdemo"
@@ -94,9 +96,11 @@ teardown(void)
 static void
 drawtext(int x, int y, const char *text)
 {
-	XRenderCompositeString8(dpy, PictOpOver,
+	uint32_t codepoints[256];
+	int length = utf8_to_utf32((const uint8_t *) text, codepoints, 256);
+	XRenderCompositeString32(dpy, PictOpOver,
 		fgpic, pic, NULL,
-		glyphset, 0, 0, x, y, text, strlen(text));
+		glyphset, 0, 0, x, y, codepoints, length);
 }
 
 static void

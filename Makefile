@@ -15,7 +15,7 @@ schrift.o: schrift.h
 
 sftdemo: sftdemo.o libschrift.a
 	$(LD) $(LDFLAGS) $@.o -o $@ -L$(X11LIB) -L. -lX11 -lXrender -lschrift -lm
-sftdemo.o: sftdemo.c schrift.h util/arg.h
+sftdemo.o: sftdemo.c schrift.h util/arg.h util/utf8_to_utf32.h
 	$(CC) -c $(CFLAGS) $(@:.o=.c) -o $@ $(CPPFLAGS) -I$(X11INC)
 
 stress: stress.o libschrift.a

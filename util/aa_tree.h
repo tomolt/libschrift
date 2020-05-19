@@ -20,10 +20,20 @@
 #define AA_TREE_H
 
 struct aa_node;
-struct aa_tree { struct aa_node *root; };
 
-void aa_put(struct aa_tree *tree, unsigned long key, unsigned long value);
-int  aa_get(struct aa_tree *tree, unsigned long key, unsigned long *value);
+typedef int (*aa_compare_func)(const void *left, const void *right, const void *userdata);
+
+struct aa_tree {
+	struct aa_node *root;
+	aa_compare_func compare;
+	const void *userdata;
+	int keysize;
+};
+
+void aa_init(struct aa_tree *tree, int keysize,
+	aa_compare_func compare, const void *userdata);
+void aa_put(struct aa_tree *tree, const void *key, void *value);
+int  aa_get(struct aa_tree *tree, const void *key, void **value);
 void aa_free(struct aa_tree *tree);
 
 #endif

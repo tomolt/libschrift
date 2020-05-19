@@ -11,6 +11,7 @@
 #include <schrift.h>
 
 #include "util/utf8_to_utf32.h"
+#include "util/aa_tree.h"
 #include "util/arg.h"
 
 #define APP_NAME "sftdemo"
@@ -28,6 +29,7 @@ static Picture pic, fgpic;
 static GlyphSet glyphset;
 static struct SFT sft;
 static XRenderPictFormat *format;
+static struct aa_tree loadedset;
 
 static void
 die(const char *msg)
@@ -41,6 +43,14 @@ usage(void)
 {
 	fprintf(stderr,
 		"usage: %s [-f font file] [-s size in px] [-P] [message]\n", argv0);
+}
+
+static int
+compare32(const void *v1, const void *v2, const void *userdata)
+{
+	(void) userdata;
+	const uint32_t *u1 = v1, *u2 = v2;
+	return *u1 - *u2;
 }
 
 static void
@@ -74,20 +84,10 @@ loadglyph(struct SFT *sft, unsigned int charCode)
 	XRenderAddGlyphs(dpy, glyphset, &glyph, &info, 1, bitmap, stride * chr.height);
 }
 
-/* Renders all glyphs and uploads them to the X11 server ahead of time. */
-static void
-loadglyphset(void)
-{
-	/* Right now, this demo program only handles ASCII strings.
-	 * This is not a limitation of the library itself. */
-	unsigned char c;
-	for (c = 32; c < 128; ++c)
-		loadglyph(&sft, c);
-}
-
 static void
 teardown(void)
 {
+	aa_free(&loadedset);
 	sft_freefont(sft.font);
 	XCloseDisplay(dpy);
 	exit(0);
@@ -98,6 +98,13 @@ drawtext(int x, int y, const char *text)
 {
 	uint32_t codepoints[256];
 	int length = utf8_to_utf32((const uint8_t *) text, codepoints, 256);
+
+	for (int i = 0; i < length; ++i) {
+		if (aa_get(&loadedset, &codepoints[i], NULL)) continue;
+		loadglyph(&sft, codepoints[i]);
+		aa_put(&loadedset, &codepoints[i], NULL);
+	}
+
 	XRenderCompositeString32(dpy, PictOpOver,
 		fgpic, pic, NULL,
 		glyphset, 0, 0, x, y, codepoints, length);
@@ -208,7 +215,8 @@ main(int argc, char *argv[])
 	sft.yScale = size;
 	sft.flags = SFT_DOWNWARD_Y | SFT_CHAR_IMAGE;
 
-	loadglyphset();
+	aa_init(&loadedset, 4, compare32, NULL);
+
 	runx();
 	return 0;
 }

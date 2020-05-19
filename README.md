@@ -35,5 +35,4 @@ Progress
 --------
 libschrift isn't ready for serious use yet.
 
-Kerning, subpixel rendering, missing glyph detection and a UTF-8 aware
-demo program are still missing.
+Kerning, subpixel rendering, and missing glyph detection are still missing.

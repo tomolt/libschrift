@@ -17,6 +17,7 @@
  */
 
 #include <stdlib.h>
+#include <string.h>
 
 #include "aa_tree.h"
 
@@ -25,7 +26,7 @@ struct aa_node
 	struct aa_node *childs[2];
 	void *value;
 	unsigned char black; /* TODO pack memory more tightly */
-	void key[];
+	unsigned char key[];
 };
 
 static struct aa_node *
@@ -72,7 +73,7 @@ aa_put_rec(struct aa_tree *tree, struct aa_node *node, const void *key, void *va
 			node->value = value;
 			return node;
 		}
-		node->childs[cmp > 0] = aa_put_rec(node->childs[cmp > 0], key, value);
+		node->childs[cmp > 0] = aa_put_rec(tree, node->childs[cmp > 0], key, value);
 		node = aa_skew(node);
 		node = aa_split(node);
 		return node;
@@ -101,7 +102,7 @@ aa_init(struct aa_tree *tree, int keysize, aa_compare_func compare, const void *
 void
 aa_put(struct aa_tree *tree, const void *key, void *value)
 {
-	tree->root = aa_put_rec(tree->root, key, value);
+	tree->root = aa_put_rec(tree, tree->root, key, value);
 }
 
 int

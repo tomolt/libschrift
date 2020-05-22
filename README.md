@@ -20,9 +20,6 @@ Limitations
 - Support for most TrueType (.ttf) and certain OpenType (.otf) fonts.
   No bitmap or PostScript fonts (for now).
 - No hinting. Especially no auto-hinting like *FreeType2*.
-- the demo program is *currently* limited to ASCII characters;
-  the library is not. UTF-8 support in the demo program will be implemented
-  eventually.
 
 Documentation
 -------------

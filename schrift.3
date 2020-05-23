@@ -39,6 +39,12 @@ uses semantic versioning, the returned string will usually be of the form
 
 .Ss The SFT structure
 
+The struct SFT is a structure to be filled out by the application using schrift.
+It bundles all the different parameters neccessary for drawing,
+like for example which font to use, into a single struct.
+Most functions in
+.Nm
+take a struct SFT as their primary argument.
 .Bd -literal
 struct SFT {
 	SFT_Font *font;
@@ -49,6 +55,47 @@ struct SFT {
 	unsigned int flags;
 };
 .Ed
+
+The fields are as follows:
+.Bl -tag -width 8
+.It Va font
+The font to render with.
+.It Va xScale
+The user-specified width of one em-square in pixels.
+.It Va yScale
+The user-specified height of one em-square in pixels.
+.It Va x
+The horizontal offset in pixels to be applied before rendering to an image.
+Can be used for subpixel-accurate positioning.
+.It Va y
+The vertical offset in pixels to be applied before rendering to an image.
+Can be used for subpixel-accurate positioning.
+.It Va flags
+A bitfield of binary flags that control various functionalities.
+
+If
+.Dv SFT_DOWNWARD_Y
+is set, the Y axis is interpreted to point downwards. Otherwise, it points upwards.
+
+If
+.Dv SFT_RENDER_IMAGE
+is set, the function
+.Fn sft_char
+will, when called, render a specified character into an image buffer.
+Otherwise,
+.Fn sft_char
+will only return auxiliary data such as image buffer dimensions and horizontal advance width.
+
+If
+.Dv SFT_CATCH_MISSING
+is set, the function
+.Nm sft_char
+will return immediately if called on a character that the used font does not have data for.
+The user then has to check whether this happened by looking at the returned field
+.Va missing
+which will be set to 1 if this case occurred, or 0 otherwise.
+
+.El
 
 .Ss The SFT_Char structure
 .Fn sft_char
@@ -61,6 +108,7 @@ struct SFT_Char {
 	int y;
 	int width;
 	int height;
+	unsigned char missing;
 };
 .Ed
 
@@ -93,6 +141,9 @@ The height of the image in pixels.
 This field gets set even if
 .Dv SFT_RENDER_IMAGE
 was not set.
+.It Va missing
+Contains a positive value if the used font doesn't have data for the specified character,
+and a fallback character (the missing glyph) has been selected instead.
 .El
 
 .Sh RETURN VALUES

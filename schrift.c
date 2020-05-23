@@ -14,6 +14,8 @@
 
 #include "schrift.h"
 
+#define SCHRIFT_VERSION "0.5.23"
+
 #define FILE_MAGIC_ONE             0x00010000
 #define FILE_MAGIC_TWO             0x74727565
 
@@ -136,6 +138,12 @@ static void draw_line(struct buffer buf, struct line line);
 static void post_process(struct buffer buf, uint8_t *image);
 
 /* function implementations */
+
+const char *
+sft_version(void)
+{
+	return SCHRIFT_VERSION;
+}
 
 /* Loads a font from a user-supplied memory range. */
 SFT_Font *

@@ -42,7 +42,7 @@ static void
 usage(void)
 {
 	fprintf(stderr,
-		"usage: %s [-f font file] [-s size in px] [-P] [message]\n", argv0);
+		"usage: %s [-v] [-f font file] [-s size in px] [-P] [message]\n", argv0);
 }
 
 static int
@@ -191,6 +191,9 @@ main(int argc, char *argv[])
 	case 's':
 		size = atof(EARGF(usage()));
 		break;
+	case 'v':
+		printf("libschrift v%s\n", sft_version());
+		exit(0);
 	default:
 		usage();
 		exit(1);

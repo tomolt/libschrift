@@ -43,6 +43,9 @@ struct SFT_Char
 	int height;
 };
 
+/* libschrift uses semantic versioning. */
+const char *sft_version(void);
+
 SFT_Font *sft_loadmem(const void *mem, unsigned long size);
 SFT_Font *sft_loadfile(const char *filename);
 void sft_freefont(SFT_Font *font);

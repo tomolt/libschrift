@@ -6,7 +6,6 @@ The following bullet points are listed in no particular order.
   This should never happen and points to a bug somewhere in the outline decoder.
 
 ## Features
-- Versioning of the library & A version test interface.
 - Kerning needs to be tested.
 - `sftdemo` needs a better sample text. The one I planned on using is apparently copyrighted ...
 - `stress` should render a large range of code points to be more representative.

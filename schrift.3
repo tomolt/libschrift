@@ -11,6 +11,9 @@
 
 .In schrift.h
 
+.Ft const char *
+.Fn sft_version "void"
+
 .Ft SFT_Font *
 .Fn sft_loadmem "const void *mem" "unsigned long size"
 .Ft SFT_Font *
@@ -24,6 +27,15 @@
 .Fn sft_char "const struct SFT *sft" "unsigned int charCode" "struct SFT_Char *chr"
 
 .Sh DESCRIPTION
+
+.Fn sft_version
+can be used to determine which version of
+.Nm
+you are using. Since
+.Nm
+uses semantic versioning, the returned string will usually be of the form
+.Qq MAJOR.MINOR.PATCH
+\&.
 
 .Ss The SFT structure
 

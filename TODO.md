@@ -4,6 +4,9 @@ The following bullet points are listed in no particular order.
 ## Bugs
 - There might still be situations in which the asserts inside `decode_contours` get triggered.
   This should never happen and points to a bug somewhere in the outline decoder.
+- The proportion of left and right horizontal spacing around some characters in monospace fonts
+  is weirdly of balance. Reproducable with the character 'X' and any of the following fonts:
+  B612Mono-Regular.ttf, CamingoCode-Regular.ttf, CourierPrime-Regular.ttf, NotoMono-Regular.ttf, UbuntuMono-Regular.ttf
 
 ## Features
 - Kerning needs to be tested.
@@ -17,6 +20,8 @@ The following bullet points are listed in no particular order.
 - We need an interface to check if a font is monospace.
 - We will probably need user-defined transformations for slanted text etc.
 - `sftdemo` should probably make use of kerning.
+- We need an interface for subpixel rendering.
+  Mattias Andrée already proposed a possible API for this!
 
 ## Documentation
 - Fill in missing sections and paragraphs in the man page.

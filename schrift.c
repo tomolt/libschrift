@@ -297,6 +297,11 @@ sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 
 	if ((glyph = glyph_id(sft->font, charCode)) < 0)
 		return -1;
+	
+	chr->missing = (glyph == 0);
+	if (chr->missing && (sft->flags & SFT_CATCH_MISSING))
+		return 0;
+
 	if (hor_metrics(sft, glyph, &chr->advance, &leftSideBearing) < 0)
 		return -1;
 	if ((outline = outline_offset(sft->font, glyph)) < 0)

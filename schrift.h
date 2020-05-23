@@ -17,8 +17,9 @@
 #ifndef SCHRIFT_H
 #define SCHRIFT_H 1
 
-#define SFT_DOWNWARD_Y   0x01
-#define SFT_RENDER_IMAGE 0x02
+#define SFT_DOWNWARD_Y    0x01
+#define SFT_RENDER_IMAGE  0x02
+#define SFT_CATCH_MISSING 0x04
 
 /* Deprecated. Use SFT_RENDER_IMAGE instead (Only the name has changed). */
 #define SFT_CHAR_IMAGE 0x02
@@ -44,6 +45,7 @@ struct SFT_Char
 	int y;
 	int width;
 	int height;
+	unsigned char missing;
 };
 
 /* libschrift uses semantic versioning. */

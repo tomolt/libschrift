@@ -14,8 +14,6 @@ The following bullet points are listed in no particular order.
 - `stress` should render a large range of code points to be more representative.
 - `sftdemo`'s use of `aa_tree` *might* be a major performance bottleneck. If that's the case,
   we will need another algorithm / datastructure / strategy for loading code point ranges.
-- We need an interface to check if the missing glyph is about to be rendered and conditionally abort,
-  so the user can retry rendering with another font instead.
 - `sftdemo` should operate on a hierarchy of fonts, since nowadays most fonts aren't monolithic files anymore.
 - We need an interface to check if a font is monospace.
 - We will probably need user-defined transformations for slanted text etc.
@@ -28,4 +26,5 @@ The following bullet points are listed in no particular order.
 - Example snippets in the man page.
 - The `sft_kerning` function has to be documented, preferably in the man page.
 - The inner workings of `sftdemo` have to be better documented, as it is meant to be example code.
+- Info in the man page about `SFT_CATCH_MISSING`.
 

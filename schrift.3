@@ -72,7 +72,7 @@ The colors are inverse to what you would expect: Text is always drawn white on b
 That's because this way it's really convenient to use the image as an alpha mask.
 This is also the reason why the image isn't gamma corrected.
 This field only gets set if the flag
-.Dv SFT_CHAR_IMAGE
+.Dv SFT_RENDER_IMAGE
 was set.
 In this case, it is the caller's duty to later release the image's memory again by calling
 .Fn free .
@@ -86,12 +86,12 @@ controls the orientation of the coordinate system that this field is relative to
 .It Va width
 The width of the image in pixels.
 This field gets set even if
-.Dv SFT_CHAR_IMAGE
+.Dv SFT_RENDER_IMAGE
 was not set.
 .It Va height
 The height of the image in pixels.
 This field gets set even if
-.Dv SFT_CHAR_IMAGE
+.Dv SFT_RENDER_IMAGE
 was not set.
 .El
 

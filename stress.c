@@ -59,7 +59,7 @@ main(int argc, char *argv[])
 	sft.font = font;
 	sft.xScale = size;
 	sft.yScale = size;
-	sft.flags = SFT_DOWNWARD_Y | SFT_CHAR_IMAGE;
+	sft.flags = SFT_DOWNWARD_Y | SFT_RENDER_IMAGE;
 	for (i = 0; i < 1000; ++i) {
 		for (c = 32; c < 128; ++c) {
 			if (!(sft_char(&sft, c, &chr) < 0))

@@ -321,7 +321,7 @@ sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 	chr->width = w;
 	chr->height = h;
 	/* Render the outline (if requested). */
-	if (sft->flags & SFT_CHAR_IMAGE) {
+	if (sft->flags & SFT_RENDER_IMAGE) {
 		/* Make transformation relative to min corner. */
 		transform[4] -= x;
 		transform[5] -= y;

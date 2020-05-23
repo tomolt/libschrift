@@ -216,7 +216,7 @@ main(int argc, char *argv[])
 		die("Can't load font file.");
 	sft.xScale = size;
 	sft.yScale = size;
-	sft.flags = SFT_DOWNWARD_Y | SFT_CHAR_IMAGE;
+	sft.flags = SFT_DOWNWARD_Y | SFT_RENDER_IMAGE;
 
 	aa_init(&loadedset, 4, compare32, NULL);
 

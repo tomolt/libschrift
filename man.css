@@ -2,12 +2,20 @@ table.head, table.foot {
      width: 100%;
 }
 
+table.foot {
+	margin-top: 2em;
+}
+
 td.head-rtitle, td.foot-os {
      text-align: right;
 }
 
 td.head-vol {
      text-align: center;
+}
+
+span.Lb {
+	font-style: italic;
 }
 
 div.Pp {
@@ -23,16 +31,8 @@ code.Nm, code.Fl, code.Cm, code.Ic, code.In, code.Fd, code.Fn, code.Cd {
      font-family: inherit;
 }
 
-article, aside, details, figcaption, figure, footer, header, hgroup, nav, section, summary {
+article, aside, details, footer, header, hgroup, nav, section, summary {
      display: block;
-}
-
-[hidden] {
-     display: none;
-}
-
-abbr[title] {
-     border-bottom: 1px dotted;
 }
 
 b, strong, dl.Bl-diag > dt, span.Ms {
@@ -43,37 +43,12 @@ dfn, span.Pa, span.Ad {
      font-style: italic;
 }
 
-mark {
-     background: #ff0;
-     color: #000;
-}
-
-code, kbd, pre, samp {
-     font-family: monospace, sans-serif;
-     font-size: 1em;
-}
-
 q {
      quotes: "201C" "201D" "2018" "2019";
 }
 
 small {
      font-size: 80%;
-}
-
-sub, sup {
-     font-size: 75%;
-     line-height: 0;
-     position: relative;
-     vertical-align: baseline;
-}
-
-sup {
-     top: -.5em;
-}
-
-sub {
-     bottom: -.25em;
 }
 
 table {
@@ -102,18 +77,11 @@ body {
 
 a {
      color: #b58900;
+     outline: 0;
 }
 
 a:hover {
      color: #cb4b16;
-}
-
-a:focus {
-     outline: thin dotted;
-}
-
-a:active, a:hover {
-     outline: 0;
 }
 
 /* Code sections */
@@ -138,7 +106,7 @@ pre {
 
 h1 {
      color: #d33682;
-     font-size: 2.8em;
+     font-size: 2em;
 	 font-weight: 700;
 }
 
@@ -148,21 +116,21 @@ h2, h3, h4, h5, h6 {
 }
 
 h2 {
-     font-size: 2.4em;
+     font-size: 1.5em;
 }
 
 h3 {
-     font-size: 1.8em;
+     font-size: 1.25em;
 }
 
 h4 {
-     font-size: 1.4em;
+     font-size: 1.15em;
 }
 
 h5 {
-     font-size: 1.3em;
+     font-size: 1.1em;
 }
 
 h6 {
-     font-size: 1.15em;
+     font-size: 1.05em;
 }

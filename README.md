@@ -28,8 +28,11 @@ refer to the *schrift(3)* man page,
 the source code of the bundled example program *sftdemo*,
 as well as the header file *schrift.h*.
 
+You can also view the man page in your browser at
+<http://tomolt.github.io/libschrift/>
+
 Progress
 --------
 libschrift isn't ready for serious use yet.
-
-Kerning, subpixel rendering, and missing glyph detection are still missing.
+Altough *most* features are in place by now, there is still a lot
+of testing against real-world font files to be done.

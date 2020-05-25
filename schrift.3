@@ -2,50 +2,44 @@
 .Dt SCHRIFT 3
 .Os suckless.org
 .Sh NAME
-.Nm schrift
+.Nm schrift ,
+.Nm libschrift
 .Nd Lightweight TrueType font rendering library
-
 .Sh SYNOPSIS
-
 .Lb libschrift
-
 .In schrift.h
-
 .Ft const char *
 .Fn sft_version "void"
-
 .Ft SFT_Font *
 .Fn sft_loadmem "const void *mem" "unsigned long size"
 .Ft SFT_Font *
 .Fn sft_loadfile "const char *filename"
 .Ft void
 .Fn sft_freefont "SFT_Font *font"
-
 .Ft int
 .Fn sft_linemetrics "const struct SFT *sft" "double *ascent" "double *descent" "double *gap"
 .Ft int
 .Fn sft_kerning "const struct SFT *sft" "unsigned long leftChar" "unsigned long rightChar" "double kerning[2]"
 .Ft int
 .Fn sft_char "const struct SFT *sft" "unsigned int charCode" "struct SFT_Char *chr"
-
 .Sh DESCRIPTION
-
 .Fn sft_version
 can be used to determine which version of
 .Nm
-you are using. Since
+you are using.
+Since
 .Nm
 uses semantic versioning, the returned string will usually be of the form
 .Qq MAJOR.MINOR.PATCH
 \&.
-
+.sp
 .Fn sft_loadfile
 will load a font from a given filename (by mapping it into memory),
 whereas
 .Fn sft_loadmem
 can be given an arbitrary memory address and size (in bytes).
 This allows users to load fonts from ZIP file streams etc.
-
+.sp
 Once a user is done with a particular font and does not need to access it any more,
 he may use
 .Fn sft_freefont
@@ -55,19 +49,16 @@ If the font has been loaded with
 the user has to additionally free the memory they passed to
 .Fn sft_loadmem
 on their own.
-
-
-
+.sp
 The most important public function of
 .Nm
 is
-.Fn sft_char .
+.Fn sft_char
+\&.
 It lets users query codepoint-specific information, like horizontal advance width, extents, etc.
 It can also render a specified codepoint to an in-memory image.
 More details can be found in the following sections.
-
 .Ss The SFT structure
-
 The struct SFT is a structure to be filled out by the application using schrift.
 It bundles all the different parameters neccessary for drawing,
 like for example which font to use, or how big the text should be, into a single struct.
@@ -84,7 +75,6 @@ struct SFT {
 	unsigned int flags;
 };
 .Ed
-
 The fields are as follows:
 .Bl -tag -width 8
 .It Va font
@@ -101,11 +91,12 @@ The vertical offset in pixels to be applied before rendering to an image.
 Can be used for subpixel-accurate positioning.
 .It Va flags
 A bitfield of binary flags that control various functionalities.
-
+.sp
 If
 .Dv SFT_DOWNWARD_Y
-is set, the Y axis is interpreted to point downwards. Otherwise, it points upwards.
-
+is set, the Y axis is interpreted to point downwards.
+Otherwise, it points upwards.
+.sp
 If
 .Dv SFT_RENDER_IMAGE
 is set, the function
@@ -114,7 +105,7 @@ will, when called, render a specified character into an image buffer.
 Otherwise,
 .Fn sft_char
 will only return auxiliary data such as image buffer dimensions and horizontal advance width.
-
+.sp
 If
 .Dv SFT_CATCH_MISSING
 is set, the function
@@ -123,9 +114,7 @@ will return immediately if called on a character that the used font does not hav
 The user then has to check whether this happened by looking at the returned field
 .Va missing
 which will be set to 1 if this case occurred, or 0 otherwise.
-
 .El
-
 .Ss The SFT_Char structure
 .Fn sft_char
 returns all relevant information except status code in a struct SFT_Char.
@@ -140,7 +129,6 @@ struct SFT_Char {
 	unsigned char missing;
 };
 .Ed
-
 The fields are as follows:
 .Bl -tag -width 8
 .It Va image
@@ -152,7 +140,8 @@ This field only gets set if the flag
 .Dv SFT_RENDER_IMAGE
 was set.
 In this case, it is the caller's duty to later release the image's memory again by calling
-.Fn free .
+.Fn free
+\&.
 .It Va x
 The X offset in pixels that should be applied to the image.
 .It Va y
@@ -174,9 +163,7 @@ was not set.
 Contains a positive value if the used font doesn't have data for the specified character,
 and a fallback character (the missing glyph) has been selected instead.
 .El
-
 .Sh RETURN VALUES
-
 .Fn sft_loadmem
 and
 .Fn sft_loadfile
@@ -185,16 +172,15 @@ return NULL on error.
 and
 .Fn sft_char
 return 0 on success or -1 on error.
-
 .Sh EXAMPLES
-
 See the source code of
 .Sy sftdemo
 for a detailed example of real-world usage of
-.Nm .
-
+.Nm
+\&.
+.Sh AUTHORS
+.An Thomas Oltmann Aq Mt thomas.oltmann.hhg@gmail.com
 .Sh CAVEATS
-
 The only text encoding that
 .Nm
 understands is Unicode.
@@ -203,6 +189,3 @@ are TrueType (.ttf) fonts (Some OpenType fonts might work too,
 as OpenType is effectively a superset of TrueType).
 .Nm
 currently does not implement font hinting and probably never will.
-
-.Sh AUTHORS
-.An Thomas Oltmann Aq Mt thomas.oltmann.hhg@gmail.com

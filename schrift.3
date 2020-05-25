@@ -1,4 +1,4 @@
-.Dd April 19, 2020
+.Dd May 25, 2020
 .Dt SCHRIFT 3
 .Os suckless.org
 .Sh NAME
@@ -24,6 +24,8 @@
 .Ft int
 .Fn sft_linemetrics "const struct SFT *sft" "double *ascent" "double *descent" "double *gap"
 .Ft int
+.Fn sft_kerning "const struct SFT *sft" "unsigned long leftChar" "unsigned long rightChar" "double kerning[2]"
+.Ft int
 .Fn sft_char "const struct SFT *sft" "unsigned int charCode" "struct SFT_Char *chr"
 
 .Sh DESCRIPTION
@@ -37,11 +39,38 @@ uses semantic versioning, the returned string will usually be of the form
 .Qq MAJOR.MINOR.PATCH
 \&.
 
+.Fn sft_loadfile
+will load a font from a given filename (by mapping it into memory),
+whereas
+.Fn sft_loadmem
+can be given an arbitrary memory address and size (in bytes).
+This allows users to load fonts from ZIP file streams etc.
+
+Once a user is done with a particular font and does not need to access it any more,
+he may use
+.Fn sft_freefont
+to free all memory reserved by the font.
+If the font has been loaded with
+.Fn sft_loadmem
+the user has to additionally free the memory they passed to
+.Fn sft_loadmem
+on their own.
+
+
+
+The most important public function of
+.Nm
+is
+.Fn sft_char .
+It lets users query codepoint-specific information, like horizontal advance width, extents, etc.
+It can also render a specified codepoint to an in-memory image.
+More details can be found in the following sections.
+
 .Ss The SFT structure
 
 The struct SFT is a structure to be filled out by the application using schrift.
 It bundles all the different parameters neccessary for drawing,
-like for example which font to use, into a single struct.
+like for example which font to use, or how big the text should be, into a single struct.
 Most functions in
 .Nm
 take a struct SFT as their primary argument.

@@ -24,7 +24,7 @@ Limitations
 Documentation
 -------------
 For documentation on how to use *libschrift* in your own programs,
-refer to the (currently incomplete) *schrift(3)* man page,
+refer to the *schrift(3)* man page,
 the source code of the bundled example program *sftdemo*,
 as well as the header file *schrift.h*.
 

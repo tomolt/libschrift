@@ -1,4 +1,168 @@
+table.head, table.foot {
+     width: 100%;
+}
+
+td.head-rtitle, td.foot-os {
+     text-align: right;
+}
+
+td.head-vol {
+     text-align: center;
+}
+
+div.Pp {
+     margin: 1ex 0ex;
+}
+
+div.Nd, div.Bf, div.Op {
+     display: inline;
+}
+
+code.Nm, code.Fl, code.Cm, code.Ic, code.In, code.Fd, code.Fn, code.Cd {
+     font-weight: 700;
+     font-family: inherit;
+}
+
+article, aside, details, figcaption, figure, footer, header, hgroup, nav, section, summary {
+     display: block;
+}
+
+[hidden] {
+     display: none;
+}
+
+abbr[title] {
+     border-bottom: 1px dotted;
+}
+
+b, strong, dl.Bl-diag > dt, span.Ms {
+     font-weight: 700;
+}
+
+dfn, span.Pa, span.Ad {
+     font-style: italic;
+}
+
+mark {
+     background: #ff0;
+     color: #000;
+}
+
+code, kbd, pre, samp {
+     font-family: monospace, sans-serif;
+     font-size: 1em;
+}
+
+q {
+     quotes: "201C" "201D" "2018" "2019";
+}
+
+small {
+     font-size: 80%;
+}
+
+sub, sup {
+     font-size: 75%;
+     line-height: 0;
+     position: relative;
+     vertical-align: baseline;
+}
+
+sup {
+     top: -.5em;
+}
+
+sub {
+     bottom: -.25em;
+}
+
+table {
+     border-collapse: collapse;
+     border-spacing: 0;
+}
+
+html {
+     -webkit-text-size-adjust: 100%;
+     -ms-text-size-adjust: 100%;
+     font-family: sans-serif;
+     background-color: #eee8d5;
+     color: #657b83;
+     margin: 1em;
+}
+
 body {
-	margin: 0 auto;
-	width: 80%;
+     background-color: #fdf6e3;
+     margin: 0 auto;
+     max-width: 23cm;
+     border: 1pt solid #93a1a1;
+     padding: 1em;
+}
+
+/* Links */
+
+a {
+     color: #b58900;
+}
+
+a:hover {
+     color: #cb4b16;
+}
+
+a:focus {
+     outline: thin dotted;
+}
+
+a:active, a:hover {
+     outline: 0;
+}
+
+/* Code sections */
+
+pre, code {
+     font-family: monospace;
+}
+
+code {
+     padding: 2px;
+}
+
+pre {
+     white-space: pre-wrap;
+     word-wrap: break-word;
+     color: #657b83;
+     border: 1pt solid #93a1a1;
+     padding: 1em;
+}
+
+/* Headings */
+
+h1 {
+     color: #d33682;
+     font-size: 2.8em;
+	 font-weight: 700;
+}
+
+h2, h3, h4, h5, h6 {
+     color: #859900;
+	 font-weight: 700;
+}
+
+h2 {
+     font-size: 2.4em;
+}
+
+h3 {
+     font-size: 1.8em;
+}
+
+h4 {
+     font-size: 1.4em;
+}
+
+h5 {
+     font-size: 1.3em;
+}
+
+h6 {
+     font-size: 1.15em;
 }

@@ -1,60 +1,4 @@
-table.head, table.foot {
-     width: 100%;
-}
-
-table.foot {
-	margin-top: 2em;
-}
-
-td.head-rtitle, td.foot-os {
-     text-align: right;
-}
-
-td.head-vol {
-     text-align: center;
-}
-
-span.Lb {
-	font-style: italic;
-}
-
-div.Pp {
-     margin: 1ex 0ex;
-}
-
-div.Nd, div.Bf, div.Op {
-     display: inline;
-}
-
-code.Nm, code.Fl, code.Cm, code.Ic, code.In, code.Fd, code.Fn, code.Cd {
-     font-weight: 700;
-     font-family: inherit;
-}
-
-article, aside, details, footer, header, hgroup, nav, section, summary {
-     display: block;
-}
-
-b, strong, dl.Bl-diag > dt, span.Ms {
-     font-weight: 700;
-}
-
-dfn, span.Pa, span.Ad {
-     font-style: italic;
-}
-
-q {
-     quotes: "201C" "201D" "2018" "2019";
-}
-
-small {
-     font-size: 80%;
-}
-
-table {
-     border-collapse: collapse;
-     border-spacing: 0;
-}
+/* General Body etc. */
 
 html {
      -webkit-text-size-adjust: 100%;
@@ -73,33 +17,27 @@ body {
      padding: 1em;
 }
 
-/* Links */
+/* Header & Footer */
 
-a {
-     color: #b58900;
-     outline: 0;
+table {
+     border-collapse: collapse;
+     border-spacing: 0;
 }
 
-a:hover {
-     color: #cb4b16;
+table.head, table.foot {
+     width: 100%;
 }
 
-/* Code sections */
-
-pre, code {
-     font-family: monospace;
+table.foot {
+	margin-top: 2em;
 }
 
-code {
-     padding: 2px;
+td.head-rtitle, td.foot-os {
+     text-align: right;
 }
 
-pre {
-     white-space: pre-wrap;
-     word-wrap: break-word;
-     color: #657b83;
-     border: 1pt solid #93a1a1;
-     padding: 1em;
+td.head-vol {
+     text-align: center;
 }
 
 /* Headings */
@@ -134,3 +72,53 @@ h5 {
 h6 {
      font-size: 1.05em;
 }
+
+/* Links */
+
+a {
+     color: #b58900;
+	 text-decoration: none;
+}
+
+a:visited {
+     color: #b58900;
+}
+
+a:hover {
+     color: #cb4b16;
+}
+
+/* Code sections */
+
+pre, code {
+     font-family: monospace;
+}
+
+code {
+     padding: 2px;
+     font-weight: 700;
+     font-family: inherit;
+}
+
+pre {
+     white-space: pre-wrap;
+     word-wrap: break-word;
+     color: #657b83;
+     border: 1pt solid #93a1a1;
+     padding: 1em;
+}
+
+/* Various mandoc elements */
+
+span.Lb {
+	font-style: italic;
+}
+
+div.Nd, div.Bf, div.Op {
+     display: inline;
+}
+
+dl.Bl-diag > dt, span.Ms {
+     font-weight: 700;
+}
+

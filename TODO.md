@@ -4,9 +4,6 @@ The following bullet points are listed in no particular order.
 ## Bugs
 - There might still be situations in which the asserts inside `decode_contours` get triggered.
   This should never happen and points to a bug somewhere in the outline decoder.
-- The proportion of left and right horizontal spacing around some characters in monospace fonts
-  is weirdly of balance. Reproducable with the character 'X' and any of the following fonts:
-  B612Mono-Regular.ttf, CamingoCode-Regular.ttf, CourierPrime-Regular.ttf, NotoMono-Regular.ttf, UbuntuMono-Regular.ttf
 
 ## Features
 - Kerning needs to be tested.
@@ -22,6 +19,9 @@ The following bullet points are listed in no particular order.
   Mattias Andrée already proposed a possible API for this!
 - There are some kerning features like minimum values that are not yet supported.
 - There are some compound glyph features like grid-snapping that are not yet supported.
+- We need an interface to support using an entire priority / codepoint-range based stack of fonts.
+  For the longest time, I thought this could be done by a text shaping library sitting on top of schrift.
+  Now I'm starting to see that it would be much more beneficial to implement this directly within libschrift.
 
 ## Documentation
 - Fill in missing sections and paragraphs in the man page.

@@ -2,8 +2,8 @@
 The following bullet points are listed in no particular order.
 
 ## Bugs
-- There might still be situations in which the asserts inside `decode_contours` get triggered.
-  This should never happen and points to a bug somewhere in the outline decoder.
+There are currently no known bugs ...
+But that doesn't mean there aren't any!
 
 ## Features
 - Kerning needs to be tested.

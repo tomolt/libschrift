@@ -930,8 +930,11 @@ decode_contours(int numContours, unsigned int *endPts, uint8_t *flags, struct po
 	for (c = 0; c < numContours; ++c) {
 		f = nextPt;
 		l = endPts[c];
-		assert(l > f);
 		nextPt = l + 1;
+		/* Skip contours with less than two points, since the following algorithm can't handle them and
+		 * they should appear invisible either way (because they don't have any area). */
+		if (f == l) continue;
+		assert(l > f);
 		looseEnd = flags[f] & POINT_IS_ON_CURVE ? points[f++] :
 			flags[l] & POINT_IS_ON_CURVE ? points[l--] :
 			midpoint(points[f], points[l]);
@@ -1008,8 +1011,11 @@ draw_simple(const struct SFT *sft, long offset, int numContours, struct buffer b
 		endPts[i] = getu16(sft->font, offset);
 		offset += 2;
 	}
+	/* Ensure that endPts are never falling.
+	 * Falling endPts have no sensible interpretation and most likely only occur in malicious input.
+	 * Therefore, we bail, should we ever encounter such input. */
 	for (i = 0; i < numContours - 1; ++i) {
-		if (!(endPts[i + 1] > endPts[i] + 1))
+		if (endPts[i + 1] < endPts[i] + 1)
 			goto failure;
 	}
 	offset += 2 + getu16(sft->font, offset);

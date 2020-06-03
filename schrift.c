@@ -636,7 +636,7 @@ global_transform(const struct SFT *sft, double leftSideBearing, double transform
 	transform[1] = 0.0;
 	transform[2] = 0.0;
 	transform[3] = sft->yScale / unitsPerEm;
-	transform[4] = sft->x + leftSideBearing;
+	transform[4] = sft->x - leftSideBearing;
 	transform[5] = sft->y;
 	return 0;
 }

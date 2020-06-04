@@ -99,6 +99,14 @@ drawtext(int x, int y, const char *text)
 	uint32_t codepoints[256];
 	int length = utf8_to_utf32((const uint8_t *) text, codepoints, 256);
 
+	/* Strip non-printable characters. */
+	int w = 0;
+	for (int r = 0; r < length; ++r) {
+		if (codepoints[r] >= 0x20)
+			codepoints[w++] = codepoints[r];
+	}
+	length = w;
+
 	for (int i = 0; i < length; ++i) {
 		if (aa_get(&loadedset, &codepoints[i], NULL)) continue;
 		loadglyph(&sft, codepoints[i]);

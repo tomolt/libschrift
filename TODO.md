@@ -11,8 +11,6 @@ But that doesn't mean there aren't any!
 - `stress` should render a large range of code points to be more representative.
 - `sftdemo`'s use of `aa_tree` *might* be a major performance bottleneck. If that's the case,
   we will need another algorithm / datastructure / strategy for loading code point ranges.
-- `sftdemo` should operate on a hierarchy of fonts, since nowadays most fonts aren't monolithic files anymore.
-- We need an interface to check if a font is monospace.
 - We will probably need user-defined transformations for slanted text etc.
 - `sftdemo` should probably make use of kerning.
 - We need an interface for subpixel rendering.

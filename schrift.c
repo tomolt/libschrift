@@ -94,6 +94,7 @@ static int  init_buffer(struct buffer *buf, int width, int height);
 static void flip_buffer(struct buffer *buf);
 /* 'outline' data structure management */
 static int  init_outline(struct outline *outl);
+static void free_outline(struct outline *outl);
 static int  grow_curves(struct outline *outl);
 static int  grow_lines(struct outline *outl);
 /* TTF parsing utilities */
@@ -341,15 +342,13 @@ sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 			return -1;
 		}
 		if (tesselate_curves(&outl) < 0) {
-			free(outl.curves);
-			free(outl.lines);
+			free_outline(&outl);
 			return -1;
 		}
 		for (int i = 0; i < outl.numLines; ++i) {
 			draw_line(buf, outl.lines[i]);
 		}
-		free(outl.curves);
-		free(outl.lines);
+		free_outline(&outl);
 		if (sft->flags & SFT_DOWNWARD_Y) {
 			flip_buffer(&buf);
 		}
@@ -517,6 +516,13 @@ init_outline(struct outline *outl)
 	if ((outl->lines = malloc(outl->capLines * sizeof(outl->lines[0]))) == NULL)
 		return -1;
 	return 0;
+}
+
+static void
+free_outline(struct outline *outl)
+{
+	free(outl->curves);
+	free(outl->lines);
 }
 
 static int
@@ -947,37 +953,47 @@ decode_contours(int numContours, unsigned int *endPts, uint8_t *flags, struct po
 		f = nextPt;
 		l = endPts[c];
 		nextPt = l + 1;
+
 		/* Skip contours with less than two points, since the following algorithm can't handle them and
 		 * they should appear invisible either way (because they don't have any area). */
 		if (f == l) continue;
 		assert(l > f);
-		looseEnd = flags[f] & POINT_IS_ON_CURVE ? points[f++] :
-			flags[l] & POINT_IS_ON_CURVE ? points[l--] :
-			midpoint(points[f], points[l]);
+
+		if (flags[f] & POINT_IS_ON_CURVE) {
+			looseEnd = points[f++];
+		} else if (flags[l] & POINT_IS_ON_CURVE) {
+			looseEnd = points[l--];
+		} else {
+			looseEnd = midpoint(points[f], points[l]);
+		}
 		beg = looseEnd;
 		gotCtrl = 0;
 		for (i = f; i <= l; ++i) {
 			if (flags[i] & POINT_IS_ON_CURVE) {
 				if (gotCtrl) {
-					curve = (struct curve) { beg, ctrl, points[i] };
 					if (outl->numCurves >= outl->capCurves && grow_curves(outl) < 0)
 						return -1;
+
+					curve = (struct curve) { beg, ctrl, points[i] };
 					outl->curves[outl->numCurves++] = curve;
 				} else if (beg.y != points[i].y) {
-					line = (struct line) { beg, points[i] };
 					if (outl->numLines >= outl->capLines && grow_lines(outl) < 0)
 						return -1;
+
+					line = (struct line) { beg, points[i] };
 					outl->lines[outl->numLines++] = line;
 				}
 				beg = points[i];
 				gotCtrl = 0;
 			} else {
 				if (gotCtrl) {
-					center = midpoint(ctrl, points[i]);
-					curve = (struct curve) { beg, ctrl, center };
 					if (outl->numCurves >= outl->capCurves && grow_curves(outl) < 0)
 						return -1;
+
+					center = midpoint(ctrl, points[i]);
+					curve = (struct curve) { beg, ctrl, center };
 					outl->curves[outl->numCurves++] = curve;
+
 					beg = center;
 				}
 				ctrl = points[i];
@@ -985,14 +1001,16 @@ decode_contours(int numContours, unsigned int *endPts, uint8_t *flags, struct po
 			}
 		}
 		if (gotCtrl) {
-			curve = (struct curve) { beg, ctrl, looseEnd };
 			if (outl->numCurves >= outl->capCurves && grow_curves(outl) < 0)
 				return -1;
+
+			curve = (struct curve) { beg, ctrl, looseEnd };
 			outl->curves[outl->numCurves++] = curve;
 		} else if (beg.y != looseEnd.y) {
-			line = (struct line) { beg, looseEnd };
 			if (outl->numLines >= outl->capLines && grow_lines(outl) < 0)
 				return -1;
+
+			line = (struct line) { beg, looseEnd };
 			outl->lines[outl->numLines++] = line;
 		}
 	}

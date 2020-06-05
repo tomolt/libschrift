@@ -121,13 +121,13 @@ static int  hor_metrics(const struct SFT *sft, long glyph, double *advanceWidth,
 static long outline_offset(SFT_Font *font, long glyph);
 /* transform & outline -> extents */
 static int  glyph_extents(SFT_Font *font, unsigned long offset, double transform[6], int *x, int *y, int *w, int *h);
-/* drawing outlines */
+/* decoding outlines */
 static long simple_flags(SFT_Font *font, unsigned long offset, int numPts, uint8_t *flags);
 static int  simple_points(SFT_Font *font, long offset, int numPts, uint8_t *flags, struct point *points);
 static int  decode_contours(int numContours, unsigned int *endPts, uint8_t *flags, struct point *points, struct outline *outl);
-static int  draw_simple(const struct SFT *sft, long offset, int numContours, struct buffer buf, double transform[6]);
-static int  draw_compound(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6], int recDepth);
-static int  draw_outline(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6], int recDepth);
+static int  simple_outline(const struct SFT *sft, long offset, int numContours, struct buffer buf, double transform[6], struct outline *outl);
+static int  compound_outline(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6], int recDepth, struct outline *outl);
+static int  decode_outline(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6], int recDepth, struct outline *outl);
 /* tesselation */
 static int  is_flat(struct curve curve, double flatness);
 static int  tesselate_curves(struct outline *outl);
@@ -332,10 +332,24 @@ sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 		if (init_buffer(&buf, w, h) < 0) {
 			return -1;
 		}
-		if (draw_outline(sft, outline, buf, transform, 0) < 0) {
+		struct outline outl = { 0 };
+		if (init_outline(&outl) < 0) {
+			return -1;
+		}
+		if (decode_outline(sft, outline, buf, transform, 0, &outl) < 0) {
 			free(buf.rows);
 			return -1;
 		}
+		if (tesselate_curves(&outl) < 0) {
+			free(outl.curves);
+			free(outl.lines);
+			return -1;
+		}
+		for (int i = 0; i < outl.numLines; ++i) {
+			draw_line(buf, outl.lines[i]);
+		}
+		free(outl.curves);
+		free(outl.lines);
 		if (sft->flags & SFT_DOWNWARD_Y) {
 			flip_buffer(&buf);
 		}
@@ -982,9 +996,8 @@ decode_contours(int numContours, unsigned int *endPts, uint8_t *flags, struct po
 }
 
 static int
-draw_simple(const struct SFT *sft, long offset, int numContours, struct buffer buf, double transform[6])
+simple_outline(const struct SFT *sft, long offset, int numContours, struct buffer buf, double transform[6], struct outline *outl)
 {
-	struct outline outl = { 0 };
 	struct point *points;
 	unsigned int *endPts;
 	uint8_t *memory = NULL, *flags;
@@ -1024,29 +1037,18 @@ draw_simple(const struct SFT *sft, long offset, int numContours, struct buffer b
 		goto failure;
 	transform_points(numPts, points, transform);
 	clip_points(numPts, points, buf);
-	if (init_outline(&outl) < 0)
+	if (decode_contours(numContours, endPts, flags, points, outl) < 0)
 		goto failure;
-	if (decode_contours(numContours, endPts, flags, points, &outl) < 0)
-		goto failure;
-	if (tesselate_curves(&outl) < 0)
-		goto failure;
-	for (i = 0; i < outl.numLines; ++i) {
-		draw_line(buf, outl.lines[i]);
-	}
 
 	STACK_FREE(memory) ;
-	free(outl.curves);
-	free(outl.lines);
 	return 0;
 failure:
 	STACK_FREE(memory) ;
-	free(outl.curves);
-	free(outl.lines);
 	return -1;
 }
 
 static int
-draw_compound(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6], int recDepth)
+compound_outline(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6], int recDepth, struct outline *outl)
 {
 	double local[6];
 	long outline;
@@ -1110,7 +1112,7 @@ draw_compound(const struct SFT *sft, unsigned long offset, struct buffer buf, do
 			return -1;
 		if (outline) {
 			compose_transforms(transform, local);
-			if (draw_outline(sft, outline, buf, local, recDepth + 1) < 0)
+			if (decode_outline(sft, outline, buf, local, recDepth + 1, outl) < 0)
 				return -1;
 		}
 	} while (flags & THERE_ARE_MORE_COMPONENTS);
@@ -1119,7 +1121,7 @@ draw_compound(const struct SFT *sft, unsigned long offset, struct buffer buf, do
 }
 
 static int
-draw_outline(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6], int recDepth)
+decode_outline(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6], int recDepth, struct outline *outl)
 {
 	int numContours;
 	if (sft->font->size < offset + 10)
@@ -1127,10 +1129,10 @@ draw_outline(const struct SFT *sft, unsigned long offset, struct buffer buf, dou
 	numContours = geti16(sft->font, offset);
 	if (numContours >= 0) {
 		/* Glyph has a 'simple' outline consisting of a number of contours. */
-		return draw_simple(sft, offset + 10, numContours, buf, transform);
+		return simple_outline(sft, offset + 10, numContours, buf, transform, outl);
 	} else {
 		/* Glyph has a compound outline combined from mutiple other outlines. */
-		return draw_compound(sft, offset + 10, buf, transform, recDepth);
+		return compound_outline(sft, offset + 10, buf, transform, recDepth, outl);
 	}
 }
 

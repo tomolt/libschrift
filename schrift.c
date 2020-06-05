@@ -438,27 +438,31 @@ transform_points(int numPts, struct point *points, double trf[6])
 static void
 clip_points(int numPts, struct point *points, struct buffer buf)
 {
-	struct point *restrict pt;
+	struct point pt;
 	double dv;
-	uint64_t *ip = (void *) &dv;
+	uint64_t *ip;
 	int i;
+
 	for (i = 0; i < numPts; ++i) {
-		pt = &points[i];
-		if (pt->x < 0) {
-			pt->x = 0;
+		pt = points[i];
+
+		if (pt.x < 0.0) {
+			points[i].x = 0.0;
 		}
-		if (pt->x >= buf.width) {
+		if (pt.x >= buf.width) {
 			dv = buf.width;
+			ip = (void *) &dv;
 			--*ip;
-			pt->x = dv;
+			points[i].x = dv;
 		}
-		if (pt->y < 0) {
-			pt->y = 0;
+		if (pt.y < 0.0) {
+			points[i].y = 0.0;
 		}
-		if (pt->y >= buf.height) {
+		if (pt.y >= buf.height) {
 			dv = buf.height;
+			ip = (void *) &dv;
 			--*ip;
-			pt->y = dv;
+			points[i].y = dv;
 		}
 	}
 }

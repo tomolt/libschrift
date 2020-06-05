@@ -127,7 +127,7 @@ static int  glyph_extents(SFT_Font *font, unsigned long offset, double transform
 /* decoding outlines */
 static long simple_flags(SFT_Font *font, unsigned long offset, int numPts, uint8_t *flags);
 static int  simple_points(SFT_Font *font, long offset, int numPts, uint8_t *flags, struct point *points);
-static int  decode_contour(uint8_t *flags, unsigned int f, unsigned int l, unsigned int basePoint, struct outline *outl);
+static int  decode_contour(uint8_t *flags, unsigned int basePoint, unsigned int count, struct outline *outl);
 static int  simple_outline(const struct SFT *sft, long offset, int numContours, struct buffer buf, double transform[6], struct outline *outl);
 static int  compound_outline(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6], int recDepth, struct outline *outl);
 static int  decode_outline(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6], int recDepth, struct outline *outl);
@@ -963,30 +963,33 @@ simple_points(SFT_Font *font, long offset, int numPts, uint8_t *flags, struct po
 }
 
 static int
-decode_contour(uint8_t *flags, unsigned int f, unsigned int l, unsigned int basePoint, struct outline *outl)
+decode_contour(uint8_t *flags, unsigned int basePoint, unsigned int count, struct outline *outl)
 {
 	unsigned int looseEnd, beg, ctrl, center;
 	unsigned int gotCtrl, i;
 
 	/* Skip contours with less than two points, since the following algorithm can't handle them and
 	 * they should appear invisible either way (because they don't have any area). */
-	if (f == l) return 0;
-	assert(l > f);
+	if (count < 2) return 0;
 
-	if (flags[f] & POINT_IS_ON_CURVE) {
-		looseEnd = basePoint + f++;
-	} else if (flags[l] & POINT_IS_ON_CURVE) {
-		looseEnd = basePoint + l--;
+	if (flags[0] & POINT_IS_ON_CURVE) {
+		looseEnd = basePoint++;
+		++flags;
+		--count;
+	} else if (flags[count - 1] & POINT_IS_ON_CURVE) {
+		looseEnd = basePoint + --count;
 	} else {
 		if (outl->numPoints >= outl->capPoints && grow_points(outl) < 0)
 			return -1;
 
 		looseEnd = outl->numPoints;
-		outl->points[outl->numPoints++] = midpoint(outl->points[basePoint + f], outl->points[basePoint + l]);
+		outl->points[outl->numPoints++] = midpoint(
+			outl->points[basePoint],
+			outl->points[basePoint + count - 1]);
 	}
 	beg = looseEnd;
 	gotCtrl = 0;
-	for (i = f; i <= l; ++i) {
+	for (i = 0; i < count; ++i) {
 		if (flags[i] & POINT_IS_ON_CURVE) {
 			if (gotCtrl) {
 				if (outl->numCurves >= outl->capCurves && grow_curves(outl) < 0)
@@ -1050,7 +1053,7 @@ simple_outline(const struct SFT *sft, long offset, int numContours, struct buffe
 			return -1;
 	}
 	
-	memLen += numContours * sizeof(endPts[0]);
+	memLen = numContours * sizeof(endPts[0]);
 	memLen += numPts * sizeof(flags[0]);
 	STACK_ALLOC(memory, memLen, 2048) ;
 	if (memory == NULL)
@@ -1079,12 +1082,14 @@ simple_outline(const struct SFT *sft, long offset, int numContours, struct buffe
 	transform_points(numPts, outl->points + basePoint, transform);
 	clip_points(numPts, outl->points + basePoint, buf);
 	
-	unsigned int first = 0, last;
+	unsigned int contourBase = 0;
 	for (int c = 0; c < numContours; ++c) {
-		last = endPts[c];
-		if (decode_contour(flags, first, last, basePoint, outl) < 0)
+		unsigned int count = endPts[c] - contourBase + 1;
+		if (decode_contour(flags, basePoint, count, outl) < 0)
 			goto failure;
-		first = last + 1;
+		flags += count;
+		basePoint += count;
+		contourBase += count;
 	}
 
 	STACK_FREE(memory) ;

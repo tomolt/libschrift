@@ -127,7 +127,7 @@ static int  glyph_extents(SFT_Font *font, unsigned long offset, double transform
 /* decoding outlines */
 static long simple_flags(SFT_Font *font, unsigned long offset, int numPts, uint8_t *flags);
 static int  simple_points(SFT_Font *font, long offset, int numPts, uint8_t *flags, struct point *points);
-static int  decode_contours(int numContours, unsigned int *endPts, uint8_t *flags, unsigned int basePoint, struct outline *outl);
+static int  decode_contour(uint8_t *flags, unsigned int f, unsigned int l, unsigned int basePoint, struct outline *outl);
 static int  simple_outline(const struct SFT *sft, long offset, int numContours, struct buffer buf, double transform[6], struct outline *outl);
 static int  compound_outline(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6], int recDepth, struct outline *outl);
 static int  decode_outline(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6], int recDepth, struct outline *outl);
@@ -963,69 +963,62 @@ struct iline { uint_fast16_t beg, end; };
 struct icurve { uint_fast16_t beg, end, ctrl; };
 
 static int
-decode_contours(int numContours, unsigned int *endPts, uint8_t *flags, unsigned int basePoint, struct outline *outl)
+decode_contour(uint8_t *flags, unsigned int f, unsigned int l, unsigned int basePoint, struct outline *outl)
 {
 	struct iline lines[512];
 	struct icurve curves[512];
 	unsigned int looseEnd, beg, ctrl, center;
-	int nextPt, c, f, l, gotCtrl, i;
-	int numLines = 0;
-	int numCurves = 0;
+	unsigned int gotCtrl, i;
+	unsigned int numLines = 0;
+	unsigned int numCurves = 0;
 
-	nextPt = 0;
-	for (c = 0; c < numContours; ++c) {
-		f = nextPt;
-		l = endPts[c];
-		nextPt = l + 1;
+	/* Skip contours with less than two points, since the following algorithm can't handle them and
+	 * they should appear invisible either way (because they don't have any area). */
+	if (f == l) return 0;
+	assert(l > f);
 
-		/* Skip contours with less than two points, since the following algorithm can't handle them and
-		 * they should appear invisible either way (because they don't have any area). */
-		if (f == l) continue;
-		assert(l > f);
+	if (flags[f] & POINT_IS_ON_CURVE) {
+		looseEnd = basePoint + f++;
+	} else if (flags[l] & POINT_IS_ON_CURVE) {
+		looseEnd = basePoint + l--;
+	} else {
+		if (outl->numPoints >= outl->capPoints && grow_points(outl) < 0)
+			return -1;
 
-		if (flags[f] & POINT_IS_ON_CURVE) {
-			looseEnd = basePoint + f++;
-		} else if (flags[l] & POINT_IS_ON_CURVE) {
-			looseEnd = basePoint + l--;
-		} else {
-			if (outl->numPoints >= outl->capPoints && grow_points(outl) < 0)
-				return -1;
-
-			looseEnd = outl->numPoints;
-			outl->points[outl->numPoints++] = midpoint(outl->points[basePoint + f], outl->points[basePoint + l]);
-		}
-		beg = looseEnd;
-		gotCtrl = 0;
-		for (i = f; i <= l; ++i) {
-			if (flags[i] & POINT_IS_ON_CURVE) {
-				if (gotCtrl) {
-					curves[numCurves++] = (struct icurve) { beg, basePoint + i, ctrl };
-				} else {
-					lines[numLines++] = (struct iline) { beg, basePoint + i };
-				}
-				beg = basePoint + i;
-				gotCtrl = 0;
+		looseEnd = outl->numPoints;
+		outl->points[outl->numPoints++] = midpoint(outl->points[basePoint + f], outl->points[basePoint + l]);
+	}
+	beg = looseEnd;
+	gotCtrl = 0;
+	for (i = f; i <= l; ++i) {
+		if (flags[i] & POINT_IS_ON_CURVE) {
+			if (gotCtrl) {
+				curves[numCurves++] = (struct icurve) { beg, basePoint + i, ctrl };
 			} else {
-				if (gotCtrl) {
-					if (outl->numPoints >= outl->capPoints && grow_points(outl) < 0)
-						return -1;
-
-					center = outl->numPoints;
-					outl->points[outl->numPoints++] = midpoint(outl->points[ctrl], outl->points[basePoint + i]);
-
-					curves[numCurves++] = (struct icurve) { beg, center, ctrl };
-
-					beg = center;
-				}
-				ctrl = basePoint + i;
-				gotCtrl = 1;
+				lines[numLines++] = (struct iline) { beg, basePoint + i };
 			}
-		}
-		if (gotCtrl) {
-			curves[numCurves++] = (struct icurve) { beg, looseEnd, ctrl };
+			beg = basePoint + i;
+			gotCtrl = 0;
 		} else {
-			lines[numLines++] = (struct iline) { beg, looseEnd };
+			if (gotCtrl) {
+				if (outl->numPoints >= outl->capPoints && grow_points(outl) < 0)
+					return -1;
+
+				center = outl->numPoints;
+				outl->points[outl->numPoints++] = midpoint(outl->points[ctrl], outl->points[basePoint + i]);
+
+				curves[numCurves++] = (struct icurve) { beg, center, ctrl };
+
+				beg = center;
+			}
+			ctrl = basePoint + i;
+			gotCtrl = 1;
 		}
+	}
+	if (gotCtrl) {
+		curves[numCurves++] = (struct icurve) { beg, looseEnd, ctrl };
+	} else {
+		lines[numLines++] = (struct iline) { beg, looseEnd };
 	}
 
 	for (i = 0; i < numCurves; ++i) {
@@ -1093,8 +1086,14 @@ simple_outline(const struct SFT *sft, long offset, int numContours, struct buffe
 	outl->numPoints = numPts;
 	transform_points(numPts, outl->points, transform);
 	clip_points(numPts, outl->points, buf);
-	if (decode_contours(numContours, endPts, flags, 0, outl) < 0)
-		goto failure;
+	
+	unsigned int first = 0, last;
+	for (int c = 0; c < numContours; ++c) {
+		last = endPts[c];
+		if (decode_contour(flags, first, last, 0, outl) < 0)
+			goto failure;
+		first = last + 1;
+	}
 
 	STACK_FREE(memory) ;
 	return 0;

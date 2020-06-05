@@ -1,4 +1,4 @@
-.Dd May 25, 2020
+.Dd June 5, 2020
 .Dt SCHRIFT 3
 .Os suckless.org
 .Sh NAME
@@ -50,7 +50,21 @@ the user has to additionally free the memory they passed to
 .Fn sft_loadmem
 on their own.
 .sp
-The most important public function of
+The following functions all take a struct SFT as their primary argument.
+Details concerning this struct can be found in the next section.
+.sp
+.Fn sft_linemetrics
+can be used to query the typographic ascender, descender, and line gap, in pixels.
+The ascender refers to the distance of the highest point of a line of text to it's baseline.
+Analogously, the descender refers to the distance to the lowest point.
+The line gap measures the suggested blank space between consecutive lines.
+.sp
+.Fn sft_kerning
+can be used to find the kerning between a pair of characters (codepoints).
+That is, an x and y offset that should be applied to the second character,
+should it follow the first.
+.sp
+Lastly, the most important public function of
 .Nm
 is
 .Fn sft_char

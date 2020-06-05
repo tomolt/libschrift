@@ -60,10 +60,11 @@ struct cell    { int16_t area, cover; };
 
 struct outline
 {
+	struct point *points;
 	struct curve *curves;
 	struct line *lines;
-	int numCurves, numLines;
-	int capCurves, capLines;
+	int numPoints, numCurves, numLines;
+	int capPoints, capCurves, capLines;
 };
 
 struct buffer
@@ -95,6 +96,7 @@ static void flip_buffer(struct buffer *buf);
 /* 'outline' data structure management */
 static int  init_outline(struct outline *outl);
 static void free_outline(struct outline *outl);
+static int  grow_points(struct outline *outl);
 static int  grow_curves(struct outline *outl);
 static int  grow_lines(struct outline *outl);
 /* TTF parsing utilities */
@@ -507,6 +509,10 @@ flip_buffer(struct buffer *buf)
 static int
 init_outline(struct outline *outl)
 {
+	outl->numPoints = 0;
+	outl->capPoints = 64;
+	if ((outl->points = malloc(outl->capPoints * sizeof(outl->points[0]))) == NULL)
+		return -1;
 	outl->numCurves = 0;
 	outl->capCurves = 64;
 	if ((outl->curves = malloc(outl->capCurves * sizeof(outl->curves[0]))) == NULL)
@@ -521,8 +527,21 @@ init_outline(struct outline *outl)
 static void
 free_outline(struct outline *outl)
 {
+	free(outl->points);
 	free(outl->curves);
 	free(outl->lines);
+}
+
+static int
+grow_points(struct outline *outl)
+{
+	void *mem;
+	int cap = outl->capPoints * 2;
+	if ((mem = realloc(outl->points, cap * sizeof(outl->points[0]))) == NULL)
+		return -1;
+	outl->capPoints = cap;
+	outl->points = mem;
+	return 0;
 }
 
 static int

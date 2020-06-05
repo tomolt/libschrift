@@ -127,7 +127,7 @@ static int  glyph_extents(SFT_Font *font, unsigned long offset, double transform
 /* decoding outlines */
 static long simple_flags(SFT_Font *font, unsigned long offset, int numPts, uint8_t *flags);
 static int  simple_points(SFT_Font *font, long offset, int numPts, uint8_t *flags, struct point *points);
-static int  decode_contours(int numContours, unsigned int *endPts, uint8_t *flags, struct outline *outl);
+static int  decode_contours(int numContours, unsigned int *endPts, uint8_t *flags, unsigned int basePoint, struct outline *outl);
 static int  simple_outline(const struct SFT *sft, long offset, int numContours, struct buffer buf, double transform[6], struct outline *outl);
 static int  compound_outline(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6], int recDepth, struct outline *outl);
 static int  decode_outline(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6], int recDepth, struct outline *outl);
@@ -963,7 +963,7 @@ struct iline { uint_fast16_t beg, end; };
 struct icurve { uint_fast16_t beg, end, ctrl; };
 
 static int
-decode_contours(int numContours, unsigned int *endPts, uint8_t *flags, struct outline *outl)
+decode_contours(int numContours, unsigned int *endPts, uint8_t *flags, unsigned int basePoint, struct outline *outl)
 {
 	struct iline lines[512];
 	struct icurve curves[512];
@@ -984,26 +984,26 @@ decode_contours(int numContours, unsigned int *endPts, uint8_t *flags, struct ou
 		assert(l > f);
 
 		if (flags[f] & POINT_IS_ON_CURVE) {
-			looseEnd = f++;
+			looseEnd = basePoint + f++;
 		} else if (flags[l] & POINT_IS_ON_CURVE) {
-			looseEnd = l--;
+			looseEnd = basePoint + l--;
 		} else {
 			if (outl->numPoints >= outl->capPoints && grow_points(outl) < 0)
 				return -1;
 
 			looseEnd = outl->numPoints;
-			outl->points[outl->numPoints++] = midpoint(outl->points[f], outl->points[l]);
+			outl->points[outl->numPoints++] = midpoint(outl->points[basePoint + f], outl->points[basePoint + l]);
 		}
 		beg = looseEnd;
 		gotCtrl = 0;
 		for (i = f; i <= l; ++i) {
 			if (flags[i] & POINT_IS_ON_CURVE) {
 				if (gotCtrl) {
-					curves[numCurves++] = (struct icurve) { beg, i, ctrl };
+					curves[numCurves++] = (struct icurve) { beg, basePoint + i, ctrl };
 				} else {
-					lines[numLines++] = (struct iline) { beg, i };
+					lines[numLines++] = (struct iline) { beg, basePoint + i };
 				}
-				beg = i;
+				beg = basePoint + i;
 				gotCtrl = 0;
 			} else {
 				if (gotCtrl) {
@@ -1011,13 +1011,13 @@ decode_contours(int numContours, unsigned int *endPts, uint8_t *flags, struct ou
 						return -1;
 
 					center = outl->numPoints;
-					outl->points[outl->numPoints++] = midpoint(outl->points[ctrl], outl->points[i]);
+					outl->points[outl->numPoints++] = midpoint(outl->points[ctrl], outl->points[basePoint + i]);
 
 					curves[numCurves++] = (struct icurve) { beg, center, ctrl };
 
 					beg = center;
 				}
-				ctrl = i;
+				ctrl = basePoint + i;
 				gotCtrl = 1;
 			}
 		}
@@ -1093,7 +1093,7 @@ simple_outline(const struct SFT *sft, long offset, int numContours, struct buffe
 	outl->numPoints = numPts;
 	transform_points(numPts, outl->points, transform);
 	clip_points(numPts, outl->points, buf);
-	if (decode_contours(numContours, endPts, flags, outl) < 0)
+	if (decode_contours(numContours, endPts, flags, 0, outl) < 0)
 		goto failure;
 
 	STACK_FREE(memory) ;

@@ -54,8 +54,8 @@ enum { SrcMapping, SrcUser };
 
 /* structs */
 struct point   { double x, y; };
-struct line    { struct point beg, end; };
-struct curve   { struct point beg, ctrl, end; };
+struct line    { uint_least16_t beg, end; };
+struct curve   { uint_least16_t beg, end, ctrl; };
 struct cell    { int16_t area, cover; };
 
 struct outline
@@ -63,8 +63,8 @@ struct outline
 	struct point *points;
 	struct curve *curves;
 	struct line *lines;
-	int numPoints, numCurves, numLines;
-	int capPoints, capCurves, capLines;
+	unsigned int numPoints, numCurves, numLines;
+	unsigned int capPoints, capCurves, capLines;
 };
 
 struct buffer
@@ -132,11 +132,11 @@ static int  simple_outline(const struct SFT *sft, long offset, int numContours, 
 static int  compound_outline(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6], int recDepth, struct outline *outl);
 static int  decode_outline(const struct SFT *sft, unsigned long offset, struct buffer buf, double transform[6], int recDepth, struct outline *outl);
 /* tesselation */
-static int  is_flat(struct curve curve, double flatness);
+static int  is_flat(struct outline *outl, struct curve curve, double flatness);
 static int  tesselate_curves(struct outline *outl);
 /* silhouette rasterization */
 static void draw_dot(struct buffer buf, int px, int py, double xAvg, double yDiff);
-static void draw_line(struct buffer buf, struct line line);
+static void draw_line(struct buffer buf, struct point origin, struct point goal);
 /* post-processing */
 static void post_process(struct buffer buf, uint8_t *image);
 
@@ -347,8 +347,11 @@ sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 			free_outline(&outl);
 			return -1;
 		}
-		for (int i = 0; i < outl.numLines; ++i) {
-			draw_line(buf, outl.lines[i]);
+		for (unsigned int i = 0; i < outl.numLines; ++i) {
+			struct line line = outl.lines[i];
+			struct point origin = outl.points[line.beg];
+			struct point goal = outl.points[line.end];
+			draw_line(buf, origin, goal);
 		}
 		free_outline(&outl);
 		if (sft->flags & SFT_DOWNWARD_Y) {
@@ -959,18 +962,11 @@ simple_points(SFT_Font *font, long offset, int numPts, uint8_t *flags, struct po
 	return 0;
 }
 
-struct iline { uint_fast16_t beg, end; };
-struct icurve { uint_fast16_t beg, end, ctrl; };
-
 static int
 decode_contour(uint8_t *flags, unsigned int f, unsigned int l, unsigned int basePoint, struct outline *outl)
 {
-	struct iline lines[512];
-	struct icurve curves[512];
 	unsigned int looseEnd, beg, ctrl, center;
 	unsigned int gotCtrl, i;
-	unsigned int numLines = 0;
-	unsigned int numCurves = 0;
 
 	/* Skip contours with less than two points, since the following algorithm can't handle them and
 	 * they should appear invisible either way (because they don't have any area). */
@@ -993,21 +989,27 @@ decode_contour(uint8_t *flags, unsigned int f, unsigned int l, unsigned int base
 	for (i = f; i <= l; ++i) {
 		if (flags[i] & POINT_IS_ON_CURVE) {
 			if (gotCtrl) {
-				curves[numCurves++] = (struct icurve) { beg, basePoint + i, ctrl };
+				if (outl->numCurves >= outl->capCurves && grow_curves(outl) < 0)
+					return -1;
+				outl->curves[outl->numCurves++] = (struct curve) { beg, basePoint + i, ctrl };
 			} else {
-				lines[numLines++] = (struct iline) { beg, basePoint + i };
+				if (outl->numLines >= outl->capLines && grow_lines(outl) < 0)
+					return -1;
+				outl->lines[outl->numLines++] = (struct line) { beg, basePoint + i };
 			}
 			beg = basePoint + i;
 			gotCtrl = 0;
 		} else {
 			if (gotCtrl) {
+				center = outl->numPoints;
 				if (outl->numPoints >= outl->capPoints && grow_points(outl) < 0)
 					return -1;
+				outl->points[center] = midpoint(outl->points[ctrl], outl->points[basePoint + i]);
+				++outl->numPoints;
 
-				center = outl->numPoints;
-				outl->points[outl->numPoints++] = midpoint(outl->points[ctrl], outl->points[basePoint + i]);
-
-				curves[numCurves++] = (struct icurve) { beg, center, ctrl };
+				if (outl->numCurves >= outl->capCurves && grow_curves(outl) < 0)
+					return -1;
+				outl->curves[outl->numCurves++] = (struct curve) { beg, center, ctrl };
 
 				beg = center;
 			}
@@ -1016,27 +1018,15 @@ decode_contour(uint8_t *flags, unsigned int f, unsigned int l, unsigned int base
 		}
 	}
 	if (gotCtrl) {
-		curves[numCurves++] = (struct icurve) { beg, looseEnd, ctrl };
-	} else {
-		lines[numLines++] = (struct iline) { beg, looseEnd };
-	}
-
-	for (i = 0; i < numCurves; ++i) {
 		if (outl->numCurves >= outl->capCurves && grow_curves(outl) < 0)
 			return -1;
-
-		struct curve curve = { outl->points[curves[i].beg],
-			outl->points[curves[i].ctrl], outl->points[curves[i].end] };
-		outl->curves[outl->numCurves++] = curve;
-	}
-
-	for (i = 0; i < numLines; ++i) {
+		outl->curves[outl->numCurves++] = (struct curve) { beg, looseEnd, ctrl };
+	} else {
 		if (outl->numLines >= outl->capLines && grow_lines(outl) < 0)
 			return -1;
-
-		struct line line = { outl->points[lines[i].beg], outl->points[lines[i].end] };
-		outl->lines[outl->numLines++] = line;
+		outl->lines[outl->numLines++] = (struct line) { beg, looseEnd };
 	}
+
 	return 0;
 }
 
@@ -1046,14 +1036,16 @@ simple_outline(const struct SFT *sft, long offset, int numContours, struct buffe
 	unsigned int *endPts;
 	uint8_t *memory = NULL, *flags;
 	unsigned long memLen;
-	int i, numPts;
+	unsigned int numPts;
+	int i;
+
+	unsigned int basePoint = outl->numPoints;
 
 	if (sft->font->size < (unsigned long) offset + numContours * 2 + 2)
 		goto failure;
 	numPts = getu16(sft->font, offset + (numContours - 1) * 2) + 1;
 
-	outl->numPoints = 0;
-	while (outl->capPoints < numPts) {
+	while (outl->capPoints < basePoint + numPts) {
 		if (grow_points(outl) < 0)
 			return -1;
 	}
@@ -1081,16 +1073,16 @@ simple_outline(const struct SFT *sft, long offset, int numContours, struct buffe
 
 	if ((offset = simple_flags(sft->font, offset, numPts, flags)) < 0)
 		goto failure;
-	if (simple_points(sft->font, offset, numPts, flags, outl->points) < 0)
+	if (simple_points(sft->font, offset, numPts, flags, outl->points + basePoint) < 0)
 		goto failure;
-	outl->numPoints = numPts;
-	transform_points(numPts, outl->points, transform);
-	clip_points(numPts, outl->points, buf);
+	outl->numPoints += numPts;
+	transform_points(numPts, outl->points + basePoint, transform);
+	clip_points(numPts, outl->points + basePoint, buf);
 	
 	unsigned int first = 0, last;
 	for (int c = 0; c < numContours; ++c) {
 		last = endPts[c];
-		if (decode_contour(flags, first, last, 0, outl) < 0)
+		if (decode_contour(flags, first, last, basePoint, outl) < 0)
 			goto failure;
 		first = last + 1;
 	}
@@ -1193,11 +1185,14 @@ decode_outline(const struct SFT *sft, unsigned long offset, struct buffer buf, d
 
 /* A heuristic to tell whether a given curve can be approximated closely enough by a line. */
 static int
-is_flat(struct curve curve, double flatness)
+is_flat(struct outline *outl, struct curve curve, double flatness)
 {
-	struct point mid = midpoint(curve.beg, curve.end);
-	double x = curve.ctrl.x - mid.x;
-	double y = curve.ctrl.y - mid.y;
+	struct point beg = outl->points[curve.beg];
+	struct point end = outl->points[curve.end];
+	struct point ctrl = outl->points[curve.ctrl];
+	struct point mid = midpoint(beg, end);
+	double x = ctrl.x - mid.x;
+	double y = ctrl.y - mid.y;
 	return x * x + y * y <= flatness * flatness;
 }
 
@@ -1212,26 +1207,38 @@ tesselate_curves(struct outline *outl)
 	*/
 #define STACK_SIZE 10
 	struct curve stack[STACK_SIZE], curve;
-	struct line line;
-	struct point ctrl0, ctrl1, pivot;
-	int top, i;
+	unsigned int top, i;
 	for (i = 0; i < outl->numCurves; ++i) {
 		top = 0;
 		curve = outl->curves[i];
 		for (;;) {
-			if (is_flat(curve, 0.5) || top >= STACK_SIZE) {
-				line = (struct line) { curve.beg, curve.end };
+			if (is_flat(outl, curve, 0.5) || top >= STACK_SIZE) {
 				if (outl->numLines >= outl->capLines && grow_lines(outl) < 0)
 					return -1;
-				outl->lines[outl->numLines++] = line;
+				outl->lines[outl->numLines++] = (struct line) { curve.beg, curve.end };
 				if (top == 0) break;
 				curve = stack[--top];
 			} else {
-				ctrl0 = midpoint(curve.beg, curve.ctrl);
-				ctrl1 = midpoint(curve.ctrl, curve.end);
-				pivot = midpoint(ctrl0, ctrl1);
-				stack[top++] = (struct curve) { curve.beg, ctrl0, pivot };
-				curve = (struct curve) { pivot, ctrl1, curve.end };
+				unsigned int ctrl0 = outl->numPoints;
+				if (outl->numPoints >= outl->capPoints && grow_points(outl) < 0)
+					return -1;
+				outl->points[ctrl0] = midpoint(outl->points[curve.beg], outl->points[curve.ctrl]);
+				++outl->numPoints;
+
+				unsigned int ctrl1 = outl->numPoints;
+				if (outl->numPoints >= outl->capPoints && grow_points(outl) < 0)
+					return -1;
+				outl->points[ctrl1] = midpoint(outl->points[curve.ctrl], outl->points[curve.end]);
+				++outl->numPoints;
+
+				unsigned int pivot = outl->numPoints;
+				if (outl->numPoints >= outl->capPoints && grow_points(outl) < 0)
+					return -1;
+				outl->points[pivot] = midpoint(outl->points[ctrl0], outl->points[ctrl1]);
+				++outl->numPoints;
+
+				stack[top++] = (struct curve) { curve.beg, pivot, ctrl0 };
+				curve = (struct curve) { pivot, curve.end, ctrl1 };
 			}
 		}
 	}
@@ -1251,7 +1258,7 @@ draw_dot(struct buffer buf, int px, int py, double xAvg, double yDiff)
 
 /* Draws a line into the buffer. Uses a custom 2D raycasting algorithm to do so. */
 static void
-draw_line(struct buffer buf, struct line line)
+draw_line(struct buffer buf, struct point origin, struct point goal)
 {
 	double originX, originY;
 	double goalX, goalY;
@@ -1262,8 +1269,8 @@ draw_line(struct buffer buf, struct line line)
 	int pixelX, pixelY;
 	int iter, numIters;
 
-	originX = line.beg.x;
-	goalX = line.end.x;
+	originX = origin.x;
+	goalX = goal.x;
 	deltaX = goalX - originX;
 	pixelX = (int) originX;
 	if (deltaX != 0.0) {
@@ -1274,8 +1281,8 @@ draw_line(struct buffer buf, struct line line)
 		crossingGapX = fabs(signedGapX);
 	}
 
-	originY = line.beg.y;
-	goalY = line.end.y;
+	originY = origin.y;
+	goalY = goal.y;
 	deltaY = goalY - originY;
 	pixelY = (int) originY;
 	if (deltaY != 0.0) {
@@ -1307,7 +1314,7 @@ draw_line(struct buffer buf, struct line line)
 	}
 
 	double deltaDistance = 1.0 - prevDistance;
-	double averageX = (line.end.x - pixelX) - 0.5 * deltaX * deltaDistance;
+	double averageX = (goalX - pixelX) - 0.5 * deltaX * deltaDistance;
 	draw_dot(buf, pixelX, pixelY, averageX, deltaY * deltaDistance);
 }
 

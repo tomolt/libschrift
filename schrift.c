@@ -1039,7 +1039,6 @@ decode_contours(int numContours, unsigned int *endPts, uint8_t *flags, struct po
 static int
 simple_outline(const struct SFT *sft, long offset, int numContours, struct buffer buf, double transform[6], struct outline *outl)
 {
-	struct point *points;
 	unsigned int *endPts;
 	uint8_t *memory = NULL, *flags;
 	unsigned long memLen;
@@ -1048,15 +1047,18 @@ simple_outline(const struct SFT *sft, long offset, int numContours, struct buffe
 	if (sft->font->size < (unsigned long) offset + numContours * 2 + 2)
 		goto failure;
 	numPts = getu16(sft->font, offset + (numContours - 1) * 2) + 1;
+
+	while (outl->capPoints < numPts) {
+		if (grow_points(outl) < 0)
+			return -1;
+	}
 	
-	memLen  = numPts * sizeof(points[0]);
 	memLen += numContours * sizeof(endPts[0]);
 	memLen += numPts * sizeof(flags[0]);
 	STACK_ALLOC(memory, memLen, 2048) ;
 	if (memory == NULL)
 		goto failure;
-	points = (struct point *) memory;
-	endPts = (unsigned int *) (points + numPts);
+	endPts = (unsigned int *) memory;
 	flags = (uint8_t *) (endPts + numContours);
 
 	for (i = 0; i < numContours; ++i) {
@@ -1074,11 +1076,11 @@ simple_outline(const struct SFT *sft, long offset, int numContours, struct buffe
 
 	if ((offset = simple_flags(sft->font, offset, numPts, flags)) < 0)
 		goto failure;
-	if (simple_points(sft->font, offset, numPts, flags, points) < 0)
+	if (simple_points(sft->font, offset, numPts, flags, outl->points) < 0)
 		goto failure;
-	transform_points(numPts, points, transform);
-	clip_points(numPts, points, buf);
-	if (decode_contours(numContours, endPts, flags, points, outl) < 0)
+	transform_points(numPts, outl->points, transform);
+	clip_points(numPts, outl->points, buf);
+	if (decode_contours(numContours, endPts, flags, outl->points, outl) < 0)
 		goto failure;
 
 	STACK_FREE(memory) ;

@@ -59,7 +59,7 @@ It lets users query codepoint-specific information, like horizontal advance widt
 It can also render a specified codepoint to an in-memory image.
 More details can be found in the following sections.
 .Ss The SFT structure
-The struct SFT is a structure to be filled out by the application using schrift.
+The struct SFT is a structure to be filled out by the application.
 It bundles all the different parameters neccessary for drawing,
 like for example which font to use, or how big the text should be, into a single struct.
 Most functions in
@@ -134,34 +134,42 @@ The fields are as follows:
 .It Va image
 An 8-bit grayscale image without any padding, so each byte corresponds to one pixel.
 The colors are inverse to what you would expect: Text is always drawn white on black.
-That's because this way it's really convenient to use the image as an alpha mask.
-This is also the reason why the image isn't gamma corrected.
+That is because this way it is really convenient to use the image as an alpha mask.
+This is also the reason why the image is not gamma corrected.
+.sp
 This field only gets set if the flag
 .Dv SFT_RENDER_IMAGE
 was set.
 In this case, it is the caller's duty to later release the image's memory again by calling
 .Fn free
 \&.
+Otherwise, if
+.Dv SFT_RENDER_IMAGE
+was not set, this field is set to NULL.
 .It Va x
-The X offset in pixels that should be applied to the image.
+The X offset in pixels that the application should apply when displaying the image on the screen.
 .It Va y
-The Y offset in pixels that should be applied to the image.
+The Y offset in pixels that the application should apply when displaying the image on the screen.
+.sp
 The flag
 .Dv SFT_DOWNWARD_Y
 controls the orientation of the coordinate system that this field is relative to.
 .It Va width
 The width of the image in pixels.
+.sp
 This field gets set even if
 .Dv SFT_RENDER_IMAGE
 was not set.
 .It Va height
 The height of the image in pixels.
+.sp
 This field gets set even if
 .Dv SFT_RENDER_IMAGE
 was not set.
 .It Va missing
 Contains a positive value if the used font doesn't have data for the specified character,
 and a fallback character (the missing glyph) has been selected instead.
+It is 0 otherwise.
 .El
 .Sh RETURN VALUES
 .Fn sft_loadmem

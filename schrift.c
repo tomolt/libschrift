@@ -295,6 +295,8 @@ sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 	long glyph, outline;
 	int x, y, w, h;
 
+	memset(chr, 0, sizeof(*chr));
+
 	if ((glyph = glyph_id(sft->font, charCode)) < 0)
 		return -1;
 	
@@ -306,13 +308,9 @@ sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 		return -1;
 	if ((outline = outline_offset(sft->font, glyph)) < 0)
 		return -1;
-	if (!outline) {
-		/* Glyph has completely empty outline. This is allowed by the spec. */
-		chr->x = chr->y = 0;
-		chr->width = chr->height = 0;
-		chr->image = NULL;
+	/* A glyph may have a completely empty outline. */
+	if (!outline)
 		return 0;
-	}
 	/* Set up the linear transformation. */
 	if (global_transform(sft, leftSideBearing, transform) < 0)
 		return -1;

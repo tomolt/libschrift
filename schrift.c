@@ -14,7 +14,7 @@
 
 #include "schrift.h"
 
-#define SCHRIFT_VERSION "0.6.0"
+#define SCHRIFT_VERSION "0.7.0"
 
 #define FILE_MAGIC_ONE             0x00010000
 #define FILE_MAGIC_TWO             0x74727565

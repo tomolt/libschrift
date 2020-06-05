@@ -959,13 +959,18 @@ simple_points(SFT_Font *font, long offset, int numPts, uint8_t *flags, struct po
 	return 0;
 }
 
+struct iline { uint_fast16_t beg, end; };
+struct icurve { uint_fast16_t beg, end, ctrl; };
+
 static int
 decode_contours(int numContours, unsigned int *endPts, uint8_t *flags, struct point *points, struct outline *outl)
 {
-	struct curve curve;
-	struct line line;
-	struct point looseEnd, beg, ctrl, center;
+	struct iline lines[512];
+	struct icurve curves[512];
+	unsigned int looseEnd, beg, ctrl, center;
 	int nextPt, c, f, l, gotCtrl, i;
+	int numLines = 0;
+	int numCurves = 0;
 
 	nextPt = 0;
 	for (c = 0; c < numContours; ++c) {
@@ -979,59 +984,65 @@ decode_contours(int numContours, unsigned int *endPts, uint8_t *flags, struct po
 		assert(l > f);
 
 		if (flags[f] & POINT_IS_ON_CURVE) {
-			looseEnd = points[f++];
+			looseEnd = f++;
 		} else if (flags[l] & POINT_IS_ON_CURVE) {
-			looseEnd = points[l--];
+			looseEnd = l--;
 		} else {
-			looseEnd = midpoint(points[f], points[l]);
+			if (outl->numPoints >= outl->capPoints && grow_points(outl) < 0)
+				return -1;
+
+			looseEnd = outl->numPoints;
+			outl->points[outl->numPoints++] = midpoint(points[f], points[l]);
 		}
 		beg = looseEnd;
 		gotCtrl = 0;
 		for (i = f; i <= l; ++i) {
 			if (flags[i] & POINT_IS_ON_CURVE) {
 				if (gotCtrl) {
-					if (outl->numCurves >= outl->capCurves && grow_curves(outl) < 0)
-						return -1;
-
-					curve = (struct curve) { beg, ctrl, points[i] };
-					outl->curves[outl->numCurves++] = curve;
-				} else if (beg.y != points[i].y) {
-					if (outl->numLines >= outl->capLines && grow_lines(outl) < 0)
-						return -1;
-
-					line = (struct line) { beg, points[i] };
-					outl->lines[outl->numLines++] = line;
+					curves[numCurves++] = (struct icurve) { beg, i, ctrl };
+				} else {
+					lines[numLines++] = (struct iline) { beg, i };
 				}
-				beg = points[i];
+				beg = i;
 				gotCtrl = 0;
 			} else {
 				if (gotCtrl) {
-					if (outl->numCurves >= outl->capCurves && grow_curves(outl) < 0)
+					if (outl->numPoints >= outl->capPoints && grow_points(outl) < 0)
 						return -1;
 
-					center = midpoint(ctrl, points[i]);
-					curve = (struct curve) { beg, ctrl, center };
-					outl->curves[outl->numCurves++] = curve;
+					center = outl->numPoints;
+					outl->points[outl->numPoints++] = midpoint(points[ctrl], points[i]);
+
+					curves[numCurves++] = (struct icurve) { beg, center, ctrl };
 
 					beg = center;
 				}
-				ctrl = points[i];
+				ctrl = i;
 				gotCtrl = 1;
 			}
 		}
 		if (gotCtrl) {
-			if (outl->numCurves >= outl->capCurves && grow_curves(outl) < 0)
-				return -1;
-
-			curve = (struct curve) { beg, ctrl, looseEnd };
-			outl->curves[outl->numCurves++] = curve;
-		} else if (beg.y != looseEnd.y) {
-			if (outl->numLines >= outl->capLines && grow_lines(outl) < 0)
-				return -1;
-
-			line = (struct line) { beg, looseEnd };
-			outl->lines[outl->numLines++] = line;
+			curves[numCurves++] = (struct icurve) { beg, looseEnd, ctrl };
+		} else {
+			lines[numLines++] = (struct iline) { beg, looseEnd };
 		}
+	}
+
+	for (i = 0; i < numCurves; ++i) {
+		if (outl->numCurves >= outl->capCurves && grow_curves(outl) < 0)
+			return -1;
+
+		struct curve curve = { points[curves[i].beg],
+			points[curves[i].ctrl], points[curves[i].end] };
+		outl->curves[outl->numCurves++] = curve;
+	}
+
+	for (i = 0; i < numLines; ++i) {
+		if (outl->numLines >= outl->capLines && grow_lines(outl) < 0)
+			return -1;
+
+		struct line line = { points[lines[i].beg], points[lines[i].end] };
+		outl->lines[outl->numLines++] = line;
 	}
 	return 0;
 }
@@ -1048,6 +1059,7 @@ simple_outline(const struct SFT *sft, long offset, int numContours, struct buffe
 		goto failure;
 	numPts = getu16(sft->font, offset + (numContours - 1) * 2) + 1;
 
+	outl->numPoints = 0;
 	while (outl->capPoints < numPts) {
 		if (grow_points(outl) < 0)
 			return -1;
@@ -1078,6 +1090,7 @@ simple_outline(const struct SFT *sft, long offset, int numContours, struct buffe
 		goto failure;
 	if (simple_points(sft->font, offset, numPts, flags, outl->points) < 0)
 		goto failure;
+	outl->numPoints = numPts;
 	transform_points(numPts, outl->points, transform);
 	clip_points(numPts, outl->points, buf);
 	if (decode_contours(numContours, endPts, flags, outl->points, outl) < 0)

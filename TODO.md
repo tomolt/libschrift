@@ -34,9 +34,7 @@ The following bullet points are listed in no particular order.
 - `clip_points` probably should take the outline as the primary argument.
 - Perhaps rename `struct buffer` to `struct raster` again?
 - The following new functions to map array problems to single instance problems:
-  * `draw_lines` / `draw_line`
   * `decode_contours` / `decode_contour`
-  * `tesselate_curves` / `tesselate_curve`
 - Consider internally switching to floats for most rational number representations.
 - Replace usage of overly specific integer sizes (`uint16_t` etc.) with slightly
   more malleable ones. Either builtin integer types or ones of the form `uint_least16_t`.

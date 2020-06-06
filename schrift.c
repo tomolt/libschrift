@@ -132,10 +132,12 @@ static int  compound_outline(const struct SFT *sft, unsigned long offset, int re
 static int  decode_outline(const struct SFT *sft, unsigned long offset, int recDepth, struct outline *outl);
 /* tesselation */
 static int  is_flat(struct outline *outl, struct curve curve, double flatness);
+static int  tesselate_curve(struct curve curve, struct outline *outl);
 static int  tesselate_curves(struct outline *outl);
 /* silhouette rasterization */
 static void draw_dot(struct buffer buf, int px, int py, double xAvg, double yDiff);
 static void draw_line(struct buffer buf, struct point origin, struct point goal);
+static void draw_lines(struct outline *outl, struct buffer buf);
 /* post-processing */
 static void post_process(struct buffer buf, uint8_t *image);
 
@@ -336,9 +338,11 @@ sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 		}
 		struct outline outl = { 0 };
 		if (init_outline(&outl) < 0) {
+			free(buf.rows);
 			return -1;
 		}
 		if (decode_outline(sft, outline, 0, &outl) < 0) {
+			free_outline(&outl);
 			free(buf.rows);
 			return -1;
 		}
@@ -348,12 +352,7 @@ sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 			free_outline(&outl);
 			return -1;
 		}
-		for (unsigned int i = 0; i < outl.numLines; ++i) {
-			struct line line = outl.lines[i];
-			struct point origin = outl.points[line.beg];
-			struct point goal = outl.points[line.end];
-			draw_line(buf, origin, goal);
-		}
+		draw_lines(&outl, buf);
 		free_outline(&outl);
 		if (sft->flags & SFT_DOWNWARD_Y) {
 			flip_buffer(&buf);
@@ -1189,53 +1188,58 @@ is_flat(struct outline *outl, struct curve curve, double flatness)
 }
 
 static int
-tesselate_curves(struct outline *outl)
+tesselate_curve(struct curve curve, struct outline *outl)
 {
-	/*
-	From my tests I can conclude that this stack barely reaches a top height
-	of 4 elements even for the largest font sizes I'm willing to support. And
-	as space requirements should only grow logarithmically, I think 10 is
-	more than enough.
-	*/
+	/* From my tests I can conclude that this stack barely reaches a top height
+	 * of 4 elements even for the largest font sizes I'm willing to support. And
+	 * as space requirements should only grow logarithmically, I think 10 is
+	 * more than enough. */
 #define STACK_SIZE 10
-	struct curve stack[STACK_SIZE], curve;
-	unsigned int top, i;
-	for (i = 0; i < outl->numCurves; ++i) {
-		top = 0;
-		curve = outl->curves[i];
-		for (;;) {
-			if (is_flat(outl, curve, 0.5) || top >= STACK_SIZE) {
-				if (outl->numLines >= outl->capLines && grow_lines(outl) < 0)
-					return -1;
-				outl->lines[outl->numLines++] = (struct line) { curve.beg, curve.end };
-				if (top == 0) break;
-				curve = stack[--top];
-			} else {
-				unsigned int ctrl0 = outl->numPoints;
-				if (outl->numPoints >= outl->capPoints && grow_points(outl) < 0)
-					return -1;
-				outl->points[ctrl0] = midpoint(outl->points[curve.beg], outl->points[curve.ctrl]);
-				++outl->numPoints;
+	struct curve stack[STACK_SIZE];
+	unsigned int top = 0;
+	for (;;) {
+		if (is_flat(outl, curve, 0.5) || top >= STACK_SIZE) {
+			if (outl->numLines >= outl->capLines && grow_lines(outl) < 0)
+				return -1;
+			outl->lines[outl->numLines++] = (struct line) { curve.beg, curve.end };
+			if (top == 0) break;
+			curve = stack[--top];
+		} else {
+			unsigned int ctrl0 = outl->numPoints;
+			if (outl->numPoints >= outl->capPoints && grow_points(outl) < 0)
+				return -1;
+			outl->points[ctrl0] = midpoint(outl->points[curve.beg], outl->points[curve.ctrl]);
+			++outl->numPoints;
 
-				unsigned int ctrl1 = outl->numPoints;
-				if (outl->numPoints >= outl->capPoints && grow_points(outl) < 0)
-					return -1;
-				outl->points[ctrl1] = midpoint(outl->points[curve.ctrl], outl->points[curve.end]);
-				++outl->numPoints;
+			unsigned int ctrl1 = outl->numPoints;
+			if (outl->numPoints >= outl->capPoints && grow_points(outl) < 0)
+				return -1;
+			outl->points[ctrl1] = midpoint(outl->points[curve.ctrl], outl->points[curve.end]);
+			++outl->numPoints;
 
-				unsigned int pivot = outl->numPoints;
-				if (outl->numPoints >= outl->capPoints && grow_points(outl) < 0)
-					return -1;
-				outl->points[pivot] = midpoint(outl->points[ctrl0], outl->points[ctrl1]);
-				++outl->numPoints;
+			unsigned int pivot = outl->numPoints;
+			if (outl->numPoints >= outl->capPoints && grow_points(outl) < 0)
+				return -1;
+			outl->points[pivot] = midpoint(outl->points[ctrl0], outl->points[ctrl1]);
+			++outl->numPoints;
 
-				stack[top++] = (struct curve) { curve.beg, pivot, ctrl0 };
-				curve = (struct curve) { pivot, curve.end, ctrl1 };
-			}
+			stack[top++] = (struct curve) { curve.beg, pivot, ctrl0 };
+			curve = (struct curve) { pivot, curve.end, ctrl1 };
 		}
 	}
 	return 0;
 #undef STACK_SIZE
+}
+
+static int
+tesselate_curves(struct outline *outl)
+{
+	unsigned int i;
+	for (i = 0; i < outl->numCurves; ++i) {
+		if (tesselate_curve(outl->curves[i], outl) < 0)
+			return -1;
+	}
+	return 0;
 }
 
 static void
@@ -1308,6 +1312,18 @@ draw_line(struct buffer buf, struct point origin, struct point goal)
 	double deltaDistance = 1.0 - prevDistance;
 	double averageX = (goalX - pixelX) - 0.5 * deltaX * deltaDistance;
 	draw_dot(buf, pixelX, pixelY, averageX, deltaY * deltaDistance);
+}
+
+static void
+draw_lines(struct outline *outl, struct buffer buf)
+{
+	unsigned int i;
+	for (i = 0; i < outl->numLines; ++i) {
+		struct line line = outl->lines[i];
+		struct point origin = outl->points[line.beg];
+		struct point goal = outl->points[line.end];
+		draw_line(buf, origin, goal);
+	}
 }
 
 /* Integrate the values in the buffer to arrive at the final grayscale image. */

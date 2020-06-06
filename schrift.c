@@ -88,9 +88,10 @@ static void unmap_file(SFT_Font *font);
 static inline int quantize(double x);
 static struct point midpoint(struct point a, struct point b);
 static void transform_points(int numPts, struct point *points, double trf[6]);
-static void clip_points(int numPts, struct point *points, struct buffer buf);
+static void clip_points(int numPts, struct point *points, int width, int height);
 /* 'buffer' data structure management */
 static int  init_buffer(struct buffer *buf, int width, int height);
+static void free_buffer(struct buffer *buf);
 static void flip_buffer(struct buffer *buf);
 /* 'outline' data structure management */
 static int  init_outline(struct outline *outl);
@@ -140,6 +141,8 @@ static void draw_line(struct buffer buf, struct point origin, struct point goal)
 static void draw_lines(struct outline *outl, struct buffer buf);
 /* post-processing */
 static void post_process(struct buffer buf, uint8_t *image);
+/* glyph rendering */
+static int render_image(const struct SFT *sft, unsigned long offset, double transform[6], struct SFT_Char *chr);
 
 /* function implementations */
 
@@ -294,7 +297,6 @@ int
 sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 {
 	double transform[6];
-	struct buffer buf;
 	double leftSideBearing;
 	long glyph, outline;
 	int x, y, w, h;
@@ -332,37 +334,9 @@ sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 		/* Make transformation relative to min corner. */
 		transform[4] -= x;
 		transform[5] -= y;
-		/* Allocate internal buffer for drawing into. */
-		if (init_buffer(&buf, w, h) < 0) {
+	
+		if (render_image(sft, outline, transform, chr) < 0)
 			return -1;
-		}
-		struct outline outl = { 0 };
-		if (init_outline(&outl) < 0) {
-			free(buf.rows);
-			return -1;
-		}
-		if (decode_outline(sft, outline, 0, &outl) < 0) {
-			free_outline(&outl);
-			free(buf.rows);
-			return -1;
-		}
-		transform_points(outl.numPoints, outl.points, transform);
-		clip_points(outl.numPoints, outl.points, buf);
-		if (tesselate_curves(&outl) < 0) {
-			free_outline(&outl);
-			return -1;
-		}
-		draw_lines(&outl, buf);
-		free_outline(&outl);
-		if (sft->flags & SFT_DOWNWARD_Y) {
-			flip_buffer(&buf);
-		}
-		if ((chr->image = calloc(w * h, 1)) == NULL) {
-			free(buf.rows);
-			return -1;
-		}
-		post_process(buf, chr->image);
-		free(buf.rows);
 	}
 	return 0;
 }
@@ -427,7 +401,7 @@ transform_points(int numPts, struct point *points, double trf[6])
 }
 
 static void
-clip_points(int numPts, struct point *points, struct buffer buf)
+clip_points(int numPts, struct point *points, int width, int height)
 {
 	struct point pt;
 	double dv;
@@ -440,8 +414,8 @@ clip_points(int numPts, struct point *points, struct buffer buf)
 		if (pt.x < 0.0) {
 			points[i].x = 0.0;
 		}
-		if (pt.x >= buf.width) {
-			dv = buf.width;
+		if (pt.x >= width) {
+			dv = width;
 			ip = (void *) &dv;
 			--*ip;
 			points[i].x = dv;
@@ -449,8 +423,8 @@ clip_points(int numPts, struct point *points, struct buffer buf)
 		if (pt.y < 0.0) {
 			points[i].y = 0.0;
 		}
-		if (pt.y >= buf.height) {
-			dv = buf.height;
+		if (pt.y >= height) {
+			dv = height;
 			ip = (void *) &dv;
 			--*ip;
 			points[i].y = dv;
@@ -481,6 +455,12 @@ init_buffer(struct buffer *buf, int width, int height)
 	}
 
 	return 0;
+}
+
+static void
+free_buffer(struct buffer *buf)
+{
+	free(buf->rows);
 }
 
 static void
@@ -1343,5 +1323,38 @@ post_process(struct buffer buf, uint8_t *image)
 			accum += cell.cover;
 		}
 	}
+}
+
+static int
+render_image(const struct SFT *sft, unsigned long offset, double transform[6], struct SFT_Char *chr)
+{
+	struct outline outl = { 0 };
+	struct buffer buf = { 0 };
+	int err = 0;
+
+	err |= init_outline(&outl) < 0;
+	err |= decode_outline(sft, offset, 0, &outl) < 0;
+	if (!err) {
+		transform_points(outl.numPoints, outl.points, transform);
+		clip_points(outl.numPoints, outl.points, chr->width, chr->height);
+	}
+	err |= tesselate_curves(&outl) < 0;
+
+	err |= init_buffer(&buf, chr->width, chr->height) < 0;
+	if (!err) {
+		draw_lines(&outl, buf);
+		if (sft->flags & SFT_DOWNWARD_Y)
+			flip_buffer(&buf);
+	}
+
+	err |= (chr->image = calloc(chr->width * chr->height, 1)) == NULL;
+	if (!err) {
+		post_process(buf, chr->image);
+	}
+
+	free_buffer(&buf);
+	free_outline(&outl);
+
+	return err ? -1 : 0;
 }
 

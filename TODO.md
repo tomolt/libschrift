@@ -2,7 +2,6 @@
 The following bullet points are listed in no particular order.
 
 ## Bugs
-- Fix a minor memory leak in `sft_char` that only happens in nearly-OOM situations.
 
 ## Features
 - Kerning needs to be tested.
@@ -29,7 +28,6 @@ The following bullet points are listed in no particular order.
 ## Code Quality
 - Refactor `simple_outline`
 - Refactor `tesselate_curves`
-- Change `sft_char` to bulk-deallocate at the end.
 - `transform_points` probably should take the outline as the primary argument.
 - `clip_points` probably should take the outline as the primary argument.
 - Perhaps rename `struct buffer` to `struct raster` again?

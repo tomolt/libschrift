@@ -2,8 +2,7 @@
 The following bullet points are listed in no particular order.
 
 ## Bugs
-There are currently no known bugs ...
-But that doesn't mean there aren't any!
+- Fix a minor memory leak in `sft_char` that only happens in nearly-OOM situations.
 
 ## Features
 - Kerning needs to be tested.
@@ -26,4 +25,19 @@ But that doesn't mean there aren't any!
 - Example snippets in the man page.
 - The `sft_kerning` function has to be documented, preferably in the man page.
 - The inner workings of `sftdemo` have to be better documented, as it is meant to be example code.
+
+## Code Quality
+- Refactor `simple_outline`
+- Refactor `tesselate_curves`
+- Change `sft_char` to bulk-deallocate at the end.
+- `transform_points` probably should take the outline as the primary argument.
+- `clip_points` probably should take the outline as the primary argument.
+- Perhaps rename `struct buffer` to `struct raster` again?
+- The following new functions to map array problems to single instance problems:
+  * `draw_lines` / `draw_line`
+  * `decode_contours` / `decode_contour`
+  * `tesselate_curves` / `tesselate_curve`
+- Consider internally switching to floats for most rational number representations.
+- Replace usage of overly specific integer sizes (`uint16_t` etc.) with slightly
+  more malleable ones. Either builtin integer types or ones of the form `uint_least16_t`.
 

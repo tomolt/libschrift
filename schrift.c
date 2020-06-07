@@ -56,7 +56,7 @@ enum { SrcMapping, SrcUser };
 struct point   { double x, y; };
 struct line    { uint_least16_t beg, end; };
 struct curve   { uint_least16_t beg, end, ctrl; };
-struct cell    { int16_t area, cover; };
+struct cell    { int_least16_t area, cover; };
 
 struct outline
 {

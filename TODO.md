@@ -1,7 +1,9 @@
-# schrift TODOs
+# schrift To-Do's
 The following bullet points are listed in no particular order.
 
 ## Bugs
+- Some characters still seems to exhibit a left side bearing issue.
+- Consider switching to floats in `struct cell` to circumvent quantization errors.
 
 ## Features
 - Kerning needs to be tested.

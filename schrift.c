@@ -1334,26 +1334,20 @@ render_image(const struct SFT *sft, unsigned long offset, double transform[6], s
 
 	err |= init_outline(&outl) < 0;
 	err |= decode_outline(sft, offset, 0, &outl) < 0;
-	if (!err) {
-		transform_points(outl.numPoints, outl.points, transform);
-		clip_points(outl.numPoints, outl.points, chr->width, chr->height);
-	}
+	if (!err) transform_points(outl.numPoints, outl.points, transform);
+	if (!err) clip_points(outl.numPoints, outl.points, chr->width, chr->height);
 	err |= tesselate_curves(&outl) < 0;
 
 	err |= init_buffer(&buf, chr->width, chr->height) < 0;
-	if (!err) {
-		draw_lines(&outl, buf);
-		if (sft->flags & SFT_DOWNWARD_Y)
-			flip_buffer(&buf);
-	}
+	if (!err) draw_lines(&outl, buf);
+	free_outline(&outl);
+	if (!err && sft->flags & SFT_DOWNWARD_Y)
+		flip_buffer(&buf);
 
 	err |= (chr->image = calloc(chr->width * chr->height, 1)) == NULL;
-	if (!err) {
-		post_process(buf, chr->image);
-	}
+	if (!err) post_process(buf, chr->image);
 
 	free_buffer(&buf);
-	free_outline(&outl);
 
 	return err ? -1 : 0;
 }

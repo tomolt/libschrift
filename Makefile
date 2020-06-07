@@ -28,6 +28,7 @@ util/aa_tree.o: util/aa_tree.c util/aa_tree.h
 
 clean:
 	rm -f *.o
+	rm -f util/*.o
 	rm -f libschrift.a
 	rm -f sftdemo
 	rm -f stress

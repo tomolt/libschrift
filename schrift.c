@@ -1304,7 +1304,9 @@ draw_lines(struct outline *outl, struct buffer buf)
 		struct line line = outl->lines[i];
 		struct point origin = outl->points[line.beg];
 		struct point goal = outl->points[line.end];
-		draw_line(buf, origin, goal);
+		if (origin.y != goal.y) {
+			draw_line(buf, origin, goal);
+		}
 	}
 }
 

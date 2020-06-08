@@ -56,7 +56,7 @@ enum { SrcMapping, SrcUser };
 struct point { double x, y; };
 struct line  { uint_least16_t beg, end; };
 struct curve { uint_least16_t beg, end, ctrl; };
-struct cell  { int_least16_t area, cover; };
+struct cell  { double area, cover; };
 
 struct outline
 {
@@ -1229,8 +1229,8 @@ draw_dot(struct buffer buf, int px, int py, double xAvg, double yDiff)
 {
 	struct cell *restrict ptr = &buf.rows[py][px];
 	struct cell cell = *ptr;
-	cell.cover += quantize(yDiff);
-	cell.area += quantize((1.0 - xAvg) * yDiff);
+	cell.cover += yDiff;
+	cell.area += (1.0 - xAvg) * yDiff;
 	*ptr = cell;
 }
 
@@ -1314,14 +1314,15 @@ post_process(struct buffer buf, uint8_t *image)
 {
 	struct cell *restrict in, cell;
 	uint8_t *restrict out;
-	int x, y, accum;
+	double accum;
+	int x, y;
 	out = image;
 	for (y = 0; y < buf.height; ++y) {
-		accum = 0;
+		accum = 0.0;
 		in = buf.rows[y];
 		for (x = 0; x < buf.width; ++x) {
 			cell = *in++;
-			*out++ = MIN(abs(accum + cell.area), 255);
+			*out++ = quantize(MIN(fabs(accum + cell.area), 1.0));
 			accum += cell.cover;
 		}
 	}

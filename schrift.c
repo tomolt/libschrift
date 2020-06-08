@@ -56,7 +56,7 @@ enum { SrcMapping, SrcUser };
 struct point { double x, y; };
 struct line  { uint_least16_t beg, end; };
 struct curve { uint_least16_t beg, end, ctrl; };
-struct cell  { int_least16_t area, cover; };
+struct cell  { double area, cover; };
 
 struct outline
 {
@@ -126,7 +126,7 @@ static long outline_offset(SFT_Font *font, long glyph);
 static int  glyph_extents(SFT_Font *font, unsigned long offset, double transform[6], int *x, int *y, int *w, int *h);
 /* decoding outlines */
 static long simple_flags(SFT_Font *font, unsigned long offset, int numPts, uint8_t *flags);
-static int  simple_points(SFT_Font *font, long offset, int numPts, uint8_t *flags, struct point *points);
+static int  simple_points(SFT_Font *font, unsigned long offset, int numPts, uint8_t *flags, struct point *points);
 static int  decode_contour(uint8_t *flags, unsigned int basePoint, unsigned int count, struct outline *outl);
 static int  simple_outline(SFT_Font *font, unsigned long offset, int numContours, struct outline *outl);
 static int  compound_outline(SFT_Font *font, unsigned long offset, int recDepth, struct outline *outl);
@@ -887,45 +887,47 @@ simple_flags(SFT_Font *font, unsigned long offset, int numPts, uint8_t *flags)
 
 /* For a 'simple' outline, decodes both X and Y coordinates for each point of the outline. */
 static int
-simple_points(SFT_Font *font, long offset, int numPts, uint8_t *flags, struct point *points)
+simple_points(SFT_Font *font, unsigned long offset, int numPts, uint8_t *flags, struct point *points)
 {
-	long xBytes = 0, yBytes = 0, xOffset, yOffset, x = 0, y = 0;
+	long accum, value, bit;
 	int i;
 
 	assert(numPts > 0);
 
+	accum = 0L;
 	for (i = 0; i < numPts; ++i) {
-		
-		if (flags[i] & X_CHANGE_IS_SMALL) xBytes += 1;
-		else if (!(flags[i] & X_CHANGE_IS_ZERO)) xBytes += 2;
-
-		if (flags[i] & Y_CHANGE_IS_SMALL) yBytes += 1;
-		else if (!(flags[i] & Y_CHANGE_IS_ZERO)) yBytes += 2;
-	}
-
-	if (font->size < (unsigned long) offset + xBytes + yBytes)
-		return -1;
-
-	xOffset = offset;
-	yOffset = offset + xBytes;
-	for (i = 0; i < numPts; ++i) {
-
 		if (flags[i] & X_CHANGE_IS_SMALL) {
-			x += (long) getu8(font, xOffset++) * (flags[i] & X_CHANGE_IS_POSITIVE ? 1 : -1);
+			if (font->size < offset + 1)
+				return -1;
+			value = (long) getu8(font, offset++);
+			bit = !!(flags[i] & X_CHANGE_IS_POSITIVE);
+			accum -= (value ^ -bit) + bit;
 		} else if (!(flags[i] & X_CHANGE_IS_ZERO)) {
-			x += geti16(font, xOffset);
-			xOffset += 2;
+			if (font->size < offset + 2)
+				return -1;
+			accum += geti16(font, offset);
+			offset += 2;
 		}
-
-		if (flags[i] & Y_CHANGE_IS_SMALL) {
-			y += (long) getu8(font, yOffset++) * (flags[i] & Y_CHANGE_IS_POSITIVE ? 1 : -1);
-		} else if (!(flags[i] & Y_CHANGE_IS_ZERO)) {
-			y += geti16(font, yOffset);
-			yOffset += 2;
-		}
-
-		points[i] = (struct point) { x, y };
+		points[i].x = accum;
 	}
+
+	accum = 0L;
+	for (i = 0; i < numPts; ++i) {
+		if (flags[i] & Y_CHANGE_IS_SMALL) {
+			if (font->size < offset + 1)
+				return -1;
+			value = (long) getu8(font, offset++);
+			bit = !!(flags[i] & Y_CHANGE_IS_POSITIVE);
+			accum -= (value ^ -bit) + bit;
+		} else if (!(flags[i] & Y_CHANGE_IS_ZERO)) {
+			if (font->size < offset + 2)
+				return -1;
+			accum += geti16(font, offset);
+			offset += 2;
+		}
+		points[i].y = accum;
+	}
+
 	return 0;
 }
 
@@ -1229,8 +1231,8 @@ draw_dot(struct buffer buf, int px, int py, double xAvg, double yDiff)
 {
 	struct cell *restrict ptr = &buf.rows[py][px];
 	struct cell cell = *ptr;
-	cell.cover += quantize(yDiff);
-	cell.area += quantize((1.0 - xAvg) * yDiff);
+	cell.cover += yDiff;
+	cell.area += (1.0 - xAvg) * yDiff;
 	*ptr = cell;
 }
 
@@ -1316,14 +1318,15 @@ post_process(struct buffer buf, uint8_t *image)
 {
 	struct cell *restrict in, cell;
 	uint8_t *restrict out;
-	int x, y, accum;
+	double accum;
+	int x, y;
 	out = image;
 	for (y = 0; y < buf.height; ++y) {
-		accum = 0;
+		accum = 0.0;
 		in = buf.rows[y];
 		for (x = 0; x < buf.width; ++x) {
 			cell = *in++;
-			*out++ = MIN(abs(accum + cell.area), 255);
+			*out++ = quantize(MIN(fabs(accum + cell.area), 1.0));
 			accum += cell.cover;
 		}
 	}

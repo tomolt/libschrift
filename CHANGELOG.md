@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.7.1
+- Pushed quantization to a later phase.
+  Should get rid of any quantization errors (i.e. not quite black backgrounds).
+
 ## v0.7.0
 - Fixed a left side bearing issue.
 - Fixed a situation where the `assert` in `decode_contours` could be triggered.

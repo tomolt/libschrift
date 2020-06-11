@@ -3,8 +3,7 @@
 ## v0.7.1
 - Pushed quantization to a later phase.
   Should get rid of any quantization errors (i.e. not quite black backgrounds).
-- Optimized `simple_points` using a bit-twiddling hack for branchless conditional negation.
-  Improves overall performance by around 3%.
+- Overall performance optimizations.
 
 ## v0.7.0
 - Fixed a left side bearing issue.

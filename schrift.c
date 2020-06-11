@@ -85,7 +85,6 @@ struct SFT_Font
 static int  map_file(SFT_Font *font, const char *filename);
 static void unmap_file(SFT_Font *font);
 /* mathematical utilities */
-static inline int quantize(double x);
 static struct point midpoint(struct point a, struct point b);
 static void transform_points(int numPts, struct point *points, double trf[6]);
 static void clip_points(int numPts, struct point *points, int width, int height);
@@ -367,13 +366,6 @@ unmap_file(SFT_Font *font)
 {
 	assert(font->memory != MAP_FAILED);
 	munmap((void *) font->memory, font->size);
-}
-
-/* [0, 1] --> { 0, ..., 255 } */
-static inline int
-quantize(double x)
-{
-	return (int) (x * 255 + (x >= 0.0) - 0.5);
 }
 
 static struct point
@@ -1316,7 +1308,7 @@ post_process(struct buffer buf, uint8_t *image)
 {
 	struct cell *restrict in, cell;
 	uint8_t *restrict out;
-	double accum;
+	double accum, value;
 	int x, y;
 	out = image;
 	for (y = 0; y < buf.height; ++y) {
@@ -1324,7 +1316,10 @@ post_process(struct buffer buf, uint8_t *image)
 		in = buf.rows[y];
 		for (x = 0; x < buf.width; ++x) {
 			cell = *in++;
-			*out++ = quantize(MIN(fabs(accum + cell.area), 1.0));
+			value = fabs(accum + cell.area);
+			value = MIN(value, 1.0);
+			value = value * 255.0 + 0.5;
+			*out++ = (uint8_t) value;
 			accum += cell.cover;
 		}
 	}

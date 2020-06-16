@@ -85,7 +85,6 @@ struct SFT_Font
 static int  map_file(SFT_Font *font, const char *filename);
 static void unmap_file(SFT_Font *font);
 /* mathematical utilities */
-static inline int quantize(double x);
 static struct point midpoint(struct point a, struct point b);
 static void transform_points(int numPts, struct point *points, double trf[6]);
 static void clip_points(int numPts, struct point *points, int width, int height);
@@ -367,13 +366,6 @@ unmap_file(SFT_Font *font)
 {
 	assert(font->memory != MAP_FAILED);
 	munmap((void *) font->memory, font->size);
-}
-
-/* [0, 1] --> { 0, ..., 255 } */
-static inline int
-quantize(double x)
-{
-	return (int) (x * 255 + (x >= 0.0) - 0.5);
 }
 
 static struct point
@@ -1318,7 +1310,7 @@ post_process(struct buffer buf, uint8_t *image)
 {
 	struct cell *restrict in, cell;
 	uint8_t *restrict out;
-	double accum;
+	double accum, value;
 	int x, y;
 	out = image;
 	for (y = 0; y < buf.height; ++y) {
@@ -1326,7 +1318,10 @@ post_process(struct buffer buf, uint8_t *image)
 		in = buf.rows[y];
 		for (x = 0; x < buf.width; ++x) {
 			cell = *in++;
-			*out++ = quantize(MIN(fabs(accum + cell.area), 1.0));
+			value = fabs(accum + cell.area);
+			value = MIN(value, 1.0);
+			value = value * 255.0 + 0.5;
+			*out++ = (uint8_t) value;
 			accum += cell.cover;
 		}
 	}
@@ -1339,19 +1334,19 @@ render_image(const struct SFT *sft, unsigned long offset, double transform[6], s
 	struct buffer buf = { 0 };
 	int err = 0;
 
-	err |= init_outline(&outl) < 0;
-	err |= decode_outline(sft->font, offset, 0, &outl) < 0;
+	err = err || init_outline(&outl) < 0;
+	err = err || decode_outline(sft->font, offset, 0, &outl) < 0;
 	if (!err) transform_points(outl.numPoints, outl.points, transform);
 	if (!err) clip_points(outl.numPoints, outl.points, chr->width, chr->height);
-	err |= tesselate_curves(&outl) < 0;
+	err = err || tesselate_curves(&outl) < 0;
 
-	err |= init_buffer(&buf, chr->width, chr->height) < 0;
+	err = err || init_buffer(&buf, chr->width, chr->height) < 0;
 	if (!err) draw_lines(&outl, buf);
 	free_outline(&outl);
 	if (!err && sft->flags & SFT_DOWNWARD_Y)
 		flip_buffer(&buf);
 
-	err |= (chr->image = calloc(chr->width * chr->height, 1)) == NULL;
+	err = err || (chr->image = calloc(chr->width * chr->height, 1)) == NULL;
 	if (!err) post_process(buf, chr->image);
 
 	free_buffer(&buf);

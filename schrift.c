@@ -1330,9 +1330,12 @@ post_process(struct buffer buf, uint8_t *image)
 static int
 render_image(const struct SFT *sft, unsigned long offset, double transform[6], struct SFT_Char *chr)
 {
-	struct outline outl = { 0 };
-	struct buffer buf = { 0 };
+	struct outline outl;
+	struct buffer buf;
 	int err = 0;
+
+	memset(&outl, 0, sizeof(outl));
+	memset(&buf, 0, sizeof(buf));
 
 	err = err || init_outline(&outl) < 0;
 	err = err || decode_outline(sft->font, offset, 0, &outl) < 0;

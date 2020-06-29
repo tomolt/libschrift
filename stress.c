@@ -3,6 +3,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 
 #include <schrift.h>
 
@@ -27,7 +28,7 @@ usage(void)
 int
 main(int argc, char *argv[])
 {
-	struct SFT sft = { 0 };
+	struct SFT sft;
 	struct SFT_Char chr;
 	SFT_Font *font;
 	const char *filename;
@@ -56,6 +57,7 @@ main(int argc, char *argv[])
 	font = sft_loadfile(filename);
 	if (font == NULL)
 		die("Can't load font file.");
+	memset(&sft, 0, sizeof(sft));
 	sft.font = font;
 	sft.xScale = size;
 	sft.yScale = size;

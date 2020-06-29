@@ -56,7 +56,7 @@ compare32(const void *v1, const void *v2, const void *userdata)
 static void
 loadglyph(struct SFT *sft, unsigned int charCode)
 {
-	struct SFT_Char chr = { 0 };
+	struct SFT_Char chr;
 	XGlyphInfo info;
 	Glyph glyph;
 	int stride, i;

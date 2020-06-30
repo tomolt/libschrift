@@ -125,9 +125,7 @@ If
 is set, the function
 .Nm sft_char
 will return immediately if called on a character that the used font does not have data for.
-The user then has to check whether this happened by looking at the returned field
-.Va missing
-which will be set to 1 if this case occurred, or 0 otherwise.
+The user then has to check whether this happened by looking at the function's return value.
 .El
 .Ss The SFT_Char structure
 .Fn sft_char
@@ -140,7 +138,6 @@ struct SFT_Char {
 	int y;
 	int width;
 	int height;
-	unsigned char missing;
 };
 .Ed
 The fields are as follows:
@@ -191,11 +188,12 @@ and
 .Fn sft_loadfile
 return NULL on error.
 .Fn sft_linemetrics
-\&,
+and
 .Fn sft_kerning
-\&, and
+return 0 on success and -1 on error.
+.sp
 .Fn sft_char
-return 0 on success or -1 on error.
+returns -1 on error, 1 if the character code isn't covered by the font and a fallback character (the missing glyph) was used instead, and 0 otherwise.
 .Sh EXAMPLES
 See the source code of
 .Sy sftdemo

@@ -45,7 +45,6 @@ struct SFT_Char
 	int y;
 	int width;
 	int height;
-	unsigned char missing;
 };
 
 /* libschrift uses semantic versioning. */

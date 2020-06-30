@@ -305,9 +305,8 @@ sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 	if ((glyph = glyph_id(sft->font, charCode)) < 0)
 		return -1;
 	
-	chr->missing = (glyph == 0);
-	if (chr->missing && (sft->flags & SFT_CATCH_MISSING))
-		return 0;
+	if (glyph == 0 && (sft->flags & SFT_CATCH_MISSING))
+		return 1;
 
 	if (hor_metrics(sft, glyph, &chr->advance, &leftSideBearing) < 0)
 		return -1;
@@ -337,7 +336,8 @@ sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 		if (render_image(sft, outline, transform, chr) < 0)
 			return -1;
 	}
-	return 0;
+
+	return glyph == 0;
 }
 
 static int

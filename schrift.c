@@ -111,18 +111,15 @@ static inline uint32_t getu32(SFT_Font *font, unsigned long offset);
 static long gettable(SFT_Font *font, char tag[4]);
 /* sft -> transform */
 static int  units_per_em(SFT_Font *font);
-static int  global_transform(const struct SFT *sft, double leftSideBearing, double transform[6]);
 /* codepoint -> glyph */
 static long cmap_fmt4(SFT_Font *font, unsigned long table, unsigned long charCode);
 static long cmap_fmt6(SFT_Font *font, unsigned long table, unsigned long charCode);
 static long glyph_id(SFT_Font *font, unsigned long charCode);
 /* glyph -> hmtx */
 static int  num_long_hmtx(SFT_Font *font);
-static int  hor_metrics(const struct SFT *sft, long glyph, double *advanceWidth, double *leftSideBearing);
+static int  hor_metrics(SFT_Font *font, long glyph, int *advanceWidth, int *leftSideBearing);
 /* glyph -> outline */
 static long outline_offset(SFT_Font *font, long glyph);
-/* transform & outline -> extents */
-static int  glyph_extents(SFT_Font *font, unsigned long offset, double transform[6], int *x, int *y, int *w, int *h);
 /* decoding outlines */
 static long simple_flags(SFT_Font *font, unsigned long offset, int numPts, uint8_t *flags);
 static int  simple_points(SFT_Font *font, unsigned long offset, int numPts, uint8_t *flags, struct point *points);
@@ -296,42 +293,81 @@ int
 sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 {
 	double transform[6];
-	double leftSideBearing;
+	double xScale, yScale, xOff, yOff;
 	long glyph, outline;
-	int x, y, w, h;
+	int unitsPerEm;
+	int advance, leftSideBearing;
+	int x1, y1, x2, y2;
 
 	memset(chr, 0, sizeof(*chr));
 
 	if ((glyph = glyph_id(sft->font, charCode)) < 0)
 		return -1;
-	
 	if (glyph == 0 && (sft->flags & SFT_CATCH_MISSING))
 		return 1;
 
-	if (hor_metrics(sft, glyph, &chr->advance, &leftSideBearing) < 0)
+	/* Set up the initial transformation from
+	 * glyph coordinate space to SFT coordinate space. */
+	if ((unitsPerEm = units_per_em(sft->font)) < 0)
 		return -1;
+	xScale = sft->xScale / unitsPerEm;
+	yScale = sft->yScale / unitsPerEm;
+	xOff = sft->x;
+	yOff = sft->y;
+
+	if (hor_metrics(sft->font, glyph, &advance, &leftSideBearing) < 0)
+		return -1;
+	/* We can compute the advance width early because the scaling factors
+	 * won't be changed. This is neccessary for glyphs with completely
+	 * empty outlines. */
+	chr->advance = (int) round(advance * xScale);
+
 	if ((outline = outline_offset(sft->font, glyph)) < 0)
 		return -1;
 	/* A glyph may have a completely empty outline. */
 	if (!outline)
 		return 0;
-	/* Set up the linear transformation. */
-	if (global_transform(sft, leftSideBearing, transform) < 0)
+
+	/* Read the bounding box from the font file verbatim. */
+	if (sft->font->size < (unsigned long) outline + 10)
 		return -1;
-	/* Calculate outline extents. */
-	if (glyph_extents(sft->font, outline, transform, &x, &y, &w, &h) < 0)
+	x1 = geti16(sft->font, outline + 2);
+	y1 = geti16(sft->font, outline + 4);
+	x2 = geti16(sft->font, outline + 6);
+	y2 = geti16(sft->font, outline + 8);
+	if (x2 <= x1 || y2 <= y1)
 		return -1;
-	if (w < 0 || h < 0)
-		return -1;
-	chr->x = x;
-	chr->y = sft->flags & SFT_DOWNWARD_Y ? -(y + h) : y;
-	chr->width = w;
-	chr->height = h;
+
+	/* Shift the transformation along the X axis such that
+	 * x1 and leftSideBearing line up. Derivation:
+	 *     lsb * xScale + xOff_1 = x1 * xScale + xOff_2
+	 * <=> lsb * xScale + xOff_1 - x1 * xScale = xOff_2
+	 * <=> (lsb - x1) * xScale + xOff_1 = xOff_2 */
+	xOff += (leftSideBearing - x1) * xScale;
+
+	/* Transform the bounding box into SFT coordinate space. */
+	x1 = (int) floor(x1 * xScale + xOff);
+	y1 = (int) floor(y1 * yScale + yOff);
+	x2 = (int) ceil(x2 * xScale + xOff) + 1;
+	y2 = (int) ceil(y2 * yScale + yOff) + 1;
+
+	/* Compute the user-facing bounding box, respecting Y direction etc. */
+	chr->x = x1;
+	chr->y = sft->flags & SFT_DOWNWARD_Y ? -y2 : y1;
+	chr->width = x2 - x1;
+	chr->height = y2 - y1;
+
 	/* Render the outline (if requested). */
 	if (sft->flags & SFT_RENDER_IMAGE) {
-		/* Make transformation relative to min corner. */
-		transform[4] -= x;
-		transform[5] -= y;
+		/* Set up the transformation matrix such that
+		 * the transformed bounding boxes min corner lines
+		 * up with the (0, 0) point. */
+		transform[0] = xScale;
+		transform[1] = 0.0;
+		transform[2] = 0.0;
+		transform[3] = yScale;
+		transform[4] = xOff - x1;
+		transform[5] = yOff - y1;
 	
 		if (render_image(sft, outline, transform, chr) < 0)
 			return -1;
@@ -629,21 +665,6 @@ units_per_em(SFT_Font *font)
 	return getu16(font, head + 18);
 }
 
-static int
-global_transform(const struct SFT *sft, double leftSideBearing, double transform[6])
-{
-	int unitsPerEm;
-	if ((unitsPerEm = units_per_em(sft->font)) < 0)
-		return -1;
-	transform[0] = sft->xScale / unitsPerEm;
-	transform[1] = 0.0;
-	transform[2] = 0.0;
-	transform[3] = sft->yScale / unitsPerEm;
-	transform[4] = sft->x - leftSideBearing;
-	transform[5] = sft->y;
-	return 0;
-}
-
 static long
 cmap_fmt4(SFT_Font *font, unsigned long table, unsigned long charCode)
 {
@@ -757,26 +778,22 @@ num_long_hmtx(SFT_Font *font)
 }
 
 static int
-hor_metrics(const struct SFT *sft, long glyph, double *advanceWidth, double *leftSideBearing)
+hor_metrics(SFT_Font *font, long glyph, int *advanceWidth, int *leftSideBearing)
 {
-	double factor;
 	unsigned long offset, boundary;
 	long hmtx;
-	int unitsPerEm, numLong;
-	if ((unitsPerEm = units_per_em(sft->font)) < 0)
+	int numLong;
+	if ((numLong = num_long_hmtx(font)) < 0)
 		return -1;
-	factor = sft->xScale / unitsPerEm;
-	if ((numLong = num_long_hmtx(sft->font)) < 0)
-		return -1;
-	if ((hmtx = gettable(sft->font, "hmtx")) < 0)
+	if ((hmtx = gettable(font, "hmtx")) < 0)
 		return -1;
 	if (glyph < numLong) {
 		/* glyph is inside long metrics segment. */
 		offset = hmtx + 4 * glyph;
-		if (sft->font->size < offset + 4)
+		if (font->size < offset + 4)
 			return -1;
-		*advanceWidth = getu16(sft->font, offset) * factor;
-		*leftSideBearing = geti16(sft->font, offset + 2) * factor;
+		*advanceWidth = getu16(font, offset);
+		*leftSideBearing = geti16(font, offset + 2);
 		return 0;
 	} else {
 		/* glyph is inside short metrics segment. */
@@ -785,14 +802,14 @@ hor_metrics(const struct SFT *sft, long glyph, double *advanceWidth, double *lef
 			return -1;
 		
 		offset = boundary - 4;
-		if (sft->font->size < offset + 4)
+		if (font->size < offset + 4)
 			return -1;
-		*advanceWidth = getu16(sft->font, offset) * factor;
+		*advanceWidth = getu16(font, offset);
 		
 		offset = boundary + 2 * (glyph - numLong);
-		if (sft->font->size < offset + 2)
+		if (font->size < offset + 2)
 			return -1;
-		*leftSideBearing = geti16(sft->font, offset) * factor;
+		*leftSideBearing = geti16(font, offset);
 		return 0;
 	}
 }
@@ -835,23 +852,6 @@ outline_offset(SFT_Font *font, long glyph)
 	}
 
 	return this == next ? 0 : glyf + this;
-}
-
-static int
-glyph_extents(SFT_Font *font, unsigned long offset, double transform[6], int *x, int *y, int *w, int *h)
-{
-	struct point corners[2];
-	if (font->size < offset + 10)
-		return -1;
-	corners[0] = (struct point) { geti16(font, offset + 2), geti16(font, offset + 4) };
-	corners[1] = (struct point) { geti16(font, offset + 6), geti16(font, offset + 8) };
-	transform_points(2, corners, transform);
-	/* Important: the following lines assume transform is an affine diagonal matrix at this point! */
-	*x = (int) floor(corners[0].x) - 1;
-	*y = (int) floor(corners[0].y) - 1;
-	*w = (int) ceil(corners[1].x) + 1 - *x;
-	*h = (int) ceil(corners[1].y) + 1 - *y;
-	return 0;
 }
 
 /* For a 'simple' outline, determines each point of the outline with a set of flags. */

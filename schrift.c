@@ -1,16 +1,17 @@
 /* See LICENSE file for copyright and license details. */
 
 #include <assert.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <stdint.h>
-#include <string.h>
+#include <errno.h>
 #include <math.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-#include <unistd.h>
 #include <fcntl.h>
-#include <sys/stat.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "schrift.h"
 
@@ -81,6 +82,8 @@ struct SFT_Font
 };
 
 /* function declarations */
+/* generic utility functions */
+static void *reallocarray(void *optr, size_t nmemb, size_t size);
 /* file loading */
 static int  map_file(SFT_Font *font, const char *filename);
 static void unmap_file(SFT_Font *font);
@@ -376,6 +379,24 @@ sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 	return glyph == 0;
 }
 
+/* This is sqrt(SIZE_MAX+1), as s1*s2 <= SIZE_MAX
+ * if both s1 < MUL_NO_OVERFLOW and s2 < MUL_NO_OVERFLOW */
+#define MUL_NO_OVERFLOW	((size_t)1 << (sizeof(size_t) * 4))
+
+/* OpenBSD's reallocarray() standard libary function.
+ * A wrapper for realloc() that takes two size args like calloc().
+ * Useful because it eliminates common integer overflow bugs. */
+static void *
+reallocarray(void *optr, size_t nmemb, size_t size)
+{
+	if ((nmemb >= MUL_NO_OVERFLOW || size >= MUL_NO_OVERFLOW) &&
+	    nmemb > 0 && SIZE_MAX / nmemb < size) {
+		errno = ENOMEM;
+		return NULL;
+	}
+	return realloc(optr, size * nmemb);
+}
+
 static int
 map_file(SFT_Font *font, const char *filename)
 {
@@ -528,10 +549,10 @@ grow_points(struct outline *outl)
 	void *mem;
 	int cap = outl->capPoints * 2;
 	/* This precondition is relatively important. Otherwise, if cap
-	 * were 0, realloc may return NULL as an allocated pointer, which
+	 * were 0, reallocarray() may return NULL as an allocated pointer, which
 	 * we would misinterpret as an out-of-memory situation. */
 	assert(cap > 0);
-	if ((mem = realloc(outl->points, cap * sizeof(outl->points[0]))) == NULL)
+	if ((mem = reallocarray(outl->points, cap, sizeof(outl->points[0]))) == NULL)
 		return -1;
 	outl->capPoints = cap;
 	outl->points = mem;
@@ -544,7 +565,7 @@ grow_curves(struct outline *outl)
 	void *mem;
 	int cap = outl->capCurves * 2;
 	assert(cap > 0);
-	if ((mem = realloc(outl->curves, cap * sizeof(outl->curves[0]))) == NULL)
+	if ((mem = reallocarray(outl->curves, cap, sizeof(outl->curves[0]))) == NULL)
 		return -1;
 	outl->capCurves = cap;
 	outl->curves = mem;
@@ -557,7 +578,7 @@ grow_lines(struct outline *outl)
 	void *mem;
 	int cap = outl->capLines * 2;
 	assert(cap > 0);
-	if ((mem = realloc(outl->lines, cap * sizeof(outl->lines[0]))) == NULL)
+	if ((mem = reallocarray(outl->lines, cap, sizeof(outl->lines[0]))) == NULL)
 		return -1;
 	outl->capLines = cap;
 	outl->lines = mem;

@@ -432,8 +432,6 @@ static void
 clip_points(int numPts, struct point *points, int width, int height)
 {
 	struct point pt;
-	double dv;
-	uint64_t *ip;
 	int i;
 
 	for (i = 0; i < numPts; ++i) {
@@ -443,19 +441,13 @@ clip_points(int numPts, struct point *points, int width, int height)
 			points[i].x = 0.0;
 		}
 		if (pt.x >= width) {
-			dv = width;
-			ip = (void *) &dv;
-			--*ip;
-			points[i].x = dv;
+			points[i].x = nextafter(width, 0.0);
 		}
 		if (pt.y < 0.0) {
 			points[i].y = 0.0;
 		}
 		if (pt.y >= height) {
-			dv = height;
-			ip = (void *) &dv;
-			--*ip;
-			points[i].y = dv;
+			points[i].y = nextafter(height, 0.0);
 		}
 	}
 }

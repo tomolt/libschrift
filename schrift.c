@@ -45,11 +45,11 @@
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define SIGN(x) ((x) >= 0 ? 1 : -1)
 /* Allocate values on the stack if they are small enough, else spill to heap. */
-#define STACK_ALLOC(var, len, thresh) \
-	uint8_t var##_stack_[thresh]; \
-	var = (len) <= (thresh) ? (void *) var##_stack_ : malloc(len);
+#define STACK_ALLOC(var, type, thresh, count) \
+	type var##_stack_[thresh]; \
+	var = (count) <= (thresh) ? var##_stack_ : calloc(sizeof(type), count);
 #define STACK_FREE(var) \
-	if ((void *) var != (void *) var##_stack_) free(var);
+	if (var != var##_stack_) free(var);
 
 enum { SrcMapping, SrcUser };
 
@@ -1016,9 +1016,8 @@ decode_contour(uint8_t *flags, unsigned int basePoint, unsigned int count, struc
 static int
 simple_outline(SFT_Font *font, unsigned long offset, int numContours, struct outline *outl)
 {
-	unsigned int *endPts;
-	uint8_t *memory = NULL, *flags;
-	unsigned long memLen;
+	unsigned int *endPts = NULL;
+	uint8_t *flags = NULL;
 	long sgnOffset;
 	unsigned int numPts;
 	int i;
@@ -1034,13 +1033,12 @@ simple_outline(SFT_Font *font, unsigned long offset, int numContours, struct out
 			return -1;
 	}
 	
-	memLen = numContours * sizeof(endPts[0]);
-	memLen += numPts * sizeof(flags[0]);
-	STACK_ALLOC(memory, memLen, 2048) ;
-	if (memory == NULL)
+	STACK_ALLOC(endPts, unsigned int, 16, numContours);
+	if (endPts == NULL)
 		goto failure;
-	endPts = (unsigned int *) memory;
-	flags = (uint8_t *) (endPts + numContours);
+	STACK_ALLOC(flags, uint8_t, 128, numPts);
+	if (flags == NULL)
+		goto failure;
 
 	for (i = 0; i < numContours; ++i) {
 		endPts[i] = getu16(font, offset);
@@ -1062,20 +1060,23 @@ simple_outline(SFT_Font *font, unsigned long offset, int numContours, struct out
 		goto failure;
 	outl->numPoints += numPts;
 	
+	uint8_t *flagsPtr = flags;
 	unsigned int contourBase = 0;
 	for (int c = 0; c < numContours; ++c) {
 		unsigned int count = endPts[c] - contourBase + 1;
-		if (decode_contour(flags, basePoint, count, outl) < 0)
+		if (decode_contour(flagsPtr, basePoint, count, outl) < 0)
 			goto failure;
-		flags += count;
+		flagsPtr += count;
 		basePoint += count;
 		contourBase += count;
 	}
 
-	STACK_FREE(memory) ;
+	STACK_FREE(endPts);
+	STACK_FREE(flags);
 	return 0;
 failure:
-	STACK_FREE(memory) ;
+	STACK_FREE(endPts);
+	STACK_FREE(flags);
 	return -1;
 }
 

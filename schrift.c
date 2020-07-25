@@ -535,6 +535,10 @@ grow_points(struct outline *outl)
 {
 	void *mem;
 	int cap = outl->capPoints * 2;
+	/* This precondition is relatively important. Otherwise, if cap
+	 * were 0, realloc may return NULL as an allocated pointer, which
+	 * we would misinterpret as an out-of-memory situation. */
+	assert(cap > 0);
 	if ((mem = realloc(outl->points, cap * sizeof(outl->points[0]))) == NULL)
 		return -1;
 	outl->capPoints = cap;
@@ -547,6 +551,7 @@ grow_curves(struct outline *outl)
 {
 	void *mem;
 	int cap = outl->capCurves * 2;
+	assert(cap > 0);
 	if ((mem = realloc(outl->curves, cap * sizeof(outl->curves[0]))) == NULL)
 		return -1;
 	outl->capCurves = cap;
@@ -559,6 +564,7 @@ grow_lines(struct outline *outl)
 {
 	void *mem;
 	int cap = outl->capLines * 2;
+	assert(cap > 0);
 	if ((mem = realloc(outl->lines, cap * sizeof(outl->lines[0]))) == NULL)
 		return -1;
 	outl->capLines = cap;

@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.8.0
+- Slightly changed the missing glyph interface (check the man page for details).
+- Makefile config for building on OpenBSD.
+- Less reliance on undefined behaviour.
+- Ported the core libary & stress app to Microsoft Windows / MSVC.
+- (Hopefully) correct left side bearing calculations.
+
 ## v0.7.1
 - Pushed quantization to a later phase.
   Should get rid of any quantization errors (i.e. not quite black backgrounds).

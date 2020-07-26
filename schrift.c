@@ -91,6 +91,10 @@ struct SFT_Font
 	HANDLE mapping;
 #endif
 	int source;
+	
+	uint_least16_t unitsPerEm;
+	int_least16_t locaFormat;
+	uint_least16_t numLongHmtx;
 };
 
 /* function declarations */
@@ -124,14 +128,11 @@ static inline uint16_t getu16(SFT_Font *font, unsigned long offset);
 static inline int16_t  geti16(SFT_Font *font, unsigned long offset);
 static inline uint32_t getu32(SFT_Font *font, unsigned long offset);
 static long gettable(SFT_Font *font, char tag[4]);
-/* sft -> transform */
-static int  units_per_em(SFT_Font *font);
 /* codepoint -> glyph */
 static long cmap_fmt4(SFT_Font *font, unsigned long table, unsigned long charCode);
 static long cmap_fmt6(SFT_Font *font, unsigned long table, unsigned long charCode);
 static long glyph_id(SFT_Font *font, unsigned long charCode);
 /* glyph -> hmtx */
-static int  num_long_hmtx(SFT_Font *font);
 static int  hor_metrics(SFT_Font *font, long glyph, int *advanceWidth, int *leftSideBearing);
 /* glyph -> outline */
 static long outline_offset(SFT_Font *font, long glyph);
@@ -163,21 +164,45 @@ sft_version(void)
 	return SCHRIFT_VERSION;
 }
 
+static int
+init_font(SFT_Font *font)
+{
+	unsigned long scalerType;
+	long head, hhea;
+
+	/* Check for a compatible scalerType (magic number). */
+	scalerType = getu32(font, 0);
+	if (scalerType != FILE_MAGIC_ONE && scalerType != FILE_MAGIC_TWO)
+		return -1;
+
+	if ((head = gettable(font, "head")) < 0)
+		return -1;
+	if (font->size < (unsigned long) head + 54)
+		return -1;
+	font->unitsPerEm = getu16(font, head + 18);
+	font->locaFormat = geti16(font, head + 50);
+
+	if ((hhea = gettable(font, "hhea")) < 0)
+		return -1;
+	if (font->size < (unsigned long) hhea + 36)
+		return -1;
+	font->numLongHmtx = getu16(font, hhea + 34);
+
+	return 0;
+}
+
 /* Loads a font from a user-supplied memory range. */
 SFT_Font *
 sft_loadmem(const void *mem, unsigned long size)
 {
 	SFT_Font *font;
-	unsigned long scalerType;
 	if ((font = calloc(1, sizeof(SFT_Font))) == NULL) {
 		return NULL;
 	}
 	font->memory = mem;
 	font->size = size;
 	font->source = SrcUser;
-	/* Check for a compatible scalerType (magic number). */
-	scalerType = getu32(font, 0);
-	if (scalerType != FILE_MAGIC_ONE && scalerType != FILE_MAGIC_TWO) {
+	if (init_font(font) < 0) {
 		sft_freefont(font);
 		return NULL;
 	}
@@ -189,7 +214,6 @@ SFT_Font *
 sft_loadfile(char const *filename)
 {
 	SFT_Font *font;
-	unsigned long scalerType;
 	if ((font = calloc(1, sizeof(SFT_Font))) == NULL) {
 		return NULL;
 	}
@@ -197,9 +221,7 @@ sft_loadfile(char const *filename)
 		free(font);
 		return NULL;
 	}
-	/* Check for a compatible scalerType (magic number). */
-	scalerType = getu32(font, 0);
-	if (scalerType != FILE_MAGIC_ONE && scalerType != FILE_MAGIC_TWO) {
+	if (init_font(font) < 0) {
 		sft_freefont(font);
 		return NULL;
 	}
@@ -221,13 +243,10 @@ sft_linemetrics(const struct SFT *sft, double *ascent, double *descent, double *
 {
 	double factor;
 	long hhea;
-	int unitsPerEm;
-	if ((unitsPerEm = units_per_em(sft->font)) < 0)
-		return -1;
 	if ((hhea = gettable(sft->font, "hhea")) < 0)
 		return -1;
 	if (sft->font->size < (unsigned long) hhea + 36) return -1;
-	factor = sft->yScale / unitsPerEm;
+	factor = sft->yScale / sft->font->unitsPerEm;
 	*ascent  = geti16(sft->font, hhea + 4) * factor;
 	*descent = geti16(sft->font, hhea + 6) * factor;
 	*gap     = geti16(sft->font, hhea + 8) * factor;
@@ -241,7 +260,6 @@ sft_kerning(const struct SFT *sft, unsigned long leftChar, unsigned long rightCh
 	unsigned long offset;
 	long kern;
 	unsigned int numTables, numPairs, length, format, flags, value;
-	int unitsPerEm;
 	uint8_t key[4];
 
 	kerning[0] = 0.0;
@@ -296,10 +314,8 @@ sft_kerning(const struct SFT *sft, unsigned long leftChar, unsigned long rightCh
 		--numTables;
 	}
 
-	if ((unitsPerEm = units_per_em(sft->font)) < 0)
-		return -1;
-	kerning[0] = kerning[0] / unitsPerEm * sft->xScale;
-	kerning[1] = kerning[1] / unitsPerEm * sft->yScale;
+	kerning[0] = kerning[0] / sft->font->unitsPerEm * sft->xScale;
+	kerning[1] = kerning[1] / sft->font->unitsPerEm * sft->yScale;
 
 	return 0;
 }
@@ -310,7 +326,6 @@ sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 	double transform[6];
 	double xScale, yScale, xOff, yOff;
 	long glyph, outline;
-	int unitsPerEm;
 	int advance, leftSideBearing;
 	int x1, y1, x2, y2;
 
@@ -323,10 +338,8 @@ sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 
 	/* Set up the initial transformation from
 	 * glyph coordinate space to SFT coordinate space. */
-	if ((unitsPerEm = units_per_em(sft->font)) < 0)
-		return -1;
-	xScale = sft->xScale / unitsPerEm;
-	yScale = sft->yScale / unitsPerEm;
+	xScale = sft->xScale / sft->font->unitsPerEm;
+	yScale = sft->yScale / sft->font->unitsPerEm;
 	xOff = sft->x;
 	yOff = sft->y;
 
@@ -744,17 +757,6 @@ gettable(SFT_Font *font, char tag[4])
 	return getu32(font, (uint8_t *) match - font->memory + 8);
 }
 
-static int
-units_per_em(SFT_Font *font)
-{
-	long head;
-	if ((head = gettable(font, "head")) < 0)
-		return -1;
-	if (font->size < (unsigned long) head + 54)
-		return -1;
-	return getu16(font, head + 18);
-}
-
 static long
 cmap_fmt4(SFT_Font *font, unsigned long table, unsigned long charCode)
 {
@@ -857,27 +859,13 @@ glyph_id(SFT_Font *font, unsigned long charCode)
 }
 
 static int
-num_long_hmtx(SFT_Font *font)
-{
-	long hhea;
-	if ((hhea = gettable(font, "hhea")) < 0)
-		return -1;
-	if (font->size < (unsigned long) hhea + 36)
-		return -1;
-	return getu16(font, hhea + 34);
-}
-
-static int
 hor_metrics(SFT_Font *font, long glyph, int *advanceWidth, int *leftSideBearing)
 {
 	unsigned long offset, boundary;
 	long hmtx;
-	int numLong;
-	if ((numLong = num_long_hmtx(font)) < 0)
-		return -1;
 	if ((hmtx = gettable(font, "hmtx")) < 0)
 		return -1;
-	if (glyph < numLong) {
+	if (glyph < font->numLongHmtx) {
 		/* glyph is inside long metrics segment. */
 		offset = hmtx + 4 * glyph;
 		if (font->size < offset + 4)
@@ -887,7 +875,7 @@ hor_metrics(SFT_Font *font, long glyph, int *advanceWidth, int *leftSideBearing)
 		return 0;
 	} else {
 		/* glyph is inside short metrics segment. */
-		boundary = hmtx + 4 * numLong;
+		boundary = hmtx + 4 * font->numLongHmtx;
 		if (boundary < 4)
 			return -1;
 		
@@ -896,7 +884,7 @@ hor_metrics(SFT_Font *font, long glyph, int *advanceWidth, int *leftSideBearing)
 			return -1;
 		*advanceWidth = getu16(font, offset);
 		
-		offset = boundary + 2 * (glyph - numLong);
+		offset = boundary + 2 * (glyph - font->numLongHmtx);
 		if (font->size < offset + 2)
 			return -1;
 		*leftSideBearing = geti16(font, offset);
@@ -909,21 +897,14 @@ static long
 outline_offset(SFT_Font *font, long glyph)
 {
 	unsigned long base, this, next;
-	long head, loca, glyf;
-	int format;
+	long loca, glyf;
 
-	if ((head = gettable(font, "head")) < 0)
-		return -1;
 	if ((loca = gettable(font, "loca")) < 0)
 		return -1;
 	if ((glyf = gettable(font, "glyf")) < 0)
 		return -1;
 
-	if (font->size < (unsigned long) head + 54)
-		return -1;
-	format = geti16(font, head + 50);
-	
-	if (format == 0) {
+	if (font->locaFormat == 0) {
 		base = loca + 2 * glyph;
 
 		if (font->size < base + 4)

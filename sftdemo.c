@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <math.h>
 
 #include <X11/Xlib.h>
 #include <X11/extensions/Xrender.h>
@@ -15,10 +16,14 @@
 #include "util/arg.h"
 
 #define APP_NAME "sftdemo"
+#define MAX_LINES 40
+#define LINE_LEN 200
 
 char *argv0;
 
-static const char *message;
+static char lines[MAX_LINES][LINE_LEN];
+static int numlines;
+
 static XRenderColor fgcolor, bgcolor;
 static Display *dpy;
 static int screen;
@@ -42,7 +47,7 @@ static void
 usage(void)
 {
 	fprintf(stderr,
-		"usage: %s [-v] [-f font file] [-s size in px] [-P] [message]\n", argv0);
+		"usage: %s [-v] [-f font file] [-s size in px] [-P] [text file]\n", argv0);
 }
 
 static int
@@ -123,7 +128,14 @@ draw(int width, int height)
 {
 	XRenderFillRectangle(dpy, PictOpOver,
 		pic, &bgcolor, 0, 0, width, height);
-	drawtext(20, 50, message);
+
+	double ascent, descent, gap;
+	/* TODO check return value! */
+	sft_linemetrics(&sft, &ascent, &descent, &gap);
+
+	for (int i = 0; i < numlines; ++i) {
+		drawtext(20, ascent + gap + round((ascent + descent + gap) * 1.5) * i, lines[i]);
+	}
 }
 
 static void
@@ -152,7 +164,7 @@ setupx(void)
 
 	/* TODO We probably should check here that the X11 server actually supports XRender. */
 
-	win = XCreateWindow(dpy, DefaultRootWindow(dpy), 0, 0, 200, 100, 0,
+	win = XCreateWindow(dpy, DefaultRootWindow(dpy), 0, 0, 600, 400, 0,
 	                    DefaultDepth(dpy, screen), InputOutput,
 	                    CopyFromParent, 0, NULL);
 	XStoreName(dpy, win, APP_NAME);
@@ -183,11 +195,11 @@ runx(void)
 int
 main(int argc, char *argv[])
 {
-	const char *filename;
+	const char *filename, *textfile;
 	double size;
 
-	message = "Hello, World!";
 	filename = "resources/Ubuntu-R.ttf";
+	textfile = "resources/glass.utf8";
 	size = 16.0;
 	bgcolor = (XRenderColor) { 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF };
 	fgcolor = (XRenderColor) { 0x0000, 0x0000, 0x0000, 0xFFFF };
@@ -207,13 +219,19 @@ main(int argc, char *argv[])
 		exit(1);
 	} ARGEND
 	if (argc) {
-		message = *argv;
+		textfile = *argv;
 		--argc, ++argv;
 	}
 	if (argc) {
 		usage();
 		exit(1);
 	}
+
+	FILE *file = fopen(textfile, "r");
+	if (file == NULL)
+		die("Can't open text file.");
+	while (numlines < MAX_LINES && fgets(lines[numlines++], LINE_LEN, file) != NULL) {}
+	fclose(file);
 
 	setupx();
 

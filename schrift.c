@@ -99,12 +99,13 @@ struct SFT_Font
 
 /* function declarations */
 /* generic utility functions */
-static void *reallocarray(void *optr, size_t nmemb, size_t size);
+static void *sft_reallocarray(void *optr, size_t nmemb, size_t size);
 static inline int fast_floor(double x);
 static inline int fast_ceil(double x);
 /* file loading */
 static int  map_file(SFT_Font *font, const char *filename);
 static void unmap_file(SFT_Font *font);
+static int  init_font(SFT_Font *font);
 /* mathematical utilities */
 static struct point midpoint(struct point a, struct point b);
 static void transform_points(int numPts, struct point *points, double trf[6]);
@@ -166,33 +167,6 @@ sft_version(void)
 	return SCHRIFT_VERSION;
 }
 
-static int
-init_font(SFT_Font *font)
-{
-	unsigned long scalerType;
-	long head, hhea;
-
-	/* Check for a compatible scalerType (magic number). */
-	scalerType = getu32(font, 0);
-	if (scalerType != FILE_MAGIC_ONE && scalerType != FILE_MAGIC_TWO)
-		return -1;
-
-	if ((head = gettable(font, "head")) < 0)
-		return -1;
-	if (font->size < (unsigned long) head + 54)
-		return -1;
-	font->unitsPerEm = getu16(font, head + 18);
-	font->locaFormat = geti16(font, head + 50);
-
-	if ((hhea = gettable(font, "hhea")) < 0)
-		return -1;
-	if (font->size < (unsigned long) hhea + 36)
-		return -1;
-	font->numLongHmtx = getu16(font, hhea + 34);
-
-	return 0;
-}
-
 /* Loads a font from a user-supplied memory range. */
 SFT_Font *
 sft_loadmem(const void *mem, unsigned long size)
@@ -238,6 +212,33 @@ sft_freefont(SFT_Font *font)
 	if (font->source == SrcMapping)
 		unmap_file(font);
 	free(font);
+}
+
+static int
+init_font(SFT_Font *font)
+{
+	unsigned long scalerType;
+	long head, hhea;
+
+	/* Check for a compatible scalerType (magic number). */
+	scalerType = getu32(font, 0);
+	if (scalerType != FILE_MAGIC_ONE && scalerType != FILE_MAGIC_TWO)
+		return -1;
+
+	if ((head = gettable(font, "head")) < 0)
+		return -1;
+	if (font->size < (unsigned long) head + 54)
+		return -1;
+	font->unitsPerEm = getu16(font, head + 18);
+	font->locaFormat = geti16(font, head + 50);
+
+	if ((hhea = gettable(font, "hhea")) < 0)
+		return -1;
+	if (font->size < (unsigned long) hhea + 36)
+		return -1;
+	font->numLongHmtx = getu16(font, hhea + 34);
+
+	return 0;
 }
 
 int
@@ -414,7 +415,7 @@ sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
  * A wrapper for realloc() that takes two size args like calloc().
  * Useful because it eliminates common integer overflow bugs. */
 static void *
-reallocarray(void *optr, size_t nmemb, size_t size)
+sft_reallocarray(void *optr, size_t nmemb, size_t size)
 {
 	if ((nmemb >= MUL_NO_OVERFLOW || size >= MUL_NO_OVERFLOW) &&
 	    nmemb > 0 && SIZE_MAX / nmemb < size) {
@@ -653,7 +654,7 @@ grow_points(struct outline *outl)
 	 * were 0, reallocarray() may return NULL as an allocated pointer, which
 	 * we would misinterpret as an out-of-memory situation. */
 	assert(cap > 0);
-	if ((mem = reallocarray(outl->points, cap, sizeof(outl->points[0]))) == NULL)
+	if ((mem = sft_reallocarray(outl->points, cap, sizeof(outl->points[0]))) == NULL)
 		return -1;
 	outl->capPoints = cap;
 	outl->points = mem;
@@ -666,7 +667,7 @@ grow_curves(struct outline *outl)
 	void *mem;
 	int cap = outl->capCurves * 2;
 	assert(cap > 0);
-	if ((mem = reallocarray(outl->curves, cap, sizeof(outl->curves[0]))) == NULL)
+	if ((mem = sft_reallocarray(outl->curves, cap, sizeof(outl->curves[0]))) == NULL)
 		return -1;
 	outl->capCurves = cap;
 	outl->curves = mem;
@@ -679,7 +680,7 @@ grow_lines(struct outline *outl)
 	void *mem;
 	int cap = outl->capLines * 2;
 	assert(cap > 0);
-	if ((mem = reallocarray(outl->lines, cap, sizeof(outl->lines[0]))) == NULL)
+	if ((mem = sft_reallocarray(outl->lines, cap, sizeof(outl->lines[0]))) == NULL)
 		return -1;
 	outl->capLines = cap;
 	outl->lines = mem;

@@ -1,7 +1,7 @@
 *.o
 libschrift.a
-sftdemo
-stress
+/sftdemo
+/stress
 
 .vs/
 *.vcxproj.user

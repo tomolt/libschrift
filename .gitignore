@@ -2,3 +2,8 @@
 libschrift.a
 sftdemo
 stress
+
+.vs/
+*.vcxproj.user
+Debug/
+Release/

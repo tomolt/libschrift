@@ -8,10 +8,19 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <fcntl.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <unistd.h>
+#if defined(_MSC_VER)
+# define restrict __restrict
+#endif
+
+#if defined(_WIN32)
+# define WIN32_LEAN_AND_MEAN 1
+# include <windows.h>
+#else
+# include <fcntl.h>
+# include <sys/mman.h>
+# include <sys/stat.h>
+# include <unistd.h>
+#endif
 
 #include "schrift.h"
 
@@ -78,6 +87,9 @@ struct SFT_Font
 {
 	const uint8_t *memory;
 	unsigned long size;
+#if defined(_WIN32)
+	HANDLE mapping;
+#endif
 	int source;
 };
 
@@ -397,6 +409,61 @@ reallocarray(void *optr, size_t nmemb, size_t size)
 	return realloc(optr, size * nmemb);
 }
 
+#if defined(_WIN32)
+
+static int
+map_file(SFT_Font *font, const char *filename)
+{
+	HANDLE file;
+	DWORD high, low;
+
+	font->mapping = NULL;
+	font->memory = NULL;
+
+	file = CreateFileA(filename, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+	if (file == INVALID_HANDLE_VALUE) {
+		return -1;
+	}
+
+	low = GetFileSize(file, &high);
+	if (low == INVALID_FILE_SIZE) {
+		CloseHandle(file);
+		return -1;
+	}
+
+	font->mapping = CreateFileMapping(file, NULL, PAGE_READONLY, high, low, NULL);
+	if (font->mapping == NULL) {
+		CloseHandle(file);
+		return -1;
+	}
+
+	CloseHandle(file);
+
+	font->memory = MapViewOfFile(font->mapping, FILE_MAP_READ, 0, 0, 0);
+	if (font->memory == NULL) {
+		CloseHandle(font->mapping);
+		font->mapping = NULL;
+		return -1;
+	}
+
+	return 0;
+}
+
+static void
+unmap_file(SFT_Font *font)
+{
+	if (font->memory != NULL) {
+		UnmapViewOfFile(font->memory);
+		font->memory = NULL;
+	}
+	if (font->mapping != NULL) {
+		CloseHandle(font->mapping);
+		font->mapping = NULL;
+	}
+}
+
+#else
+
 static int
 map_file(SFT_Font *font, const char *filename)
 {
@@ -424,6 +491,8 @@ unmap_file(SFT_Font *font)
 	assert(font->memory != MAP_FAILED);
 	munmap((void *) font->memory, font->size);
 }
+
+#endif
 
 static struct point
 midpoint(struct point a, struct point b)
@@ -690,7 +759,7 @@ cmap_fmt4(SFT_Font *font, unsigned long table, unsigned long charCode)
 	unsigned long endCodes, startCodes, idDeltas, idRangeOffsets, idOffset;
 	unsigned int segCountX2, segIdxX2, startCode, idRangeOffset, id;
 	int idDelta;
-	uint8_t key[2] = { charCode >> 8, charCode };
+	uint8_t key[2] = { (uint8_t) (charCode >> 8), (uint8_t) charCode };
 	/* cmap format 4 only supports the Unicode BMP. */
 	if (charCode > 0xFFFF)
 		return 0;
@@ -1376,4 +1445,3 @@ render_image(const struct SFT *sft, unsigned long offset, double transform[6], s
 
 	return err ? -1 : 0;
 }
-

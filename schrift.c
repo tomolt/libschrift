@@ -100,6 +100,8 @@ struct SFT_Font
 /* function declarations */
 /* generic utility functions */
 static void *reallocarray(void *optr, size_t nmemb, size_t size);
+static inline int fast_floor(double x);
+static inline int fast_ceil(double x);
 /* file loading */
 static int  map_file(SFT_Font *font, const char *filename);
 static void unmap_file(SFT_Font *font);
@@ -420,6 +422,21 @@ reallocarray(void *optr, size_t nmemb, size_t size)
 		return NULL;
 	}
 	return realloc(optr, size * nmemb);
+}
+
+/* TODO maybe we should use long here instead of int. */
+static inline int
+fast_floor(double x)
+{
+	int i = (int) x;
+	return i - (i > x);
+}
+
+static inline int
+fast_ceil(double x)
+{
+	int i = (int) x;
+	return i + (i < x);
 }
 
 #if defined(_WIN32)
@@ -1307,37 +1324,48 @@ draw_line(struct buffer buf, struct point origin, struct point goal)
 	double originX, originY;
 	double goalX, goalY;
 	double deltaX, deltaY;
-	double nextCrossingX = 100.0, nextCrossingY = 100.0;
-	double crossingGapX = 0.0, crossingGapY = 0.0;
+	double nextCrossingX, nextCrossingY;
+	double crossingGapX, crossingGapY;
 	double prevDistance = 0.0;
 	int pixelX, pixelY;
-	int iter, numIters;
+	int iter, numIters = 0;
 
 	originX = origin.x;
 	goalX = goal.x;
 	deltaX = goalX - originX;
-	pixelX = (int) originX;
-	if (deltaX != 0.0) {
-		double signedGapX = 1.0 / deltaX;
-		nextCrossingX = (int) originX - originX;
-		nextCrossingX += deltaX > 0.0;
-		nextCrossingX *= signedGapX;
-		crossingGapX = fabs(signedGapX);
+	if (deltaX > 0.0) {
+		crossingGapX = 1.0 / deltaX;
+		pixelX = fast_floor(originX);
+		nextCrossingX = (1.0 - (originX - pixelX)) * crossingGapX;
+		numIters += fast_ceil(goalX) - fast_floor(originX) - 1;
+	} else if (deltaX < 0.0) {
+		crossingGapX = -(1.0 / deltaX);
+		pixelX = fast_ceil(originX) - 1;
+		nextCrossingX = (originX - pixelX) * crossingGapX;
+		numIters += fast_ceil(originX) - fast_floor(goalX) - 1;
+	} else {
+		crossingGapX = 0.0;
+		pixelX = fast_floor(originX);
+		nextCrossingX = 100.0;
 	}
 
 	originY = origin.y;
 	goalY = goal.y;
 	deltaY = goalY - originY;
-	pixelY = (int) originY;
-	if (deltaY != 0.0) {
-		double signedGapY = 1.0 / deltaY;
-		nextCrossingY = (int) originY - originY;
-		nextCrossingY += deltaY > 0.0;
-		nextCrossingY *= signedGapY;
-		crossingGapY = fabs(signedGapY);
+	if (deltaY > 0.0) {
+		crossingGapY = 1.0 / deltaY;
+		pixelY = fast_floor(originY);
+		nextCrossingY = (1.0 - (originY - pixelY)) * crossingGapY;
+		numIters += fast_ceil(goalY) - fast_floor(originY) - 1;
+	} else if (deltaY < 0.0) {
+		crossingGapY = -(1.0 / deltaY);
+		pixelY = fast_ceil(originY) - 1;
+		nextCrossingY = (originY - pixelY) * crossingGapY;
+		numIters += fast_ceil(originY) - fast_floor(goalY) - 1;
+	} else {
+		return;
 	}
 
-	numIters = abs((int) goalX - (int) originX) + abs((int) goalY - (int) originY);
 	for (iter = 0; iter < numIters; ++iter) {
 		if (nextCrossingX < nextCrossingY) {
 			double deltaDistance = nextCrossingX - prevDistance;

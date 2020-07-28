@@ -33,7 +33,8 @@ The following bullet points are listed in no particular order.
 - Perhaps rename `struct buffer` to `struct raster` again?
 - The following new functions to map array problems to single instance problems:
   * `decode_contours` / `decode_contour`
-- Consider internally switching to floats for most rational number representations.
+- Consider internally switching to Q16.16 fixnums for most rational number representations.
 - Replace usage of overly specific integer sizes (`uint16_t` etc.) with slightly
   more malleable ones. Either builtin integer types or ones of the form `uint_least16_t`.
+- Remove implicit integer conversions. They can be a source of major trouble.
 

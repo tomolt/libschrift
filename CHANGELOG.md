@@ -6,6 +6,7 @@
 - Less reliance on undefined behaviour.
 - Ported the core libary & stress app to Microsoft Windows / MSVC.
 - (Hopefully) correct left side bearing calculations.
+- Wrapped the header in extern "C" so the library can be used from C++.
 
 ## v0.7.1
 - Pushed quantization to a later phase.

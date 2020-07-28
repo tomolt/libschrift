@@ -1,5 +1,7 @@
 # Changelog
 
+## v0.9.0
+
 ## v0.8.0
 - Slightly changed the missing glyph interface (check the man page for details).
 - Makefile config for building on OpenBSD.

@@ -916,7 +916,7 @@ hor_metrics(SFT_Font *font, uint_fast32_t glyph, int *advanceWidth, int *leftSid
 		return 0;
 	} else {
 		/* glyph is inside short metrics segment. */
-		boundary = hmtx + 4U * font->numLongHmtx;
+		boundary = hmtx + 4U * (uint_fast32_t) font->numLongHmtx;
 		if (boundary < 4)
 			return -1;
 		
@@ -951,8 +951,8 @@ outline_offset(SFT_Font *font, uint_fast32_t glyph, uint_fast32_t *offset)
 		if (font->size < base + 4)
 			return -1;
 		
-		this = 2U * getu16(font, base);
-		next = 2U * getu16(font, base + 2);
+		this = 2U * (uint_fast32_t) getu16(font, base);
+		next = 2U * (uint_fast32_t) getu16(font, base + 2);
 	} else {
 		base = loca + 4 * glyph;
 
@@ -1042,7 +1042,8 @@ simple_points(SFT_Font *font, uint_fast32_t offset, uint_fast16_t numPts, uint8_
 static int
 decode_contour(uint8_t *flags, uint_fast16_t basePoint, uint_fast16_t count, struct outline *outl)
 {
-	uint_fast16_t looseEnd, beg, ctrl, center, i;
+	uint_fast16_t i;
+	uint_least16_t looseEnd, beg, ctrl, center, cur;
 	unsigned int gotCtrl;
 
 	/* Skip contours with less than two points, since the following algorithm can't handle them and
@@ -1067,24 +1068,26 @@ decode_contour(uint8_t *flags, uint_fast16_t basePoint, uint_fast16_t count, str
 	beg = looseEnd;
 	gotCtrl = 0;
 	for (i = 0; i < count; ++i) {
+		/* cur can't overflow because we ensure that basePoint + count < 0xFFFF before calling decode_contour(). */
+		cur = (uint_least16_t) (basePoint + i);
 		if (flags[i] & POINT_IS_ON_CURVE) {
 			if (gotCtrl) {
 				if (outl->numCurves >= outl->capCurves && grow_curves(outl) < 0)
 					return -1;
-				outl->curves[outl->numCurves++] = (struct curve) { beg, basePoint + i, ctrl };
+				outl->curves[outl->numCurves++] = (struct curve) { beg, cur, ctrl };
 			} else {
 				if (outl->numLines >= outl->capLines && grow_lines(outl) < 0)
 					return -1;
-				outl->lines[outl->numLines++] = (struct line) { beg, basePoint + i };
+				outl->lines[outl->numLines++] = (struct line) { beg, cur };
 			}
-			beg = basePoint + i;
+			beg = cur;
 			gotCtrl = 0;
 		} else {
 			if (gotCtrl) {
 				center = outl->numPoints;
 				if (outl->numPoints >= outl->capPoints && grow_points(outl) < 0)
 					return -1;
-				outl->points[center] = midpoint(outl->points[ctrl], outl->points[basePoint + i]);
+				outl->points[center] = midpoint(outl->points[ctrl], outl->points[cur]);
 				++outl->numPoints;
 
 				if (outl->numCurves >= outl->capCurves && grow_curves(outl) < 0)
@@ -1093,7 +1096,7 @@ decode_contour(uint8_t *flags, uint_fast16_t basePoint, uint_fast16_t count, str
 
 				beg = center;
 			}
-			ctrl = basePoint + i;
+			ctrl = cur;
 			gotCtrl = 1;
 		}
 	}

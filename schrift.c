@@ -1050,12 +1050,14 @@ decode_contour(uint8_t *flags, uint_fast16_t basePoint, uint_fast16_t count, str
 	 * they should appear invisible either way (because they don't have any area). */
 	if (count < 2) return 0;
 
+	assert(basePoint <= UINT16_MAX - count);
+
 	if (flags[0] & POINT_IS_ON_CURVE) {
-		looseEnd = basePoint++;
+		looseEnd = (uint_least16_t) basePoint++;
 		++flags;
 		--count;
 	} else if (flags[count - 1] & POINT_IS_ON_CURVE) {
-		looseEnd = basePoint + --count;
+		looseEnd = (uint_least16_t) (basePoint + --count);
 	} else {
 		if (outl->numPoints >= outl->capPoints && grow_points(outl) < 0)
 			return -1;
@@ -1161,7 +1163,7 @@ simple_outline(SFT_Font *font, uint_fast32_t offset, unsigned int numContours, s
 		goto failure;
 	if (simple_points(font, offset, numPts, flags, outl->points + basePoint) < 0)
 		goto failure;
-	outl->numPoints += numPts;
+	outl->numPoints = (uint_least16_t) (outl->numPoints + numPts);
 	
 	uint8_t *flagsPtr = flags;
 	uint_fast16_t contourBase = 0;
@@ -1304,19 +1306,19 @@ tesselate_curve(struct curve curve, struct outline *outl)
 			if (top == 0) break;
 			curve = stack[--top];
 		} else {
-			uint_fast16_t ctrl0 = outl->numPoints;
+			uint_least16_t ctrl0 = outl->numPoints;
 			if (outl->numPoints >= outl->capPoints && grow_points(outl) < 0)
 				return -1;
 			outl->points[ctrl0] = midpoint(outl->points[curve.beg], outl->points[curve.ctrl]);
 			++outl->numPoints;
 
-			uint_fast16_t ctrl1 = outl->numPoints;
+			uint_least16_t ctrl1 = outl->numPoints;
 			if (outl->numPoints >= outl->capPoints && grow_points(outl) < 0)
 				return -1;
 			outl->points[ctrl1] = midpoint(outl->points[curve.ctrl], outl->points[curve.end]);
 			++outl->numPoints;
 
-			uint_fast16_t pivot = outl->numPoints;
+			uint_least16_t pivot = outl->numPoints;
 			if (outl->numPoints >= outl->capPoints && grow_points(outl) < 0)
 				return -1;
 			outl->points[pivot] = midpoint(outl->points[ctrl0], outl->points[ctrl1]);

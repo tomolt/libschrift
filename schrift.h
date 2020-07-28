@@ -17,6 +17,10 @@
 #ifndef SCHRIFT_H
 #define SCHRIFT_H 1
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define SFT_DOWNWARD_Y    0x01
 #define SFT_RENDER_IMAGE  0x02
 #define SFT_CATCH_MISSING 0x04
@@ -57,6 +61,10 @@ void sft_freefont(SFT_Font *font);
 int sft_linemetrics(const struct SFT *sft, double *ascent, double *descent, double *gap);
 int sft_kerning(const struct SFT *sft, unsigned long leftChar, unsigned long rightChar, double kerning[2]);
 int sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
 

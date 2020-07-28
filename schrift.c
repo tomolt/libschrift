@@ -80,7 +80,7 @@ struct outline
 struct buffer
 {
 	struct cell **rows;
-	int width, height;
+	unsigned int width, height;
 };
 
 struct SFT_Font
@@ -111,7 +111,7 @@ static struct point midpoint(struct point a, struct point b);
 static void transform_points(int numPts, struct point *points, double trf[6]);
 static void clip_points(int numPts, struct point *points, int width, int height);
 /* 'buffer' data structure management */
-static int  init_buffer(struct buffer *buf, int width, int height);
+static int  init_buffer(struct buffer *buf, unsigned int width, unsigned int height);
 static void free_buffer(struct buffer *buf);
 static void flip_buffer(struct buffer *buf);
 /* 'outline' data structure management */
@@ -130,7 +130,7 @@ static inline int8_t   geti8 (SFT_Font *font, unsigned long offset);
 static inline uint16_t getu16(SFT_Font *font, unsigned long offset);
 static inline int16_t  geti16(SFT_Font *font, unsigned long offset);
 static inline uint32_t getu32(SFT_Font *font, unsigned long offset);
-static long gettable(SFT_Font *font, char tag[4]);
+static int gettable(SFT_Font *font, char tag[4], unsigned long *offset);
 /* codepoint -> glyph */
 static long cmap_fmt4(SFT_Font *font, unsigned long table, unsigned long charCode);
 static long cmap_fmt6(SFT_Font *font, unsigned long table, unsigned long charCode);
@@ -138,11 +138,11 @@ static long glyph_id(SFT_Font *font, unsigned long charCode);
 /* glyph -> hmtx */
 static int  hor_metrics(SFT_Font *font, long glyph, int *advanceWidth, int *leftSideBearing);
 /* glyph -> outline */
-static long outline_offset(SFT_Font *font, long glyph);
+static int  outline_offset(SFT_Font *font, long glyph, unsigned long *offset);
 /* decoding outlines */
 static long simple_flags(SFT_Font *font, unsigned long offset, int numPts, uint8_t *flags);
 static int  simple_points(SFT_Font *font, unsigned long offset, int numPts, uint8_t *flags, struct point *points);
-static int  decode_contour(uint8_t *flags, unsigned int basePoint, unsigned int count, struct outline *outl);
+static int  decode_contour(uint8_t *flags, unsigned short basePoint, unsigned short count, struct outline *outl);
 static int  simple_outline(SFT_Font *font, unsigned long offset, int numContours, struct outline *outl);
 static int  compound_outline(SFT_Font *font, unsigned long offset, int recDepth, struct outline *outl);
 static int  decode_outline(SFT_Font *font, unsigned long offset, int recDepth, struct outline *outl);
@@ -217,24 +217,23 @@ sft_freefont(SFT_Font *font)
 static int
 init_font(SFT_Font *font)
 {
-	unsigned long scalerType;
-	long head, hhea;
+	unsigned long scalerType, head, hhea;
 
 	/* Check for a compatible scalerType (magic number). */
 	scalerType = getu32(font, 0);
 	if (scalerType != FILE_MAGIC_ONE && scalerType != FILE_MAGIC_TWO)
 		return -1;
 
-	if ((head = gettable(font, "head")) < 0)
+	if (gettable(font, "head", &head) < 0)
 		return -1;
-	if (font->size < (unsigned long) head + 54)
+	if (font->size < head + 54)
 		return -1;
 	font->unitsPerEm = getu16(font, head + 18);
 	font->locaFormat = geti16(font, head + 50);
 
-	if ((hhea = gettable(font, "hhea")) < 0)
+	if (gettable(font, "hhea", &hhea) < 0)
 		return -1;
-	if (font->size < (unsigned long) hhea + 36)
+	if (font->size < hhea + 36)
 		return -1;
 	font->numLongHmtx = getu16(font, hhea + 34);
 
@@ -245,10 +244,10 @@ int
 sft_linemetrics(const struct SFT *sft, double *ascent, double *descent, double *gap)
 {
 	double factor;
-	long hhea;
-	if ((hhea = gettable(sft->font, "hhea")) < 0)
+	unsigned long hhea;
+	if (gettable(sft->font, "hhea", &hhea) < 0)
 		return -1;
-	if (sft->font->size < (unsigned long) hhea + 36) return -1;
+	if (sft->font->size < hhea + 36) return -1;
 	factor = sft->yScale / sft->font->unitsPerEm;
 	*ascent  = geti16(sft->font, hhea + 4) * factor;
 	*descent = geti16(sft->font, hhea + 6) * factor;
@@ -261,16 +260,15 @@ sft_kerning(const struct SFT *sft, unsigned long leftChar, unsigned long rightCh
 {
 	void *match;
 	unsigned long offset;
-	long kern;
-	unsigned int numTables, numPairs, length, format, flags, value;
+	unsigned int numTables, numPairs, length, format, flags;
+	int value;
 	uint8_t key[4];
 
 	kerning[0] = 0.0;
 	kerning[1] = 0.0;
 
-	if ((kern = gettable(sft->font, "kern")) < 0)
+	if (gettable(sft->font, "kern", &offset) < 0)
 		return 0;
-	offset = kern;
 
 	/* Read kern table header. */
 	if (sft->font->size < offset + 4)
@@ -303,7 +301,7 @@ sft_kerning(const struct SFT *sft, unsigned long leftChar, unsigned long rightCh
 			if ((match = bsearch(key, sft->font->memory + offset,
 				numPairs, 6, cmpu32)) != NULL) {
 				
-				value = geti16(sft->font, (uint8_t *) match - sft->font->memory + 4);
+				value = geti16(sft->font, (unsigned long) ((uint8_t *) match - sft->font->memory + 4));
 				if (flags & CROSS_STREAM_KERNING) {
 					kerning[1] += value;
 				} else {
@@ -328,7 +326,8 @@ sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 {
 	double transform[6];
 	double xScale, yScale, xOff, yOff;
-	long glyph, outline;
+	unsigned long outline;
+	long glyph;
 	int advance, leftSideBearing;
 	int x1, y1, x2, y2;
 
@@ -353,7 +352,7 @@ sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 	 * empty outlines. */
 	chr->advance = (int) round(advance * xScale);
 
-	if ((outline = outline_offset(sft->font, glyph)) < 0)
+	if (outline_offset(sft->font, glyph, &outline) < 0)
 		return -1;
 	/* A glyph may have a completely empty outline. */
 	if (!outline)
@@ -385,8 +384,8 @@ sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 	/* Compute the user-facing bounding box, respecting Y direction etc. */
 	chr->x = x1;
 	chr->y = sft->flags & SFT_DOWNWARD_Y ? -y2 : y1;
-	chr->width = x2 - x1;
-	chr->height = y2 - y1;
+	chr->width = (unsigned int) (x2 - x1);
+	chr->height = (unsigned int) (y2 - y1);
 
 	/* Render the outline (if requested). */
 	if (sft->flags & SFT_RENDER_IMAGE) {
@@ -512,8 +511,9 @@ map_file(SFT_Font *font, const char *filename)
 		close(fd);
 		return -1;
 	}
-	font->memory = mmap(NULL, info.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
-	font->size = info.st_size;
+	/* FIXME do some basic validation on info.st_size maybe - it is signed for example, so it *could* be negative .. */
+	font->memory = mmap(NULL, (size_t) info.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+	font->size = (unsigned long) info.st_size;
 	close(fd);
 	return font->memory == MAP_FAILED ? -1 : 0;
 }
@@ -576,11 +576,11 @@ clip_points(int numPts, struct point *points, int width, int height)
 }
 
 static int
-init_buffer(struct buffer *buf, int width, int height)
+init_buffer(struct buffer *buf, unsigned int width, unsigned int height)
 {
 	struct cell *ptr;
 	size_t rowsSize, cellsSize;
-	int i;
+	unsigned int i;
 
 	buf->rows = NULL;
 	buf->width = width;
@@ -610,7 +610,7 @@ static void
 flip_buffer(struct buffer *buf)
 {
 	struct cell *row;
-	int front = 0, back = buf->height - 1;
+	unsigned int front = 0, back = buf->height - 1;
 	while (front < back) {
 		row = buf->rows[front];
 		buf->rows[front] = buf->rows[back];
@@ -649,7 +649,7 @@ static int
 grow_points(struct outline *outl)
 {
 	void *mem;
-	int cap = outl->capPoints * 2;
+	unsigned int cap = outl->capPoints * 2;
 	/* This precondition is relatively important. Otherwise, if cap
 	 * were 0, reallocarray() may return NULL as an allocated pointer, which
 	 * we would misinterpret as an out-of-memory situation. */
@@ -665,7 +665,7 @@ static int
 grow_curves(struct outline *outl)
 {
 	void *mem;
-	int cap = outl->capCurves * 2;
+	unsigned int cap = outl->capCurves * 2;
 	assert(cap > 0);
 	if ((mem = sft_reallocarray(outl->curves, cap, sizeof(outl->curves[0]))) == NULL)
 		return -1;
@@ -678,7 +678,7 @@ static int
 grow_lines(struct outline *outl)
 {
 	void *mem;
-	int cap = outl->capLines * 2;
+	unsigned int cap = outl->capLines * 2;
 	assert(cap > 0);
 	if ((mem = sft_reallocarray(outl->lines, cap, sizeof(outl->lines[0]))) == NULL)
 		return -1;
@@ -760,8 +760,8 @@ getu32(SFT_Font *font, unsigned long offset)
 	return (uint32_t) (b3 << 24 | b2 << 16 | b1 << 8 | b0);
 }
 
-static long
-gettable(SFT_Font *font, char tag[4])
+static int
+gettable(SFT_Font *font, char tag[4], unsigned long *offset)
 {
 	void *match;
 	unsigned int numTables;
@@ -772,14 +772,16 @@ gettable(SFT_Font *font, char tag[4])
 		return -1;
 	if ((match = bsearch(tag, font->memory + 12, numTables, 16, cmpu32)) == NULL)
 		return -1;
-	return getu32(font, (uint8_t *) match - font->memory + 8);
+	*offset = getu32(font, (unsigned long) ((uint8_t *) match - font->memory + 8));
+	return 0;
 }
 
 static long
 cmap_fmt4(SFT_Font *font, unsigned long table, unsigned long charCode)
 {
+	uintptr_t segIdxX2;
 	unsigned long endCodes, startCodes, idDeltas, idRangeOffsets, idOffset;
-	unsigned int segCountX2, segIdxX2, startCode, idRangeOffset, id;
+	unsigned int segCountX2, startCode, idRangeOffset, id;
 	int idDelta;
 	uint8_t key[2] = { (uint8_t) (charCode >> 8), (uint8_t) charCode };
 	/* cmap format 4 only supports the Unicode BMP. */
@@ -839,19 +841,18 @@ cmap_fmt6(SFT_Font *font, unsigned long table, unsigned long charCode)
 static long
 glyph_id(SFT_Font *font, unsigned long charCode)
 {
-	unsigned long entry, table;
-	long cmap;
+	unsigned long cmap, entry, table;
 	unsigned int idx, numEntries;
 	int type;
 
-	if ((cmap = gettable(font, "cmap")) < 0)
+	if (gettable(font, "cmap", &cmap) < 0)
 		return -1;
 
-	if (font->size < (unsigned long) cmap + 4)
+	if (font->size < cmap + 4)
 		return -1;
 	numEntries = getu16(font, cmap + 2);
 	
-	if (font->size < (unsigned long) cmap + 4 + numEntries * 8)
+	if (font->size < cmap + 4 + numEntries * 8)
 		return -1;
 	/* Search for the first Unicode BMP entry. */
 	for (idx = 0; idx < numEntries; ++idx) {
@@ -879,9 +880,8 @@ glyph_id(SFT_Font *font, unsigned long charCode)
 static int
 hor_metrics(SFT_Font *font, long glyph, int *advanceWidth, int *leftSideBearing)
 {
-	unsigned long offset, boundary;
-	long hmtx;
-	if ((hmtx = gettable(font, "hmtx")) < 0)
+	unsigned long hmtx, offset, boundary;
+	if (gettable(font, "hmtx", &hmtx) < 0)
 		return -1;
 	if (glyph < font->numLongHmtx) {
 		/* glyph is inside long metrics segment. */
@@ -911,15 +911,15 @@ hor_metrics(SFT_Font *font, long glyph, int *advanceWidth, int *leftSideBearing)
 }
 
 /* Returns the offset into the font that the glyph's outline is stored at. */
-static long
-outline_offset(SFT_Font *font, long glyph)
+static int
+outline_offset(SFT_Font *font, long glyph, unsigned long *offset)
 {
+	unsigned long loca, glyf;
 	unsigned long base, this, next;
-	long loca, glyf;
 
-	if ((loca = gettable(font, "loca")) < 0)
+	if (gettable(font, "loca", &loca) < 0)
 		return -1;
-	if ((glyf = gettable(font, "glyf")) < 0)
+	if (gettable(font, "glyf", &glyf) < 0)
 		return -1;
 
 	if (font->locaFormat == 0) {
@@ -928,8 +928,8 @@ outline_offset(SFT_Font *font, long glyph)
 		if (font->size < base + 4)
 			return -1;
 		
-		this = 2L * getu16(font, base);
-		next = 2L * getu16(font, base + 2);
+		this = 2UL * getu16(font, base);
+		next = 2UL * getu16(font, base + 2);
 	} else {
 		base = loca + 4 * glyph;
 
@@ -940,7 +940,8 @@ outline_offset(SFT_Font *font, long glyph)
 		next = getu32(font, base + 4);
 	}
 
-	return this == next ? 0 : glyf + this;
+	*offset = this == next ? 0 : glyf + this;
+	return 0;
 }
 
 /* For a 'simple' outline, determines each point of the outline with a set of flags. */
@@ -989,7 +990,7 @@ simple_points(SFT_Font *font, unsigned long offset, int numPts, uint8_t *flags, 
 			accum += geti16(font, offset);
 			offset += 2;
 		}
-		points[i].x = accum;
+		points[i].x = (double) accum;
 	}
 
 	accum = 0L;
@@ -1006,17 +1007,17 @@ simple_points(SFT_Font *font, unsigned long offset, int numPts, uint8_t *flags, 
 			accum += geti16(font, offset);
 			offset += 2;
 		}
-		points[i].y = accum;
+		points[i].y = (double) accum;
 	}
 
 	return 0;
 }
 
 static int
-decode_contour(uint8_t *flags, unsigned int basePoint, unsigned int count, struct outline *outl)
+decode_contour(uint8_t *flags, unsigned short basePoint, unsigned short count, struct outline *outl)
 {
-	unsigned int looseEnd, beg, ctrl, center;
-	unsigned int gotCtrl, i;
+	unsigned short looseEnd, beg, ctrl, center, i;
+	unsigned int gotCtrl;
 
 	/* Skip contours with less than two points, since the following algorithm can't handle them and
 	 * they should appear invisible either way (because they don't have any area). */
@@ -1086,10 +1087,10 @@ decode_contour(uint8_t *flags, unsigned int basePoint, unsigned int count, struc
 static int
 simple_outline(SFT_Font *font, unsigned long offset, int numContours, struct outline *outl)
 {
-	unsigned int *endPts = NULL;
+	unsigned short *endPts = NULL;
 	uint8_t *flags = NULL;
 	long sgnOffset;
-	unsigned int numPts;
+	unsigned short numPts;
 	int i;
 
 	unsigned int basePoint = outl->numPoints;
@@ -1103,7 +1104,7 @@ simple_outline(SFT_Font *font, unsigned long offset, int numContours, struct out
 			return -1;
 	}
 	
-	STACK_ALLOC(endPts, unsigned int, 16, numContours);
+	STACK_ALLOC(endPts, unsigned short, 16, numContours);
 	if (endPts == NULL)
 		goto failure;
 	STACK_ALLOC(flags, uint8_t, 128, numPts);
@@ -1131,9 +1132,9 @@ simple_outline(SFT_Font *font, unsigned long offset, int numContours, struct out
 	outl->numPoints += numPts;
 	
 	uint8_t *flagsPtr = flags;
-	unsigned int contourBase = 0;
+	unsigned short contourBase = 0;
 	for (int c = 0; c < numContours; ++c) {
-		unsigned int count = endPts[c] - contourBase + 1;
+		unsigned short count = endPts[c] - contourBase + 1;
 		if (decode_contour(flagsPtr, basePoint, count, outl) < 0)
 			goto failure;
 		flagsPtr += count;
@@ -1154,7 +1155,7 @@ static int
 compound_outline(SFT_Font *font, unsigned long offset, int recDepth, struct outline *outl)
 {
 	double local[6];
-	long outline;
+	unsigned long outline;
 	unsigned int flags, glyph;
 	/* Guard against infinite recursion (compound glyphs that have themselves as component). */
 	if (recDepth >= 4)
@@ -1211,7 +1212,7 @@ compound_outline(SFT_Font *font, unsigned long offset, int recDepth, struct outl
 		 * But stb_truetype scales by the L2 norm. And FreeType2 doesn't scale at all.
 		 * Furthermore, Microsoft's spec doesn't even mention anything like this.
 		 * It's almost as if nobody ever uses this feature anyway. */
-		if ((outline = outline_offset(font, glyph)) < 0)
+		if (outline_offset(font, glyph, &outline) < 0)
 			return -1;
 		if (outline) {
 			unsigned int basePoint = outl->numPoints;

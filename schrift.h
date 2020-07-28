@@ -47,8 +47,8 @@ struct SFT_Char
 	double advance;
 	int x;
 	int y;
-	int width;
-	int height;
+	unsigned int width;
+	unsigned int height;
 };
 
 /* libschrift uses semantic versioning. */

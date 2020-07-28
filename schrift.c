@@ -784,14 +784,14 @@ cmap_fmt4(SFT_Font *font, unsigned long table, unsigned long charCode, unsigned 
 {
 	uintptr_t segIdxX2;
 	unsigned long endCodes, startCodes, idDeltas, idRangeOffsets, idOffset;
-	unsigned int segCountX2, startCode, idRangeOffset, id;
-	int idDelta;
+	unsigned short segCountX2, idRangeOffset, startCode, shortCode, idDelta, id;
 	uint8_t key[2] = { (uint8_t) (charCode >> 8), (uint8_t) charCode };
 	/* cmap format 4 only supports the Unicode BMP. */
 	if (charCode > 0xFFFF) {
 		*glyph = 0;
 		return 0;
 	}
+	shortCode = (unsigned short) charCode;
 	if (font->size < table + 8)
 		return -1;
 	segCountX2 = getu16(font, table);
@@ -804,25 +804,25 @@ cmap_fmt4(SFT_Font *font, unsigned long table, unsigned long charCode, unsigned 
 	idRangeOffsets = idDeltas + segCountX2;
 	if (font->size < idRangeOffsets + segCountX2)
 		return -1;
-	/* Find the segment that contains charCode by binary searching over the highest codes in the segments. */
+	/* Find the segment that contains shortCode by binary searching over the highest codes in the segments. */
 	segIdxX2 = (uintptr_t) csearch(key, font->memory + endCodes,
 		segCountX2 / 2, 2, cmpu16) - (uintptr_t) (font->memory + endCodes);
 	/* Look up segment info from the arrays & short circuit if the spec requires. */
-	if ((startCode = getu16(font, startCodes + segIdxX2)) > charCode)
+	if ((startCode = getu16(font, startCodes + segIdxX2)) > shortCode)
 		return 0;
-	idDelta = geti16(font, idDeltas + segIdxX2);
+	idDelta = getu16(font, idDeltas + segIdxX2);
 	if (!(idRangeOffset = getu16(font, idRangeOffsets + segIdxX2))) {
 		/* Intentional integer under- and overflow. */
-		*glyph = (unsigned int) (charCode + idDelta) & 0xFFFF;
+		*glyph = (shortCode + idDelta) & 0xFFFF;
 		return 0;
 	}
 	/* Calculate offset into glyph array and determine ultimate value. */
-	idOffset = idRangeOffsets + segIdxX2 + idRangeOffset + 2 * (charCode - startCode);
+	idOffset = idRangeOffsets + segIdxX2 + idRangeOffset + 2U * (unsigned int) (shortCode - startCode);
 	if (font->size < idOffset + 2)
 		return -1;
 	id = getu16(font, idOffset);
 	/* Intentional integer under- and overflow. */
-	*glyph = id ? (unsigned int) (id + idDelta) & 0xFFFF : 0;
+	*glyph = id ? (id + idDelta) & 0xFFFF : 0;
 	return 0;
 }
 
@@ -1112,7 +1112,12 @@ simple_outline(SFT_Font *font, unsigned long offset, unsigned int numContours, s
 
 	if (font->size < offset + numContours * 2 + 2)
 		goto failure;
-	numPts = getu16(font, offset + (numContours - 1) * 2) + 1U;
+	numPts = getu16(font, offset + (numContours - 1) * 2);
+	if (numPts == 0xFFFF)
+		goto failure;
+	numPts++;
+	if (outl->numPoints > UINT16_MAX - numPts)
+		goto failure;
 
 	while (outl->capPoints < basePoint + numPts) {
 		if (grow_points(outl) < 0)
@@ -1232,7 +1237,7 @@ compound_outline(SFT_Font *font, unsigned long offset, int recDepth, struct outl
 			unsigned int basePoint = outl->numPoints;
 			if (decode_outline(font, outline, recDepth + 1, outl) < 0)
 				return -1;
-			transform_points(outl->numPoints - basePoint, outl->points + basePoint, local);
+			transform_points((unsigned short) (outl->numPoints - basePoint), outl->points + basePoint, local);
 		}
 	} while (flags & THERE_ARE_MORE_COMPONENTS);
 

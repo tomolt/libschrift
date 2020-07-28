@@ -73,8 +73,8 @@ struct outline
 	struct point *points;
 	struct curve *curves;
 	struct line *lines;
-	unsigned int numPoints, numCurves, numLines;
-	unsigned int capPoints, capCurves, capLines;
+	unsigned short numPoints, numCurves, numLines;
+	unsigned short capPoints, capCurves, capLines;
 };
 
 struct buffer
@@ -108,8 +108,8 @@ static void unmap_file(SFT_Font *font);
 static int  init_font(SFT_Font *font);
 /* mathematical utilities */
 static struct point midpoint(struct point a, struct point b);
-static void transform_points(unsigned int numPts, struct point *points, double trf[6]);
-static void clip_points(unsigned int numPts, struct point *points, unsigned int width, unsigned int height);
+static void transform_points(unsigned short numPts, struct point *points, double trf[6]);
+static void clip_points(unsigned short numPts, struct point *points, unsigned int width, unsigned int height);
 /* 'buffer' data structure management */
 static int  init_buffer(struct buffer *buf, unsigned int width, unsigned int height);
 static void free_buffer(struct buffer *buf);
@@ -140,8 +140,8 @@ static int  hor_metrics(SFT_Font *font, unsigned long glyph, int *advanceWidth, 
 /* glyph -> outline */
 static int  outline_offset(SFT_Font *font, unsigned long glyph, unsigned long *offset);
 /* decoding outlines */
-static long simple_flags(SFT_Font *font, unsigned long offset, int numPts, uint8_t *flags);
-static int  simple_points(SFT_Font *font, unsigned long offset, int numPts, uint8_t *flags, struct point *points);
+static int  simple_flags(SFT_Font *font, unsigned long *offset, unsigned short numPts, uint8_t *flags);
+static int  simple_points(SFT_Font *font, unsigned long offset, unsigned short numPts, uint8_t *flags, struct point *points);
 static int  decode_contour(uint8_t *flags, unsigned short basePoint, unsigned short count, struct outline *outl);
 static int  simple_outline(SFT_Font *font, unsigned long offset, unsigned int numContours, struct outline *outl);
 static int  compound_outline(SFT_Font *font, unsigned long offset, int recDepth, struct outline *outl);
@@ -537,10 +537,10 @@ midpoint(struct point a, struct point b)
 
 /* Applies an affine linear transformation matrix to a set of points. */
 static void
-transform_points(unsigned int numPts, struct point *points, double trf[6])
+transform_points(unsigned short numPts, struct point *points, double trf[6])
 {
 	struct point *restrict pt;
-	unsigned int i;
+	unsigned short i;
 	for (i = 0; i < numPts; ++i) {
 		pt = &points[i];
 		*pt = (struct point) {
@@ -551,10 +551,10 @@ transform_points(unsigned int numPts, struct point *points, double trf[6])
 }
 
 static void
-clip_points(unsigned int numPts, struct point *points, unsigned int width, unsigned int height)
+clip_points(unsigned short numPts, struct point *points, unsigned int width, unsigned int height)
 {
 	struct point pt;
-	unsigned int i;
+	unsigned short i;
 
 	for (i = 0; i < numPts; ++i) {
 		pt = points[i];
@@ -648,11 +648,11 @@ static int
 grow_points(struct outline *outl)
 {
 	void *mem;
-	unsigned int cap = outl->capPoints * 2;
-	/* This precondition is relatively important. Otherwise, if cap
-	 * were 0, reallocarray() may return NULL as an allocated pointer, which
-	 * we would misinterpret as an out-of-memory situation. */
-	assert(cap > 0);
+	unsigned short cap;
+	cap = (unsigned short) (2U * outl->capPoints);
+	/* Since we use unsigned shorts for capacities, we have to be extra careful not to trigger integer overflow. */
+	if (cap <= outl->capPoints)
+		return -1;
 	if ((mem = sft_reallocarray(outl->points, cap, sizeof(outl->points[0]))) == NULL)
 		return -1;
 	outl->capPoints = cap;
@@ -664,8 +664,10 @@ static int
 grow_curves(struct outline *outl)
 {
 	void *mem;
-	unsigned int cap = outl->capCurves * 2;
-	assert(cap > 0);
+	unsigned short cap;
+	cap = (unsigned short) (2U * outl->capCurves);
+	if (cap <= outl->capCurves)
+		return -1;
 	if ((mem = sft_reallocarray(outl->curves, cap, sizeof(outl->curves[0]))) == NULL)
 		return -1;
 	outl->capCurves = cap;
@@ -677,8 +679,10 @@ static int
 grow_lines(struct outline *outl)
 {
 	void *mem;
-	unsigned int cap = outl->capLines * 2;
-	assert(cap > 0);
+	unsigned short cap;
+	cap = (unsigned short) (2U * outl->capLines);
+	if (cap <= outl->capLines)
+		return -1;
 	if ((mem = sft_reallocarray(outl->lines, cap, sizeof(outl->lines[0]))) == NULL)
 		return -1;
 	outl->capLines = cap;
@@ -954,34 +958,37 @@ outline_offset(SFT_Font *font, unsigned long glyph, unsigned long *offset)
 }
 
 /* For a 'simple' outline, determines each point of the outline with a set of flags. */
-static long
-simple_flags(SFT_Font *font, unsigned long offset, int numPts, uint8_t *flags)
+static int
+simple_flags(SFT_Font *font, unsigned long *offset, unsigned short numPts, uint8_t *flags)
 {
-	int value = 0, repeat = 0, i;
+	unsigned long off = *offset;
+	unsigned short i;
+	uint8_t value = 0, repeat = 0;
 	for (i = 0; i < numPts; ++i) {
 		if (repeat) {
 			--repeat;
 		} else {
-			if (font->size < offset + 1)
+			if (font->size < off + 1)
 				return -1;
-			value = getu8(font, offset++);
+			value = getu8(font, off++);
 			if (value & REPEAT_FLAG) {
-				if (font->size < offset + 1)
+				if (font->size < off + 1)
 					return -1;
-				repeat = getu8(font, offset++);
+				repeat = getu8(font, off++);
 			}
 		}
 		flags[i] = value;
 	}
-	return offset;
+	*offset = off;
+	return 0;
 }
 
 /* For a 'simple' outline, decodes both X and Y coordinates for each point of the outline. */
 static int
-simple_points(SFT_Font *font, unsigned long offset, int numPts, uint8_t *flags, struct point *points)
+simple_points(SFT_Font *font, unsigned long offset, unsigned short numPts, uint8_t *flags, struct point *points)
 {
 	long accum, value, bit;
-	int i;
+	unsigned short i;
 
 	assert(numPts > 0);
 
@@ -1098,161 +1105,159 @@ simple_outline(SFT_Font *font, unsigned long offset, unsigned int numContours, s
 {
 	unsigned short *endPts = NULL;
 	uint8_t *flags = NULL;
-	long sgnOffset;
 	unsigned short numPts;
 	unsigned int i;
 
-	unsigned int basePoint = outl->numPoints;
+	unsigned short basePoint = outl->numPoints;
 
-		if (font->size < offset + numContours * 2 + 2)
-			goto failure;
-		numPts = getu16(font, offset + (numContours - 1) * 2) + 1;
+	if (font->size < offset + numContours * 2 + 2)
+		goto failure;
+	numPts = getu16(font, offset + (numContours - 1) * 2) + 1U;
 
-		while (outl->capPoints < basePoint + numPts) {
-			if (grow_points(outl) < 0)
-				return -1;
-		}
-		
-		STACK_ALLOC(endPts, unsigned short, 16, numContours);
-		if (endPts == NULL)
-			goto failure;
-		STACK_ALLOC(flags, uint8_t, 128, numPts);
-		if (flags == NULL)
-			goto failure;
+	while (outl->capPoints < basePoint + numPts) {
+		if (grow_points(outl) < 0)
+			return -1;
+	}
+	
+	STACK_ALLOC(endPts, unsigned short, 16, numContours);
+	if (endPts == NULL)
+		goto failure;
+	STACK_ALLOC(flags, uint8_t, 128, numPts);
+	if (flags == NULL)
+		goto failure;
 
-		for (i = 0; i < numContours; ++i) {
-			endPts[i] = getu16(font, offset);
-			offset += 2;
-		}
-		/* Ensure that endPts are never falling.
-		 * Falling endPts have no sensible interpretation and most likely only occur in malicious input.
-		 * Therefore, we bail, should we ever encounter such input. */
-		for (i = 0; i < numContours - 1; ++i) {
-			if (endPts[i + 1] < endPts[i] + 1)
-				goto failure;
-		}
-		offset += 2U + getu16(font, offset);
-
-		if ((sgnOffset = simple_flags(font, offset, numPts, flags)) < 0)
+	for (i = 0; i < numContours; ++i) {
+		endPts[i] = getu16(font, offset);
+		offset += 2;
+	}
+	/* Ensure that endPts are never falling.
+	 * Falling endPts have no sensible interpretation and most likely only occur in malicious input.
+	 * Therefore, we bail, should we ever encounter such input. */
+	for (i = 0; i < numContours - 1; ++i) {
+		if (endPts[i + 1] < endPts[i] + 1)
 			goto failure;
-		offset = sgnOffset;
-		if (simple_points(font, offset, numPts, flags, outl->points + basePoint) < 0)
-			goto failure;
-		outl->numPoints += numPts;
-		
-		uint8_t *flagsPtr = flags;
-		unsigned short contourBase = 0;
-		for (i = 0; i < numContours; ++i) {
-			unsigned short count = endPts[i] - contourBase + 1;
-			if (decode_contour(flagsPtr, basePoint, count, outl) < 0)
-				goto failure;
-			flagsPtr += count;
-			basePoint += count;
-			contourBase += count;
-		}
+	}
+	offset += 2U + getu16(font, offset);
 
-		STACK_FREE(endPts);
-		STACK_FREE(flags);
-		return 0;
-	failure:
-		STACK_FREE(endPts);
-		STACK_FREE(flags);
-		return -1;
+	if (simple_flags(font, &offset, numPts, flags) < 0)
+		goto failure;
+	if (simple_points(font, offset, numPts, flags, outl->points + basePoint) < 0)
+		goto failure;
+	outl->numPoints += numPts;
+	
+	uint8_t *flagsPtr = flags;
+	unsigned short contourBase = 0;
+	for (i = 0; i < numContours; ++i) {
+		unsigned short count = endPts[i] - contourBase + 1;
+		if (decode_contour(flagsPtr, basePoint, count, outl) < 0)
+			goto failure;
+		flagsPtr += count;
+		basePoint += count;
+		contourBase += count;
 	}
 
-	static int
-	compound_outline(SFT_Font *font, unsigned long offset, int recDepth, struct outline *outl)
-	{
-		double local[6];
-		unsigned long outline;
-		unsigned int flags, glyph;
-		/* Guard against infinite recursion (compound glyphs that have themselves as component). */
-		if (recDepth >= 4)
+	STACK_FREE(endPts);
+	STACK_FREE(flags);
+	return 0;
+failure:
+	STACK_FREE(endPts);
+	STACK_FREE(flags);
+	return -1;
+}
+
+static int
+compound_outline(SFT_Font *font, unsigned long offset, int recDepth, struct outline *outl)
+{
+	double local[6];
+	unsigned long outline;
+	unsigned int flags, glyph;
+	/* Guard against infinite recursion (compound glyphs that have themselves as component). */
+	if (recDepth >= 4)
+		return -1;
+	do {
+		memset(local, 0, sizeof(local));
+		if (font->size < offset + 4)
 			return -1;
-		do {
-			memset(local, 0, sizeof(local));
+		flags = getu16(font, offset);
+		glyph = getu16(font, offset + 2);
+		offset += 4;
+		/* We don't implement point matching, and neither does stb_truetype for that matter. */
+		if (!(flags & ACTUAL_XY_OFFSETS))
+			return -1;
+		/* Read additional X and Y offsets (in FUnits) of this component. */
+		if (flags & OFFSETS_ARE_LARGE) {
 			if (font->size < offset + 4)
 				return -1;
-			flags = getu16(font, offset);
-			glyph = getu16(font, offset + 2);
+			local[4] = geti16(font, offset);
+			local[5] = geti16(font, offset + 2);
 			offset += 4;
-			/* We don't implement point matching, and neither does stb_truetype for that matter. */
-			if (!(flags & ACTUAL_XY_OFFSETS))
-				return -1;
-			/* Read additional X and Y offsets (in FUnits) of this component. */
-			if (flags & OFFSETS_ARE_LARGE) {
-				if (font->size < offset + 4)
-					return -1;
-				local[4] = geti16(font, offset);
-				local[5] = geti16(font, offset + 2);
-				offset += 4;
-			} else {
-				if (font->size < offset + 2)
-					return -1;
-				local[4] = geti8(font, offset);
-				local[5] = geti8(font, offset + 1);
-				offset += 2;
-			}
-			if (flags & GOT_A_SINGLE_SCALE) {
-				if (font->size < offset + 2)
-					return -1;
-				local[0] = geti16(font, offset) / 16384.0;
-				local[3] = local[0];
-				offset += 2;
-			} else if (flags & GOT_AN_X_AND_Y_SCALE) {
-				if (font->size < offset + 4)
-					return -1;
-				local[0] = geti16(font, offset + 0) / 16384.0;
-				local[3] = geti16(font, offset + 2) / 16384.0;
-				offset += 4;
-			} else if (flags & GOT_A_SCALE_MATRIX) {
-				if (font->size < offset + 8)
-					return -1;
-				local[0] = geti16(font, offset + 0) / 16384.0;
-				local[1] = geti16(font, offset + 2) / 16384.0;
-				local[2] = geti16(font, offset + 4) / 16384.0;
-				local[3] = geti16(font, offset + 6) / 16384.0;
-				offset += 8;
-			} else {
-				local[0] = 1.0;
-				local[3] = 1.0;
-			}
-			/* At this point, Apple's spec more or less tells you to scale the matrix by its own L1 norm.
-			 * But stb_truetype scales by the L2 norm. And FreeType2 doesn't scale at all.
-			 * Furthermore, Microsoft's spec doesn't even mention anything like this.
-			 * It's almost as if nobody ever uses this feature anyway. */
-			if (outline_offset(font, glyph, &outline) < 0)
-				return -1;
-			if (outline) {
-				unsigned int basePoint = outl->numPoints;
-				if (decode_outline(font, outline, recDepth + 1, outl) < 0)
-					return -1;
-				transform_points(outl->numPoints - basePoint, outl->points + basePoint, local);
-			}
-		} while (flags & THERE_ARE_MORE_COMPONENTS);
-
-		return 0;
-	}
-
-	static int
-	decode_outline(SFT_Font *font, unsigned long offset, int recDepth, struct outline *outl)
-	{
-		int numContours;
-		if (font->size < offset + 10)
-			return -1;
-		numContours = geti16(font, offset);
-		if (numContours >= 0) {
-			/* Glyph has a 'simple' outline consisting of a number of contours. */
-			return simple_outline(font, offset + 10, (unsigned int) numContours, outl);
 		} else {
-			/* Glyph has a compound outline combined from mutiple other outlines. */
-			return compound_outline(font, offset + 10, recDepth, outl);
+			if (font->size < offset + 2)
+				return -1;
+			local[4] = geti8(font, offset);
+			local[5] = geti8(font, offset + 1);
+			offset += 2;
 		}
-	}
+		if (flags & GOT_A_SINGLE_SCALE) {
+			if (font->size < offset + 2)
+				return -1;
+			local[0] = geti16(font, offset) / 16384.0;
+			local[3] = local[0];
+			offset += 2;
+		} else if (flags & GOT_AN_X_AND_Y_SCALE) {
+			if (font->size < offset + 4)
+				return -1;
+			local[0] = geti16(font, offset + 0) / 16384.0;
+			local[3] = geti16(font, offset + 2) / 16384.0;
+			offset += 4;
+		} else if (flags & GOT_A_SCALE_MATRIX) {
+			if (font->size < offset + 8)
+				return -1;
+			local[0] = geti16(font, offset + 0) / 16384.0;
+			local[1] = geti16(font, offset + 2) / 16384.0;
+			local[2] = geti16(font, offset + 4) / 16384.0;
+			local[3] = geti16(font, offset + 6) / 16384.0;
+			offset += 8;
+		} else {
+			local[0] = 1.0;
+			local[3] = 1.0;
+		}
+		/* At this point, Apple's spec more or less tells you to scale the matrix by its own L1 norm.
+		 * But stb_truetype scales by the L2 norm. And FreeType2 doesn't scale at all.
+		 * Furthermore, Microsoft's spec doesn't even mention anything like this.
+		 * It's almost as if nobody ever uses this feature anyway. */
+		if (outline_offset(font, glyph, &outline) < 0)
+			return -1;
+		if (outline) {
+			unsigned int basePoint = outl->numPoints;
+			if (decode_outline(font, outline, recDepth + 1, outl) < 0)
+				return -1;
+			transform_points(outl->numPoints - basePoint, outl->points + basePoint, local);
+		}
+	} while (flags & THERE_ARE_MORE_COMPONENTS);
 
-	/* A heuristic to tell whether a given curve can be approximated closely enough by a line. */
-	static int
-	is_flat(struct outline *outl, struct curve curve, double flatness)
+	return 0;
+}
+
+static int
+decode_outline(SFT_Font *font, unsigned long offset, int recDepth, struct outline *outl)
+{
+	int numContours;
+	if (font->size < offset + 10)
+		return -1;
+	numContours = geti16(font, offset);
+	if (numContours >= 0) {
+		/* Glyph has a 'simple' outline consisting of a number of contours. */
+		return simple_outline(font, offset + 10, (unsigned int) numContours, outl);
+	} else {
+		/* Glyph has a compound outline combined from mutiple other outlines. */
+		return compound_outline(font, offset + 10, recDepth, outl);
+	}
+}
+
+/* A heuristic to tell whether a given curve can be approximated closely enough by a line. */
+static int
+is_flat(struct outline *outl, struct curve curve, double flatness)
 {
 	struct point beg = outl->points[curve.beg];
 	struct point end = outl->points[curve.end];
@@ -1281,19 +1286,19 @@ tesselate_curve(struct curve curve, struct outline *outl)
 			if (top == 0) break;
 			curve = stack[--top];
 		} else {
-			unsigned int ctrl0 = outl->numPoints;
+			unsigned short ctrl0 = outl->numPoints;
 			if (outl->numPoints >= outl->capPoints && grow_points(outl) < 0)
 				return -1;
 			outl->points[ctrl0] = midpoint(outl->points[curve.beg], outl->points[curve.ctrl]);
 			++outl->numPoints;
 
-			unsigned int ctrl1 = outl->numPoints;
+			unsigned short ctrl1 = outl->numPoints;
 			if (outl->numPoints >= outl->capPoints && grow_points(outl) < 0)
 				return -1;
 			outl->points[ctrl1] = midpoint(outl->points[curve.ctrl], outl->points[curve.end]);
 			++outl->numPoints;
 
-			unsigned int pivot = outl->numPoints;
+			unsigned short pivot = outl->numPoints;
 			if (outl->numPoints >= outl->capPoints && grow_points(outl) < 0)
 				return -1;
 			outl->points[pivot] = midpoint(outl->points[ctrl0], outl->points[ctrl1]);

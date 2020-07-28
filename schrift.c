@@ -1080,6 +1080,10 @@ decode_contour(uint8_t *flags, uint_fast16_t basePoint, uint_fast16_t count, str
 	for (i = 0; i < count; ++i) {
 		/* cur can't overflow because we ensure that basePoint + count < 0xFFFF before calling decode_contour(). */
 		cur = (uint_least16_t) (basePoint + i);
+		/* NOTE clang-analyzer will often flag this and another piece of code because it thinks that flags and
+		 * outl->points + basePoint don't always get properly initialized -- even when you explicitly loop over both
+		 * and set every element to zero (but not when you use memset). This is a known clang-analyzer bug:
+		 * http://clang-developers.42468.n3.nabble.com/StaticAnalyzer-False-positive-with-loop-handling-td4053875.html */
 		if (flags[i] & POINT_IS_ON_CURVE) {
 			if (gotCtrl) {
 				if (outl->numCurves >= outl->capCurves && grow_curves(outl) < 0)

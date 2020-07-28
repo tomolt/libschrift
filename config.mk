@@ -19,6 +19,6 @@ X11LIB = /usr/lib/X11
 
 # flags
 CPPFLAGS = -I./
-CFLAGS = -Os -std=c99 -pedantic -Wall -Wextra
+CFLAGS = -Os -std=c99 -pedantic -Wall -Wextra -Wconversion
 LDFLAGS = -Os
 

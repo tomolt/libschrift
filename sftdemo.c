@@ -54,7 +54,7 @@ static int
 compare32(const void *v1, const void *v2, const void *userdata)
 {
 	(void) userdata;
-	const uint32_t *u1 = v1, *u2 = v2;
+	const int32_t *u1 = v1, *u2 = v2;
 	return *u1 - *u2;
 }
 
@@ -64,7 +64,7 @@ loadglyph(struct SFT *sft, unsigned int charCode)
 	struct SFT_Char chr;
 	XGlyphInfo info;
 	Glyph glyph;
-	int stride, i;
+	unsigned int stride, i;
 
 	if (sft_char(sft, charCode, &chr) < 0) {
 		printf("Couldn't load character '%c' (0x%02X).\n", charCode, charCode);
@@ -72,21 +72,21 @@ loadglyph(struct SFT *sft, unsigned int charCode)
 	}
 
 	glyph = charCode;
-	info.x = -chr.x;
-	info.y = -chr.y;
-	info.width = chr.width;
-	info.height = chr.height;
-	info.xOff = (int) (chr.advance + 0.5); /* You *should* use round() here instead. */
+	info.x = (short) -chr.x;
+	info.y = (short) -chr.y;
+	info.width = (unsigned short) chr.width;
+	info.height = (unsigned short) chr.height;
+	info.xOff = (short) round(chr.advance);
 	info.yOff = 0;
 
-	stride = (chr.width + 3) & ~3;
+	stride = (chr.width + 3) & ~3U;
 	char bitmap[stride * chr.height];
 	memset(bitmap, 0, stride * chr.height);
 	for (i = 0; i < chr.height; ++i)
 		memcpy(bitmap + i * stride, (char *) chr.image + i * chr.width, chr.width);
 	free(chr.image);
 
-	XRenderAddGlyphs(dpy, glyphset, &glyph, &info, 1, bitmap, stride * chr.height);
+	XRenderAddGlyphs(dpy, glyphset, &glyph, &info, 1, bitmap, (int) (stride * chr.height));
 }
 
 static void
@@ -124,7 +124,7 @@ drawtext(int x, int y, const char *text)
 }
 
 static void
-draw(int width, int height)
+draw(unsigned int width, unsigned int height)
 {
 	XRenderFillRectangle(dpy, PictOpOver,
 		pic, &bgcolor, 0, 0, width, height);
@@ -133,8 +133,10 @@ draw(int width, int height)
 	/* TODO check return value! */
 	sft_linemetrics(&sft, &ascent, &descent, &gap);
 
+	double y = ascent + gap;
 	for (int i = 0; i < numlines; ++i) {
-		drawtext(20, ascent + gap + round((ascent + descent + gap) * 1.5) * i, lines[i]);
+		drawtext(20, (int) round(y), lines[i]);
+		y += (ascent + descent + gap) * 1.5;
 	}
 }
 
@@ -143,7 +145,7 @@ handleevent(XEvent *ev)
 {
 	switch (ev->type) {
 	case Expose:
-		draw(ev->xexpose.width, ev->xexpose.height);
+		draw((unsigned int) ev->xexpose.width, (unsigned int) ev->xexpose.height);
 		break;
 	case ClientMessage:
 		if ((Atom) ev->xclient.data.l[0] == wmDeleteWindow)

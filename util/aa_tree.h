@@ -27,10 +27,10 @@ struct aa_tree {
 	struct aa_node *root;
 	aa_compare_func compare;
 	const void *userdata;
-	int keysize;
+	unsigned int keysize;
 };
 
-void aa_init(struct aa_tree *tree, int keysize,
+void aa_init(struct aa_tree *tree, unsigned int keysize,
 	aa_compare_func compare, const void *userdata);
 void aa_put(struct aa_tree *tree, const void *key, void *value);
 int  aa_get(struct aa_tree *tree, const void *key, void **value);

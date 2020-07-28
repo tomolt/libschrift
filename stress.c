@@ -33,7 +33,8 @@ main(int argc, char *argv[])
 	SFT_Font *font;
 	const char *filename;
 	double size;
-	int i, c;
+	unsigned long c;
+	int i;
 
 	filename = "resources/Ubuntu-R.ttf";
 	size = 16.0;

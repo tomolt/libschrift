@@ -91,7 +91,7 @@ aa_free_rec(struct aa_node *node)
 }
 
 void
-aa_init(struct aa_tree *tree, int keysize, aa_compare_func compare, const void *userdata)
+aa_init(struct aa_tree *tree, unsigned int keysize, aa_compare_func compare, const void *userdata)
 {
 	tree->root = NULL;
 	tree->keysize = keysize;

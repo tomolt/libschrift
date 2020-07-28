@@ -121,6 +121,7 @@ static int  grow_points(struct outline *outl);
 static int  grow_curves(struct outline *outl);
 static int  grow_lines(struct outline *outl);
 /* TTF parsing utilities */
+static int  is_safe_offset(SFT_Font *font, uint_fast32_t offset, uint_fast32_t margin);
 static void *csearch(const void *key, const void *base,
 	size_t nmemb, size_t size, int (*compar)(const void *, const void *));
 static int  cmpu16(const void *a, const void *b);
@@ -230,14 +231,14 @@ init_font(SFT_Font *font)
 
 	if (gettable(font, "head", &head) < 0)
 		return -1;
-	if (font->size < head + 54)
+	if (!is_safe_offset(font, head, 54))
 		return -1;
 	font->unitsPerEm = getu16(font, head + 18);
 	font->locaFormat = geti16(font, head + 50);
 
 	if (gettable(font, "hhea", &hhea) < 0)
 		return -1;
-	if (font->size < hhea + 36)
+	if (!is_safe_offset(font, hhea, 36))
 		return -1;
 	font->numLongHmtx = getu16(font, hhea + 34);
 
@@ -251,7 +252,8 @@ sft_linemetrics(const struct SFT *sft, double *ascent, double *descent, double *
 	uint_fast32_t hhea;
 	if (gettable(sft->font, "hhea", &hhea) < 0)
 		return -1;
-	if (sft->font->size < hhea + 36) return -1;
+	if (!is_safe_offset(sft->font, hhea, 36))
+		return -1;
 	factor = sft->yScale / sft->font->unitsPerEm;
 	*ascent  = geti16(sft->font, hhea + 4) * factor;
 	*descent = geti16(sft->font, hhea + 6) * factor;
@@ -275,7 +277,7 @@ sft_kerning(const struct SFT *sft, unsigned long leftChar, unsigned long rightCh
 		return 0;
 
 	/* Read kern table header. */
-	if (sft->font->size < offset + 4)
+	if (!is_safe_offset(sft->font, offset, 4))
 		return -1;
 	if (getu16(sft->font, offset) != 0)
 		return 0;
@@ -284,7 +286,7 @@ sft_kerning(const struct SFT *sft, unsigned long leftChar, unsigned long rightCh
 
 	while (numTables > 0) {
 		/* Read subtable header. */
-		if (sft->font->size < offset + 6)
+		if (!is_safe_offset(sft->font, offset, 6))
 			return -1;
 		length = getu16(sft->font, offset + 2);
 		format = getu8 (sft->font, offset + 4);
@@ -293,7 +295,7 @@ sft_kerning(const struct SFT *sft, unsigned long leftChar, unsigned long rightCh
 
 		if (format == 0 && (flags & HORIZONTAL_KERNING) && !(flags & MINIMUM_KERNING)) {
 			/* Read format 0 header. */
-			if (sft->font->size < offset + 8)
+			if (!is_safe_offset(sft->font, offset, 8))
 				return -1;
 			numPairs = getu16(sft->font, offset);
 			offset += 8;
@@ -700,6 +702,14 @@ grow_lines(struct outline *outl)
 	return 0;
 }
 
+static int
+is_safe_offset(SFT_Font *font, uint_fast32_t offset, uint_fast32_t margin)
+{
+	if (offset > font->size) return 0;
+	if (font->size - offset < margin) return 0;
+	return 1;
+}
+
 /* Like bsearch(), but returns the next highest element if key could not be found. */
 static void *
 csearch(const void *key, const void *base,
@@ -781,7 +791,7 @@ gettable(SFT_Font *font, char tag[4], uint_fast32_t *offset)
 	if (font->size < 12)
 		return -1;
 	numTables = getu16(font, 4);
-	if (font->size < 12 + (size_t) numTables * 16)
+	if (!is_safe_offset(font, 12, (uint_fast32_t) numTables * 16))
 		return -1;
 	if ((match = bsearch(tag, font->memory + 12, numTables, 16, cmpu32)) == NULL)
 		return -1;
@@ -802,7 +812,7 @@ cmap_fmt4(SFT_Font *font, uint_fast32_t table, uint_fast32_t charCode, uint_fast
 		return 0;
 	}
 	shortCode = (uint_fast16_t) charCode;
-	if (font->size < table + 8)
+	if (!is_safe_offset(font, table, 8))
 		return -1;
 	segCountX2 = getu16(font, table);
 	if ((segCountX2 & 1) || !segCountX2)
@@ -812,7 +822,7 @@ cmap_fmt4(SFT_Font *font, uint_fast32_t table, uint_fast32_t charCode, uint_fast
 	startCodes = endCodes + segCountX2 + 2;
 	idDeltas = startCodes + segCountX2;
 	idRangeOffsets = idDeltas + segCountX2;
-	if (font->size < idRangeOffsets + segCountX2)
+	if (!is_safe_offset(font, idRangeOffsets, segCountX2))
 		return -1;
 	/* Find the segment that contains shortCode by binary searching over the highest codes in the segments. */
 	segIdxX2 = (uintptr_t) csearch(key, font->memory + endCodes,
@@ -828,7 +838,7 @@ cmap_fmt4(SFT_Font *font, uint_fast32_t table, uint_fast32_t charCode, uint_fast
 	}
 	/* Calculate offset into glyph array and determine ultimate value. */
 	idOffset = idRangeOffsets + segIdxX2 + idRangeOffset + 2U * (unsigned int) (shortCode - startCode);
-	if (font->size < idOffset + 2)
+	if (!is_safe_offset(font, idOffset, 2))
 		return -1;
 	id = getu16(font, idOffset);
 	/* Intentional integer under- and overflow. */
@@ -845,11 +855,11 @@ cmap_fmt6(SFT_Font *font, uint_fast32_t table, uint_fast32_t charCode, uint_fast
 		*glyph = 0;
 		return 0;
 	}
-	if (font->size < table + 4)
+	if (!is_safe_offset(font, table, 4))
 		return -1;
 	firstCode = getu16(font, table);
 	entryCount = getu16(font, table + 2);
-	if (font->size < table + 4 + 2 * entryCount)
+	if (!is_safe_offset(font, table, 4 + 2 * entryCount))
 		return -1;
 	if (charCode < firstCode)
 		return -1;
@@ -871,11 +881,11 @@ glyph_id(SFT_Font *font, uint_fast32_t charCode, uint_fast32_t *glyph)
 	if (gettable(font, "cmap", &cmap) < 0)
 		return -1;
 
-	if (font->size < cmap + 4)
+	if (!is_safe_offset(font, cmap, 4))
 		return -1;
 	numEntries = getu16(font, cmap + 2);
 	
-	if (font->size < cmap + 4 + numEntries * 8)
+	if (!is_safe_offset(font, cmap, 4 + numEntries * 8))
 		return -1;
 	/* Search for the first Unicode BMP entry. */
 	for (idx = 0; idx < numEntries; ++idx) {
@@ -883,7 +893,7 @@ glyph_id(SFT_Font *font, uint_fast32_t charCode, uint_fast32_t *glyph)
 		type = getu16(font, entry) * 0100 + getu16(font, entry + 2);
 		if (type == 0003 || type == 0301) {
 			table = cmap + getu32(font, entry + 4);
-			if (font->size < table + 6)
+			if (!is_safe_offset(font, table, 6))
 				return -1;
 			/* Dispatch based on cmap format. */
 			switch (getu16(font, table)) {
@@ -909,7 +919,7 @@ hor_metrics(SFT_Font *font, uint_fast32_t glyph, int *advanceWidth, int *leftSid
 	if (glyph < font->numLongHmtx) {
 		/* glyph is inside long metrics segment. */
 		offset = hmtx + 4 * glyph;
-		if (font->size < offset + 4)
+		if (!is_safe_offset(font, offset, 4))
 			return -1;
 		*advanceWidth = getu16(font, offset);
 		*leftSideBearing = geti16(font, offset + 2);
@@ -921,12 +931,12 @@ hor_metrics(SFT_Font *font, uint_fast32_t glyph, int *advanceWidth, int *leftSid
 			return -1;
 		
 		offset = boundary - 4;
-		if (font->size < offset + 4)
+		if (!is_safe_offset(font, offset, 4))
 			return -1;
 		*advanceWidth = getu16(font, offset);
 		
 		offset = boundary + 2 * (glyph - font->numLongHmtx);
-		if (font->size < offset + 2)
+		if (!is_safe_offset(font, offset, 2))
 			return -1;
 		*leftSideBearing = geti16(font, offset);
 		return 0;
@@ -948,7 +958,7 @@ outline_offset(SFT_Font *font, uint_fast32_t glyph, uint_fast32_t *offset)
 	if (font->locaFormat == 0) {
 		base = loca + 2 * glyph;
 
-		if (font->size < base + 4)
+		if (!is_safe_offset(font, base, 4))
 			return -1;
 		
 		this = 2U * (uint_fast32_t) getu16(font, base);
@@ -956,7 +966,7 @@ outline_offset(SFT_Font *font, uint_fast32_t glyph, uint_fast32_t *offset)
 	} else {
 		base = loca + 4 * glyph;
 
-		if (font->size < base + 8)
+		if (!is_safe_offset(font, base, 8))
 			return -1;
 
 		this = getu32(font, base);
@@ -978,11 +988,11 @@ simple_flags(SFT_Font *font, uint_fast32_t *offset, uint_fast16_t numPts, uint8_
 		if (repeat) {
 			--repeat;
 		} else {
-			if (font->size < off + 1)
+			if (!is_safe_offset(font, off, 1))
 				return -1;
 			value = getu8(font, off++);
 			if (value & REPEAT_FLAG) {
-				if (font->size < off + 1)
+				if (!is_safe_offset(font, off, 1))
 					return -1;
 				repeat = getu8(font, off++);
 			}
@@ -1000,18 +1010,16 @@ simple_points(SFT_Font *font, uint_fast32_t offset, uint_fast16_t numPts, uint8_
 	long accum, value, bit;
 	uint_fast16_t i;
 
-	assert(numPts > 0);
-
 	accum = 0L;
 	for (i = 0; i < numPts; ++i) {
 		if (flags[i] & X_CHANGE_IS_SMALL) {
-			if (font->size < offset + 1)
+			if (!is_safe_offset(font, offset, 1))
 				return -1;
 			value = (long) getu8(font, offset++);
 			bit = !!(flags[i] & X_CHANGE_IS_POSITIVE);
 			accum -= (value ^ -bit) + bit;
 		} else if (!(flags[i] & X_CHANGE_IS_ZERO)) {
-			if (font->size < offset + 2)
+			if (!is_safe_offset(font, offset, 2))
 				return -1;
 			accum += geti16(font, offset);
 			offset += 2;
@@ -1022,13 +1030,13 @@ simple_points(SFT_Font *font, uint_fast32_t offset, uint_fast16_t numPts, uint8_
 	accum = 0L;
 	for (i = 0; i < numPts; ++i) {
 		if (flags[i] & Y_CHANGE_IS_SMALL) {
-			if (font->size < offset + 1)
+			if (!is_safe_offset(font, offset, 1))
 				return -1;
 			value = (long) getu8(font, offset++);
 			bit = !!(flags[i] & Y_CHANGE_IS_POSITIVE);
 			accum -= (value ^ -bit) + bit;
 		} else if (!(flags[i] & Y_CHANGE_IS_ZERO)) {
-			if (font->size < offset + 2)
+			if (!is_safe_offset(font, offset, 2))
 				return -1;
 			accum += geti16(font, offset);
 			offset += 2;
@@ -1123,12 +1131,14 @@ simple_outline(SFT_Font *font, uint_fast32_t offset, unsigned int numContours, s
 	uint_fast16_t numPts;
 	unsigned int i;
 
+	assert(numContours > 0);
+
 	uint_fast16_t basePoint = outl->numPoints;
 
-	if (font->size < offset + numContours * 2 + 2)
+	if (!is_safe_offset(font, offset, numContours * 2 + 2))
 		goto failure;
 	numPts = getu16(font, offset + (numContours - 1) * 2);
-	if (numPts == 0xFFFF)
+	if (numPts >= UINT16_MAX)
 		goto failure;
 	numPts++;
 	if (outl->numPoints > UINT16_MAX - numPts)
@@ -1136,7 +1146,7 @@ simple_outline(SFT_Font *font, uint_fast32_t offset, unsigned int numContours, s
 
 	while (outl->capPoints < basePoint + numPts) {
 		if (grow_points(outl) < 0)
-			return -1;
+			goto failure;
 	}
 	
 	STACK_ALLOC(endPts, uint_fast16_t, 16, numContours);
@@ -1164,16 +1174,13 @@ simple_outline(SFT_Font *font, uint_fast32_t offset, unsigned int numContours, s
 	if (simple_points(font, offset, numPts, flags, outl->points + basePoint) < 0)
 		goto failure;
 	outl->numPoints = (uint_least16_t) (outl->numPoints + numPts);
-	
-	uint8_t *flagsPtr = flags;
-	uint_fast16_t contourBase = 0;
+
+	uint_fast16_t beg = 0;
 	for (i = 0; i < numContours; ++i) {
-		uint_fast16_t count = endPts[i] - contourBase + 1;
-		if (decode_contour(flagsPtr, basePoint, count, outl) < 0)
+		uint_fast16_t count = endPts[i] - beg + 1;
+		if (decode_contour(flags + beg, basePoint + beg, count, outl) < 0)
 			goto failure;
-		flagsPtr += count;
-		basePoint += count;
-		contourBase += count;
+		beg = endPts[i] + 1;
 	}
 
 	STACK_FREE(endPts);
@@ -1196,7 +1203,7 @@ compound_outline(SFT_Font *font, uint_fast32_t offset, int recDepth, struct outl
 		return -1;
 	do {
 		memset(local, 0, sizeof(local));
-		if (font->size < offset + 4)
+		if (!is_safe_offset(font, offset, 4))
 			return -1;
 		flags = getu16(font, offset);
 		glyph = getu16(font, offset + 2);
@@ -1206,32 +1213,32 @@ compound_outline(SFT_Font *font, uint_fast32_t offset, int recDepth, struct outl
 			return -1;
 		/* Read additional X and Y offsets (in FUnits) of this component. */
 		if (flags & OFFSETS_ARE_LARGE) {
-			if (font->size < offset + 4)
+			if (!is_safe_offset(font, offset, 4))
 				return -1;
 			local[4] = geti16(font, offset);
 			local[5] = geti16(font, offset + 2);
 			offset += 4;
 		} else {
-			if (font->size < offset + 2)
+			if (!is_safe_offset(font, offset, 2))
 				return -1;
 			local[4] = geti8(font, offset);
 			local[5] = geti8(font, offset + 1);
 			offset += 2;
 		}
 		if (flags & GOT_A_SINGLE_SCALE) {
-			if (font->size < offset + 2)
+			if (!is_safe_offset(font, offset, 2))
 				return -1;
 			local[0] = geti16(font, offset) / 16384.0;
 			local[3] = local[0];
 			offset += 2;
 		} else if (flags & GOT_AN_X_AND_Y_SCALE) {
-			if (font->size < offset + 4)
+			if (!is_safe_offset(font, offset, 4))
 				return -1;
 			local[0] = geti16(font, offset + 0) / 16384.0;
 			local[3] = geti16(font, offset + 2) / 16384.0;
 			offset += 4;
 		} else if (flags & GOT_A_SCALE_MATRIX) {
-			if (font->size < offset + 8)
+			if (!is_safe_offset(font, offset, 8))
 				return -1;
 			local[0] = geti16(font, offset + 0) / 16384.0;
 			local[1] = geti16(font, offset + 2) / 16384.0;
@@ -1263,15 +1270,17 @@ static int
 decode_outline(SFT_Font *font, uint_fast32_t offset, int recDepth, struct outline *outl)
 {
 	int numContours;
-	if (font->size < offset + 10)
+	if (!is_safe_offset(font, offset, 10))
 		return -1;
 	numContours = geti16(font, offset);
-	if (numContours >= 0) {
+	if (numContours > 0) {
 		/* Glyph has a 'simple' outline consisting of a number of contours. */
 		return simple_outline(font, offset + 10, (unsigned int) numContours, outl);
-	} else {
+	} else if (numContours < 0) {
 		/* Glyph has a compound outline combined from mutiple other outlines. */
 		return compound_outline(font, offset + 10, recDepth, outl);
+	} else {
+		return 0;
 	}
 }
 

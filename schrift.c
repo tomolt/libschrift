@@ -125,11 +125,11 @@ static void *csearch(const void *key, const void *base,
 	size_t nmemb, size_t size, int (*compar)(const void *, const void *));
 static int  cmpu16(const void *a, const void *b);
 static int  cmpu32(const void *a, const void *b);
-static inline uint8_t  getu8 (SFT_Font *font, uint_fast32_t offset);
-static inline int8_t   geti8 (SFT_Font *font, uint_fast32_t offset);
-static inline uint16_t getu16(SFT_Font *font, uint_fast32_t offset);
-static inline int16_t  geti16(SFT_Font *font, uint_fast32_t offset);
-static inline uint32_t getu32(SFT_Font *font, uint_fast32_t offset);
+static inline uint_least8_t  getu8 (SFT_Font *font, uint_fast32_t offset);
+static inline int_least8_t   geti8 (SFT_Font *font, uint_fast32_t offset);
+static inline uint_least16_t getu16(SFT_Font *font, uint_fast32_t offset);
+static inline int_least16_t  geti16(SFT_Font *font, uint_fast32_t offset);
+static inline uint_least32_t getu32(SFT_Font *font, uint_fast32_t offset);
 static int gettable(SFT_Font *font, char tag[4], uint_fast32_t *offset);
 /* codepoint -> glyph */
 static int  cmap_fmt4(SFT_Font *font, uint_fast32_t table, uint_fast32_t charCode, uint_fast32_t *glyph);
@@ -736,32 +736,32 @@ cmpu32(const void *a, const void *b)
 	return memcmp(a, b, 4);
 }
 
-static inline uint8_t
+static inline uint_least8_t
 getu8(SFT_Font *font, uint_fast32_t offset)
 {
 	assert(offset + 1 <= font->size);
 	return *(font->memory + offset);
 }
 
-static inline int8_t
+static inline int_least8_t
 geti8(SFT_Font *font, uint_fast32_t offset)
 {
-	return (int8_t) getu8(font, offset);
+	return (int_least8_t) getu8(font, offset);
 }
 
-static inline uint16_t
+static inline uint_least16_t
 getu16(SFT_Font *font, uint_fast32_t offset)
 {
 	assert(offset + 2 <= font->size);
 	const uint8_t *base = font->memory + offset;
-	uint16_t b1 = base[0], b0 = base[1]; 
-	return (uint16_t) (b1 << 8 | b0);
+	uint_least16_t b1 = base[0], b0 = base[1]; 
+	return (uint_least16_t) (b1 << 8 | b0);
 }
 
 static inline int16_t
 geti16(SFT_Font *font, uint_fast32_t offset)
 {
-	return (int16_t) getu16(font, offset);
+	return (int_least16_t) getu16(font, offset);
 }
 
 static inline uint32_t
@@ -769,8 +769,8 @@ getu32(SFT_Font *font, uint_fast32_t offset)
 {
 	assert(offset + 4 <= font->size);
 	const uint8_t *base = font->memory + offset;
-	uint32_t b3 = base[0], b2 = base[1], b1 = base[2], b0 = base[3]; 
-	return (uint32_t) (b3 << 24 | b2 << 16 | b1 << 8 | b0);
+	uint_least32_t b3 = base[0], b2 = base[1], b1 = base[2], b0 = base[3]; 
+	return (uint_least32_t) (b3 << 24 | b2 << 16 | b1 << 8 | b0);
 }
 
 static int

@@ -73,8 +73,8 @@ struct outline
 	struct point *points;
 	struct curve *curves;
 	struct line *lines;
-	unsigned short numPoints, numCurves, numLines;
-	unsigned short capPoints, capCurves, capLines;
+	uint_least16_t numPoints, numCurves, numLines;
+	uint_least16_t capPoints, capCurves, capLines;
 };
 
 struct buffer
@@ -108,8 +108,8 @@ static void unmap_file(SFT_Font *font);
 static int  init_font(SFT_Font *font);
 /* mathematical utilities */
 static struct point midpoint(struct point a, struct point b);
-static void transform_points(unsigned short numPts, struct point *points, double trf[6]);
-static void clip_points(unsigned short numPts, struct point *points, unsigned int width, unsigned int height);
+static void transform_points(uint_fast16_t numPts, struct point *points, double trf[6]);
+static void clip_points(uint_fast16_t numPts, struct point *points, unsigned int width, unsigned int height);
 /* 'buffer' data structure management */
 static int  init_buffer(struct buffer *buf, unsigned int width, unsigned int height);
 static void free_buffer(struct buffer *buf);
@@ -140,9 +140,9 @@ static int  hor_metrics(SFT_Font *font, unsigned long glyph, int *advanceWidth, 
 /* glyph -> outline */
 static int  outline_offset(SFT_Font *font, unsigned long glyph, unsigned long *offset);
 /* decoding outlines */
-static int  simple_flags(SFT_Font *font, unsigned long *offset, unsigned short numPts, uint8_t *flags);
-static int  simple_points(SFT_Font *font, unsigned long offset, unsigned short numPts, uint8_t *flags, struct point *points);
-static int  decode_contour(uint8_t *flags, unsigned short basePoint, unsigned short count, struct outline *outl);
+static int  simple_flags(SFT_Font *font, unsigned long *offset, uint_fast16_t numPts, uint8_t *flags);
+static int  simple_points(SFT_Font *font, unsigned long offset, uint_fast16_t numPts, uint8_t *flags, struct point *points);
+static int  decode_contour(uint8_t *flags, uint_fast16_t basePoint, uint_fast16_t count, struct outline *outl);
 static int  simple_outline(SFT_Font *font, unsigned long offset, unsigned int numContours, struct outline *outl);
 static int  compound_outline(SFT_Font *font, unsigned long offset, int recDepth, struct outline *outl);
 static int  decode_outline(SFT_Font *font, unsigned long offset, int recDepth, struct outline *outl);
@@ -537,10 +537,10 @@ midpoint(struct point a, struct point b)
 
 /* Applies an affine linear transformation matrix to a set of points. */
 static void
-transform_points(unsigned short numPts, struct point *points, double trf[6])
+transform_points(uint_fast16_t numPts, struct point *points, double trf[6])
 {
 	struct point *restrict pt;
-	unsigned short i;
+	uint_fast16_t i;
 	for (i = 0; i < numPts; ++i) {
 		pt = &points[i];
 		*pt = (struct point) {
@@ -551,10 +551,10 @@ transform_points(unsigned short numPts, struct point *points, double trf[6])
 }
 
 static void
-clip_points(unsigned short numPts, struct point *points, unsigned int width, unsigned int height)
+clip_points(uint_fast16_t numPts, struct point *points, unsigned int width, unsigned int height)
 {
 	struct point pt;
-	unsigned short i;
+	uint_fast16_t i;
 
 	for (i = 0; i < numPts; ++i) {
 		pt = points[i];
@@ -648,14 +648,15 @@ static int
 grow_points(struct outline *outl)
 {
 	void *mem;
-	unsigned short cap;
-	cap = (unsigned short) (2U * outl->capPoints);
-	/* Since we use unsigned shorts for capacities, we have to be extra careful not to trigger integer overflow. */
-	if (cap <= outl->capPoints)
+	uint_fast16_t cap;
+	assert(outl->capPoints);
+	/* Since we use uint_fast16_t for capacities, we have to be extra careful not to trigger integer overflow. */
+	if (outl->capPoints > UINT16_MAX / 2)
 		return -1;
+	cap = (uint_fast16_t) (2U * outl->capPoints);
 	if ((mem = sft_reallocarray(outl->points, cap, sizeof(outl->points[0]))) == NULL)
 		return -1;
-	outl->capPoints = cap;
+	outl->capPoints = (uint_least16_t) cap;
 	outl->points = mem;
 	return 0;
 }
@@ -664,13 +665,14 @@ static int
 grow_curves(struct outline *outl)
 {
 	void *mem;
-	unsigned short cap;
-	cap = (unsigned short) (2U * outl->capCurves);
-	if (cap <= outl->capCurves)
+	uint_fast16_t cap;
+	assert(outl->capCurves);
+	if (outl->capCurves > UINT16_MAX / 2)
 		return -1;
+	cap = (uint_fast16_t) (2U * outl->capCurves);
 	if ((mem = sft_reallocarray(outl->curves, cap, sizeof(outl->curves[0]))) == NULL)
 		return -1;
-	outl->capCurves = cap;
+	outl->capCurves = (uint_least16_t) cap;
 	outl->curves = mem;
 	return 0;
 }
@@ -679,13 +681,14 @@ static int
 grow_lines(struct outline *outl)
 {
 	void *mem;
-	unsigned short cap;
-	cap = (unsigned short) (2U * outl->capLines);
-	if (cap <= outl->capLines)
+	uint_fast16_t cap;
+	assert(outl->capLines);
+	if (outl->capLines > UINT16_MAX / 2)
 		return -1;
+	cap = (uint_fast16_t) (2U * outl->capLines);
 	if ((mem = sft_reallocarray(outl->lines, cap, sizeof(outl->lines[0]))) == NULL)
 		return -1;
-	outl->capLines = cap;
+	outl->capLines = (uint_least16_t) cap;
 	outl->lines = mem;
 	return 0;
 }
@@ -784,14 +787,14 @@ cmap_fmt4(SFT_Font *font, unsigned long table, unsigned long charCode, unsigned 
 {
 	uintptr_t segIdxX2;
 	unsigned long endCodes, startCodes, idDeltas, idRangeOffsets, idOffset;
-	unsigned short segCountX2, idRangeOffset, startCode, shortCode, idDelta, id;
+	uint_fast16_t segCountX2, idRangeOffset, startCode, shortCode, idDelta, id;
 	uint8_t key[2] = { (uint8_t) (charCode >> 8), (uint8_t) charCode };
 	/* cmap format 4 only supports the Unicode BMP. */
 	if (charCode > 0xFFFF) {
 		*glyph = 0;
 		return 0;
 	}
-	shortCode = (unsigned short) charCode;
+	shortCode = (uint_fast16_t) charCode;
 	if (font->size < table + 8)
 		return -1;
 	segCountX2 = getu16(font, table);
@@ -959,10 +962,10 @@ outline_offset(SFT_Font *font, unsigned long glyph, unsigned long *offset)
 
 /* For a 'simple' outline, determines each point of the outline with a set of flags. */
 static int
-simple_flags(SFT_Font *font, unsigned long *offset, unsigned short numPts, uint8_t *flags)
+simple_flags(SFT_Font *font, unsigned long *offset, uint_fast16_t numPts, uint8_t *flags)
 {
 	unsigned long off = *offset;
-	unsigned short i;
+	uint_fast16_t i;
 	uint8_t value = 0, repeat = 0;
 	for (i = 0; i < numPts; ++i) {
 		if (repeat) {
@@ -985,10 +988,10 @@ simple_flags(SFT_Font *font, unsigned long *offset, unsigned short numPts, uint8
 
 /* For a 'simple' outline, decodes both X and Y coordinates for each point of the outline. */
 static int
-simple_points(SFT_Font *font, unsigned long offset, unsigned short numPts, uint8_t *flags, struct point *points)
+simple_points(SFT_Font *font, unsigned long offset, uint_fast16_t numPts, uint8_t *flags, struct point *points)
 {
 	long accum, value, bit;
-	unsigned short i;
+	uint_fast16_t i;
 
 	assert(numPts > 0);
 
@@ -1030,9 +1033,9 @@ simple_points(SFT_Font *font, unsigned long offset, unsigned short numPts, uint8
 }
 
 static int
-decode_contour(uint8_t *flags, unsigned short basePoint, unsigned short count, struct outline *outl)
+decode_contour(uint8_t *flags, uint_fast16_t basePoint, uint_fast16_t count, struct outline *outl)
 {
-	unsigned short looseEnd, beg, ctrl, center, i;
+	uint_fast16_t looseEnd, beg, ctrl, center, i;
 	unsigned int gotCtrl;
 
 	/* Skip contours with less than two points, since the following algorithm can't handle them and
@@ -1103,12 +1106,12 @@ decode_contour(uint8_t *flags, unsigned short basePoint, unsigned short count, s
 static int
 simple_outline(SFT_Font *font, unsigned long offset, unsigned int numContours, struct outline *outl)
 {
-	unsigned short *endPts = NULL;
+	uint_fast16_t *endPts = NULL;
 	uint8_t *flags = NULL;
-	unsigned short numPts;
+	uint_fast16_t numPts;
 	unsigned int i;
 
-	unsigned short basePoint = outl->numPoints;
+	uint_fast16_t basePoint = outl->numPoints;
 
 	if (font->size < offset + numContours * 2 + 2)
 		goto failure;
@@ -1124,7 +1127,7 @@ simple_outline(SFT_Font *font, unsigned long offset, unsigned int numContours, s
 			return -1;
 	}
 	
-	STACK_ALLOC(endPts, unsigned short, 16, numContours);
+	STACK_ALLOC(endPts, uint_fast16_t, 16, numContours);
 	if (endPts == NULL)
 		goto failure;
 	STACK_ALLOC(flags, uint8_t, 128, numPts);
@@ -1151,9 +1154,9 @@ simple_outline(SFT_Font *font, unsigned long offset, unsigned int numContours, s
 	outl->numPoints += numPts;
 	
 	uint8_t *flagsPtr = flags;
-	unsigned short contourBase = 0;
+	uint_fast16_t contourBase = 0;
 	for (i = 0; i < numContours; ++i) {
-		unsigned short count = endPts[i] - contourBase + 1;
+		uint_fast16_t count = endPts[i] - contourBase + 1;
 		if (decode_contour(flagsPtr, basePoint, count, outl) < 0)
 			goto failure;
 		flagsPtr += count;
@@ -1237,7 +1240,7 @@ compound_outline(SFT_Font *font, unsigned long offset, int recDepth, struct outl
 			unsigned int basePoint = outl->numPoints;
 			if (decode_outline(font, outline, recDepth + 1, outl) < 0)
 				return -1;
-			transform_points((unsigned short) (outl->numPoints - basePoint), outl->points + basePoint, local);
+			transform_points(outl->numPoints - basePoint, outl->points + basePoint, local);
 		}
 	} while (flags & THERE_ARE_MORE_COMPONENTS);
 
@@ -1291,19 +1294,19 @@ tesselate_curve(struct curve curve, struct outline *outl)
 			if (top == 0) break;
 			curve = stack[--top];
 		} else {
-			unsigned short ctrl0 = outl->numPoints;
+			uint_fast16_t ctrl0 = outl->numPoints;
 			if (outl->numPoints >= outl->capPoints && grow_points(outl) < 0)
 				return -1;
 			outl->points[ctrl0] = midpoint(outl->points[curve.beg], outl->points[curve.ctrl]);
 			++outl->numPoints;
 
-			unsigned short ctrl1 = outl->numPoints;
+			uint_fast16_t ctrl1 = outl->numPoints;
 			if (outl->numPoints >= outl->capPoints && grow_points(outl) < 0)
 				return -1;
 			outl->points[ctrl1] = midpoint(outl->points[curve.ctrl], outl->points[curve.end]);
 			++outl->numPoints;
 
-			unsigned short pivot = outl->numPoints;
+			uint_fast16_t pivot = outl->numPoints;
 			if (outl->numPoints >= outl->capPoints && grow_points(outl) < 0)
 				return -1;
 			outl->points[pivot] = midpoint(outl->points[ctrl0], outl->points[ctrl1]);

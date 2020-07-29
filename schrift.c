@@ -1450,43 +1450,51 @@ render_image(const struct SFT *sft, uint_fast32_t offset, double transform[6], s
 	struct outline outl;
 	struct buffer buf;
 	unsigned int i;
-	int err = 0;
 
 	memset(&outl, 0, sizeof(outl));
+	if (init_outline(&outl) < 0)
+		goto failure;
 
 	STACK_ALLOC(cells, struct cell, 128 * 128, chr->width * chr->height);
-	err = err || (cells == NULL);
+	if (cells == NULL)
+		goto failure;
 	STACK_ALLOC(rows, struct cell *, 128, chr->height);
-	err = err || (rows == NULL);
-
-	if (!err) {
-		memset(cells, 0, chr->width * chr->height * sizeof(*cells));
-		cellsPtr = cells;
-		for (i = 0; i < chr->height; ++i) {
-			rows[i] = cellsPtr;
-			cellsPtr += chr->width;
-		}
-		buf.rows = rows;
-		buf.width = chr->width;
-		buf.height = chr->height;
+	if (rows == NULL)
+		goto failure;
+	memset(cells, 0, chr->width * chr->height * sizeof(*cells));
+	cellsPtr = cells;
+	for (i = 0; i < chr->height; ++i) {
+		rows[i] = cellsPtr;
+		cellsPtr += chr->width;
 	}
+	buf.rows = rows;
+	buf.width = chr->width;
+	buf.height = chr->height;
 
-	err = err || init_outline(&outl) < 0;
-	err = err || decode_outline(sft->font, offset, 0, &outl) < 0;
-	if (!err) transform_points(outl.numPoints, outl.points, transform);
-	if (!err) clip_points(outl.numPoints, outl.points, chr->width, chr->height);
-	err = err || tesselate_curves(&outl) < 0;
+	if (decode_outline(sft->font, offset, 0, &outl) < 0)
+		goto failure;
+	transform_points(outl.numPoints, outl.points, transform);
+	clip_points(outl.numPoints, outl.points, chr->width, chr->height);
+	if (tesselate_curves(&outl) < 0)
+		goto failure;
 
-	if (!err) draw_lines(&outl, buf);
-	free_outline(&outl);
-	if (!err && sft->flags & SFT_DOWNWARD_Y)
+	draw_lines(&outl, buf);
+	if (sft->flags & SFT_DOWNWARD_Y)
 		flip_buffer(&buf);
 
-	err = err || (chr->image = calloc(chr->width * chr->height, 1)) == NULL;
-	if (!err) post_process(buf, chr->image);
+	chr->image = calloc(chr->width * chr->height, 1);
+	if (chr->image == NULL)
+		goto failure;
+	post_process(buf, chr->image);
 
+	free_outline(&outl);
 	STACK_FREE(cells);
 	STACK_FREE(rows);
+	return 0;
 
-	return err ? -1 : 0;
+failure:
+	free_outline(&outl);
+	STACK_FREE(cells);
+	STACK_FREE(rows);
+	return -1;
 }

@@ -111,8 +111,6 @@ static struct point midpoint(struct point a, struct point b);
 static void transform_points(uint_fast16_t numPts, struct point *points, double trf[6]);
 static void clip_points(uint_fast16_t numPts, struct point *points, unsigned int width, unsigned int height);
 /* 'buffer' data structure management */
-static int  init_buffer(struct buffer *buf, unsigned int width, unsigned int height);
-static void free_buffer(struct buffer *buf);
 static void flip_buffer(struct buffer *buf);
 /* 'outline' data structure management */
 static int  init_outline(struct outline *outl);
@@ -581,37 +579,6 @@ clip_points(uint_fast16_t numPts, struct point *points, unsigned int width, unsi
 			points[i].y = nextafter(height, 0.0);
 		}
 	}
-}
-
-static int
-init_buffer(struct buffer *buf, unsigned int width, unsigned int height)
-{
-	struct cell *ptr;
-	size_t rowsSize, cellsSize;
-	unsigned int i;
-
-	buf->rows = NULL;
-	buf->width = width;
-	buf->height = height;
-
-	rowsSize = (size_t) height * sizeof(buf->rows[0]);
-	cellsSize = (size_t) width * height * sizeof(struct cell);
-	if ((buf->rows = calloc(rowsSize + cellsSize, 1)) == NULL)
-		return -1;
-
-	ptr = (void *) (buf->rows + height);
-	for (i = 0; i < height; ++i) {
-		buf->rows[i] = ptr;
-		ptr += width;
-	}
-
-	return 0;
-}
-
-static void
-free_buffer(struct buffer *buf)
-{
-	free(buf->rows);
 }
 
 static void
@@ -1479,12 +1446,30 @@ post_process(struct buffer buf, uint8_t *image)
 static int
 render_image(const struct SFT *sft, uint_fast32_t offset, double transform[6], struct SFT_Char *chr)
 {
+	struct cell *cells = NULL, **rows = NULL, *cellsPtr;
 	struct outline outl;
 	struct buffer buf;
+	unsigned int i;
 	int err = 0;
 
 	memset(&outl, 0, sizeof(outl));
-	memset(&buf, 0, sizeof(buf));
+
+	STACK_ALLOC(cells, struct cell, 128 * 128, chr->width * chr->height);
+	err = err || (cells == NULL);
+	STACK_ALLOC(rows, struct cell *, 128, chr->height);
+	err = err || (rows == NULL);
+
+	if (!err) {
+		memset(cells, 0, chr->width * chr->height * sizeof(*cells));
+		cellsPtr = cells;
+		for (i = 0; i < chr->height; ++i) {
+			rows[i] = cellsPtr;
+			cellsPtr += chr->width;
+		}
+		buf.rows = rows;
+		buf.width = chr->width;
+		buf.height = chr->height;
+	}
 
 	err = err || init_outline(&outl) < 0;
 	err = err || decode_outline(sft->font, offset, 0, &outl) < 0;
@@ -1492,7 +1477,6 @@ render_image(const struct SFT *sft, uint_fast32_t offset, double transform[6], s
 	if (!err) clip_points(outl.numPoints, outl.points, chr->width, chr->height);
 	err = err || tesselate_curves(&outl) < 0;
 
-	err = err || init_buffer(&buf, chr->width, chr->height) < 0;
 	if (!err) draw_lines(&outl, buf);
 	free_outline(&outl);
 	if (!err && sft->flags & SFT_DOWNWARD_Y)
@@ -1501,7 +1485,8 @@ render_image(const struct SFT *sft, uint_fast32_t offset, double transform[6], s
 	err = err || (chr->image = calloc(chr->width * chr->height, 1)) == NULL;
 	if (!err) post_process(buf, chr->image);
 
-	free_buffer(&buf);
+	STACK_FREE(cells);
+	STACK_FREE(rows);
 
 	return err ? -1 : 0;
 }

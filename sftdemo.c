@@ -7,32 +7,61 @@
 #include <stdint.h>
 #include <math.h>
 
+/* This demo uses the Xlib API to open windows on X11. */
 #include <X11/Xlib.h>
+/* We also need access to the XRender extension for displaying text on the screen. */
 #include <X11/extensions/Xrender.h>
+
 #include <schrift.h>
 
+/* utf8_to_utf32.h is a single-header library for decoding UTF-8 into raw Unicode codepoints.
+ * libschrift only deals with codepoints and does not do any decoding itself, so we have to
+ * do that step here in the application. */
 #include "util/utf8_to_utf32.h"
+/* arg.h is a single-header library for parsing command line arguments.
+ * It is not needed for applications using libschrift. */
 #include "util/arg.h"
 
-#define APP_NAME "sftdemo"
+#define APP_NAME "libschrift X11 demo"
 #define MAX_LINES 40
 #define LINE_LEN 200
 
+/* We need to define this global variable so we can use arg.h. */
 char *argv0;
 
 static char lines[MAX_LINES][LINE_LEN];
 static int numlines;
 
-static XRenderColor fgcolor, bgcolor;
+/* Any X11 program needs the following variables.
+ * If you already know some of Xlib, they should be very familiar to you.
+ * If not, it might be a good idea to brush up Xlib before continuing.
+ * This is not a Xlib intro. */
 static Display *dpy;
 static int screen;
-static Atom wmDeleteWindow;
 static Window win;
+static Atom wmDeleteWindow;
+
+/* We need these variables for displaying text with XRender. */
 static Pixmap fgpix;
 static Picture pic, fgpic;
 static GlyphSet glyphset;
-static struct SFT sft;
+static XRenderColor fgcolor, bgcolor;
 static XRenderPictFormat *format;
+
+/* This is the only persistent state that we need for libschrift. */
+
+/* A struct SFT is a kind of 'drawing context' for libschrift.
+ * It bundles commonly needed parameters such as font and size and has to
+ * be filled out by the application. Any fields that the application does
+ * not need to set must be initialized with zero.
+ * (This happens automatically for global variables.) */
+static struct SFT sft;
+
+/* When using XRender we have to manually keep track of which glyphs we already rendered
+ * and uploaded to the X11 server.
+ * We do this with a sparse / page-based bitfield.
+ * Each bit corresponds to one codepoint.
+ * If it is set, then we have already rendered and uploaded that glyph. */
 
 static unsigned int **bitfield;
 
@@ -83,6 +112,8 @@ bitfield_free(void)
 	free(bitfield);
 }
 
+/* If we encounter a problem, we call this function to print an error message and abort the program.
+ * Proper applications might want to do more sophisticated error handling. */
 static void
 die(const char *msg)
 {
@@ -90,6 +121,7 @@ die(const char *msg)
 	exit(1);
 }
 
+/* Print the ways in which this program may be called. */
 static void
 usage(void)
 {
@@ -97,37 +129,47 @@ usage(void)
 		"usage: %s [-v] [-f font file] [-s size in px] [-P] [text file]\n", argv0);
 }
 
+/* Render a character with libschrift and subsequently upload it to the X11 server. */
 static void
-loadglyph(struct SFT *sft, unsigned int charCode)
+loadglyph(struct SFT *sft, unsigned long codepoint)
 {
 	struct SFT_Char chr;
 	XGlyphInfo info;
 	Glyph glyph;
 	unsigned int stride, i;
 
-	if (sft_char(sft, charCode, &chr) < 0) {
-		printf("Couldn't load character '%c' (0x%02X).\n", charCode, charCode);
+	/* Render the character with libschrift. If successfull, we get a struct SFT_Char back
+	 * which contains various useful pieces of information about the character as well as
+	 * a rendered image of the character. */
+	if (sft_char(sft, codepoint, &chr) < 0) {
+		printf("Couldn't load codepoint 0x%02lX.\n", codepoint);
 		return;
 	}
 
-	glyph = charCode;
+	/* XRender expects every row of the glyph image to be aligned to a multiple of four.
+	 * That means we have to copy the image into a separate buffer row by row,
+	 * padding the end of each row with a couple of extra bytes.
+	 * The stride is simply the number of bytes / pixels per row including the padding. */
+	stride = (chr.width + 3) & ~3U;
+	char paddedImage[stride * chr.height];
+	memset(paddedImage, 0, stride * chr.height);
+	for (i = 0; i < chr.height; ++i)
+		memcpy(paddedImage + i * stride, (char *) chr.image + i * chr.width, chr.width);
+	free(chr.image);
+
+	/* Fill in the XRender XGlyphInfo struct with the info we get in the SFT_Char struct. */
+	glyph = codepoint;
 	info.x = (short) -chr.x;
 	info.y = (short) -chr.y;
 	info.width = (unsigned short) chr.width;
 	info.height = (unsigned short) chr.height;
 	info.xOff = (short) round(chr.advance);
 	info.yOff = 0;
-
-	stride = (chr.width + 3) & ~3U;
-	char bitmap[stride * chr.height];
-	memset(bitmap, 0, stride * chr.height);
-	for (i = 0; i < chr.height; ++i)
-		memcpy(bitmap + i * stride, (char *) chr.image + i * chr.width, chr.width);
-	free(chr.image);
-
-	XRenderAddGlyphs(dpy, glyphset, &glyph, &info, 1, bitmap, (int) (stride * chr.height));
+	/* Upload the XGlyphInfo and padded image to the X11 server. */
+	XRenderAddGlyphs(dpy, glyphset, &glyph, &info, 1, paddedImage, (int) (stride * chr.height));
 }
 
+/* Free memory and exit cleanly. */
 static void
 teardown(void)
 {
@@ -137,11 +179,14 @@ teardown(void)
 	exit(0);
 }
 
+/* Draw a line of UTF-8 text on our window. */
 static void
 drawtext(int x, int y, const char *text)
 {
-	uint32_t codepoints[256];
-	int length = utf8_to_utf32((const uint8_t *) text, codepoints, 256);
+	uint32_t codepoints[LINE_LEN];
+	
+	/* Decode the UTF-8 string to UTF-32, aka an array of raw Unicode codepoints. */
+	int length = utf8_to_utf32((const uint8_t *) text, codepoints, LINE_LEN);
 
 	/* Strip non-printable characters. */
 	int w = 0;
@@ -151,20 +196,24 @@ drawtext(int x, int y, const char *text)
 	}
 	length = w;
 
+	/* Lazily render and upload all the characters that we want to draw for the first time. */
 	for (int i = 0; i < length; ++i) {
 		if (!bitfield_setbit(codepoints[i])) {
 			loadglyph(&sft, codepoints[i]);
 		}
 	}
 
+	/* Tell XRender to draw the line of text! */
 	XRenderCompositeString32(dpy, PictOpOver,
 		fgpic, pic, NULL,
 		glyphset, 0, 0, x, y, codepoints, length);
 }
 
+/* (Re-)draw the contents of our application's window. */
 static void
 draw(unsigned int width, unsigned int height)
 {
+	/* Clear the window by overwriting everything with our background color. */
 	XRenderFillRectangle(dpy, PictOpOver,
 		pic, &bgcolor, 0, 0, width, height);
 
@@ -179,6 +228,7 @@ draw(unsigned int width, unsigned int height)
 	}
 }
 
+/* Process an event that we got from X11. */
 static void
 handleevent(XEvent *ev)
 {
@@ -187,8 +237,9 @@ handleevent(XEvent *ev)
 		draw((unsigned int) ev->xexpose.width, (unsigned int) ev->xexpose.height);
 		break;
 	case ClientMessage:
-		if ((Atom) ev->xclient.data.l[0] == wmDeleteWindow)
+		if ((Atom) ev->xclient.data.l[0] == wmDeleteWindow) {
 			teardown();
+		}
 		break;
 	}
 }
@@ -199,8 +250,9 @@ setupx(void)
 	XRenderPictFormat *format;
 	XRenderPictureAttributes attr;
 
-	if (!(dpy = XOpenDisplay(NULL)))
+	if (!(dpy = XOpenDisplay(NULL))) {
 		die("Can't open X display\n");
+	}
 	screen = DefaultScreen(dpy);
 
 	/* TODO We probably should check here that the X11 server actually supports XRender. */
@@ -239,12 +291,16 @@ main(int argc, char *argv[])
 	const char *filename, *textfile;
 	double size;
 
+	/* Initialize our parameters with some default values. */
 	filename = "resources/Ubuntu-R.ttf";
 	textfile = "resources/glass.utf8";
 	size = 16.0;
 	bgcolor = (XRenderColor) { 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF };
 	fgcolor = (XRenderColor) { 0x0000, 0x0000, 0x0000, 0xFFFF };
 
+	/* Parse the user-supplied command line arguments and
+	 * overwrite our parameters with them.
+	 * We use the single-header library arg.h for this. */
 	ARGBEGIN {
 	case 'f':
 		filename = EARGF(usage());
@@ -268,10 +324,12 @@ main(int argc, char *argv[])
 		exit(1);
 	}
 
+	/* Read in the text to display on screen from a separate file. */
 	FILE *file = fopen(textfile, "r");
-	if (file == NULL)
+	if (file == NULL) {
 		die("Can't open text file.");
-	while (numlines < MAX_LINES && fgets(lines[numlines++], LINE_LEN, file) != NULL) {}
+	}
+	while (numlines < MAX_LINES && fgets(lines[numlines++], LINE_LEN, file)) {}
 	fclose(file);
 
 	setupx();
@@ -279,10 +337,16 @@ main(int argc, char *argv[])
 	format = XRenderFindStandardFormat(dpy, PictStandardA8);
 	glyphset = XRenderCreateGlyphSet(dpy, format);
 
-	if ((sft.font = sft_loadfile(filename)) == NULL)
+	/* Set up the SFT struct / 'drawing context' for libschrift. */
+	/* First off, try to load the font from a file. */
+	if ((sft.font = sft_loadfile(filename)) == NULL) {
 		die("Can't load font file.");
+	}
 	sft.xScale = size;
 	sft.yScale = size;
+	/* Tell libschrift that our Y axis points downward and
+	 * that we want it to actually render images of the characters
+	 * (per default libschrift only returns information about characters). */
 	sft.flags = SFT_DOWNWARD_Y | SFT_RENDER_IMAGE;
 
 	bitfield_init();

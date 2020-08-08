@@ -13,17 +13,14 @@ libschrift.a: schrift.o
 	$(RANLIB) $@
 schrift.o: schrift.h
 
-sftdemo: sftdemo.o util/aa_tree.o libschrift.a
-	$(LD) $(LDFLAGS) $@.o util/aa_tree.o -o $@ -L$(X11LIB) -L. -lX11 -lXrender -lschrift -lm
-sftdemo.o: sftdemo.c schrift.h util/arg.h util/utf8_to_utf32.h util/aa_tree.h
+sftdemo: sftdemo.o libschrift.a
+	$(LD) $(LDFLAGS) $@.o -o $@ -L$(X11LIB) -L. -lX11 -lXrender -lschrift -lm
+sftdemo.o: sftdemo.c schrift.h util/arg.h util/utf8_to_utf32.h
 	$(CC) -c $(CFLAGS) $(@:.o=.c) -o $@ $(CPPFLAGS) -I$(X11INC)
 
 stress: stress.o libschrift.a
 	$(LD) $(LDFLAGS) $@.o -o $@ -L. -lschrift -lm
 stress.o: stress.c schrift.h util/arg.h
-	$(CC) -c $(CFLAGS) $(@:.o=.c) -o $@ $(CPPFLAGS)
-
-util/aa_tree.o: util/aa_tree.c util/aa_tree.h
 	$(CC) -c $(CFLAGS) $(@:.o=.c) -o $@ $(CPPFLAGS)
 
 clean:

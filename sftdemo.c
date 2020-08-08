@@ -12,7 +12,6 @@
 #include <schrift.h>
 
 #include "util/utf8_to_utf32.h"
-#include "util/aa_tree.h"
 #include "util/arg.h"
 
 #define APP_NAME "sftdemo"
@@ -34,7 +33,55 @@ static Picture pic, fgpic;
 static GlyphSet glyphset;
 static struct SFT sft;
 static XRenderPictFormat *format;
-static struct aa_tree loadedset;
+
+static unsigned int **bitfield;
+
+#define TOTAL_CODEPOINTS 0x110000
+#define WORDS_IN_PAGE (1 << 9)
+#define BITS_IN_WORD (8U * sizeof(unsigned int))
+#define BITS_IN_PAGE (WORDS_IN_PAGE * BITS_IN_WORD)
+#define TOTAL_PAGES ((TOTAL_CODEPOINTS - 1 + BITS_IN_PAGE) / BITS_IN_PAGE)
+
+static void
+bitfield_init(void)
+{
+	bitfield = calloc(TOTAL_PAGES, sizeof(*bitfield));
+}
+
+static unsigned int
+bitfield_setbit(unsigned long codepoint)
+{
+	unsigned int value;
+	unsigned long page, word, bit;
+
+	if (codepoint >= TOTAL_CODEPOINTS) return 1;
+
+	page = codepoint / BITS_IN_PAGE;
+	codepoint %= BITS_IN_PAGE;
+	word = codepoint / BITS_IN_WORD;
+	codepoint %= BITS_IN_WORD;
+	bit = codepoint;
+
+	if (!bitfield[page]) {
+		bitfield[page] = calloc(WORDS_IN_PAGE, sizeof(unsigned int));
+	}
+
+	value = bitfield[page][word];
+	bitfield[page][word] = value | (1U << bit);
+	return (value >> bit) & 1U;
+}
+
+static void
+bitfield_free(void)
+{
+	unsigned long i;
+	for (i = 0; i < TOTAL_PAGES; ++i) {
+		if (bitfield[i]) {
+			free(bitfield[i]);
+		}
+	}
+	free(bitfield);
+}
 
 static void
 die(const char *msg)
@@ -48,14 +95,6 @@ usage(void)
 {
 	fprintf(stderr,
 		"usage: %s [-v] [-f font file] [-s size in px] [-P] [text file]\n", argv0);
-}
-
-static int
-compare32(const void *v1, const void *v2, const void *userdata)
-{
-	(void) userdata;
-	const int32_t *u1 = v1, *u2 = v2;
-	return *u1 - *u2;
 }
 
 static void
@@ -92,7 +131,7 @@ loadglyph(struct SFT *sft, unsigned int charCode)
 static void
 teardown(void)
 {
-	aa_free(&loadedset);
+	bitfield_free();
 	sft_freefont(sft.font);
 	XCloseDisplay(dpy);
 	exit(0);
@@ -113,9 +152,9 @@ drawtext(int x, int y, const char *text)
 	length = w;
 
 	for (int i = 0; i < length; ++i) {
-		if (aa_get(&loadedset, &codepoints[i], NULL)) continue;
-		loadglyph(&sft, codepoints[i]);
-		aa_put(&loadedset, &codepoints[i], NULL);
+		if (!bitfield_setbit(codepoints[i])) {
+			loadglyph(&sft, codepoints[i]);
+		}
 	}
 
 	XRenderCompositeString32(dpy, PictOpOver,
@@ -246,7 +285,7 @@ main(int argc, char *argv[])
 	sft.yScale = size;
 	sft.flags = SFT_DOWNWARD_Y | SFT_RENDER_IMAGE;
 
-	aa_init(&loadedset, 4, compare32, NULL);
+	bitfield_init();
 
 	runx();
 	return 0;

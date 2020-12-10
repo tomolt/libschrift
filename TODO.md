@@ -2,8 +2,6 @@
 The following bullet points are listed in no particular order.
 
 ## Bugs
-- Punctuation apparently doesn't line up properly for monospace fonts.
-  Andor has the details.
 
 ## Features
 - Kerning needs to be tested.

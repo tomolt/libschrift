@@ -233,7 +233,7 @@ init_font(SFT_Font *font)
 		return -1;
 	font->unitsPerEm = getu16(font, head + 18);
 	font->locaFormat = geti16(font, head + 50);
-
+	
 	if (gettable(font, "hhea", &hhea) < 0)
 		return -1;
 	if (!is_safe_offset(font, hhea, 36))
@@ -374,13 +374,6 @@ sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 	if (x2 <= x1 || y2 <= y1)
 		return -1;
 
-	/* Shift the transformation along the X axis such that
-	 * x1 and leftSideBearing line up. Derivation:
-	 *     lsb * xScale + xOff_1 = x1 * xScale + xOff_2
-	 * <=> lsb * xScale + xOff_1 - x1 * xScale = xOff_2
-	 * <=> (lsb - x1) * xScale + xOff_1 = xOff_2 */
-	xOff += (leftSideBearing - x1) * xScale;
-
 	/* Transform the bounding box into SFT coordinate space. */
 	x1 = (int) floor(x1 * xScale + xOff);
 	y1 = (int) floor(y1 * yScale + yOff);
@@ -388,7 +381,7 @@ sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 	y2 = (int) ceil(y2 * yScale + yOff) + 1;
 
 	/* Compute the user-facing bounding box, respecting Y direction etc. */
-	chr->x = x1;
+	chr->x = (int) floor(leftSideBearing * xScale + xOff);
 	chr->y = sft->flags & SFT_DOWNWARD_Y ? -y2 : y1;
 	chr->width = (unsigned int) (x2 - x1);
 	chr->height = (unsigned int) (y2 - y1);

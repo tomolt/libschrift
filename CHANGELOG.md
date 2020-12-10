@@ -1,6 +1,11 @@
 # Changelog
 
 ## v0.9.0
+- Improved/fixed glyph positioning calculations.
+- Perform less internal heap allocations when rendering small glyphs.
+- Hardening against integer overflow bugs.
+- Explained the details of `sftdemo`.
+- Replaced the ill-suited aa-tree in `sftdemo` with a simple bitfield.
 
 ## v0.8.0
 - Slightly changed the missing glyph interface (check the man page for details).

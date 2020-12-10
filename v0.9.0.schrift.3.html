@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <link rel="stylesheet" href="style.css" type="text/css" media="all"/>
+  <title>SCHRIFT(3)</title>
+</head>
+<body>
+<table class="head">
+  <tr>
+    <td class="head-ltitle">SCHRIFT(3)</td>
+    <td class="head-vol">Library Functions Manual</td>
+    <td class="head-rtitle">SCHRIFT(3)</td>
+  </tr>
+</table>
+<div class="manual-text">
+<section class="Sh">
+<h1 class="Sh" id="NAME"><a class="permalink" href="#NAME">NAME</a></h1>
+<code class="Nm">schrift</code>, <code class="Nm">libschrift</code> &#x2014;
+<div class="Nd">Lightweight TrueType font rendering library</div>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="SYNOPSIS"><a class="permalink" href="#SYNOPSIS">SYNOPSIS</a></h1>
+<span class="Lb">library &#x201C;libschrift&#x201D;</span>
+<br/>
+<code class="In">#include &lt;<a class="In">schrift.h</a>&gt;</code>
+<p class="Pp"><var class="Ft">const char *</var>
+  <br/>
+  <code class="Fn">sft_version</code>(<var class="Fa" style="white-space: nowrap;">void</var>);</p>
+<p class="Pp"><var class="Ft">SFT_Font *</var>
+  <br/>
+  <code class="Fn">sft_loadmem</code>(<var class="Fa" style="white-space: nowrap;">const
+    void *mem</var>, <var class="Fa" style="white-space: nowrap;">unsigned long
+    size</var>);</p>
+<p class="Pp"><var class="Ft">SFT_Font *</var>
+  <br/>
+  <code class="Fn">sft_loadfile</code>(<var class="Fa" style="white-space: nowrap;">const
+    char *filename</var>);</p>
+<p class="Pp"><var class="Ft">void</var>
+  <br/>
+  <code class="Fn">sft_freefont</code>(<var class="Fa" style="white-space: nowrap;">SFT_Font
+    *font</var>);</p>
+<p class="Pp"><var class="Ft">int</var>
+  <br/>
+  <code class="Fn">sft_linemetrics</code>(<var class="Fa" style="white-space: nowrap;">const
+    struct SFT *sft</var>, <var class="Fa" style="white-space: nowrap;">double
+    *ascent</var>, <var class="Fa" style="white-space: nowrap;">double
+    *descent</var>, <var class="Fa" style="white-space: nowrap;">double
+    *gap</var>);</p>
+<p class="Pp"><var class="Ft">int</var>
+  <br/>
+  <code class="Fn">sft_kerning</code>(<var class="Fa" style="white-space: nowrap;">const
+    struct SFT *sft</var>, <var class="Fa" style="white-space: nowrap;">unsigned
+    long leftChar</var>, <var class="Fa" style="white-space: nowrap;">unsigned
+    long rightChar</var>, <var class="Fa" style="white-space: nowrap;">double
+    kerning[2]</var>);</p>
+<p class="Pp"><var class="Ft">int</var>
+  <br/>
+  <code class="Fn">sft_char</code>(<var class="Fa" style="white-space: nowrap;">const
+    struct SFT *sft</var>, <var class="Fa" style="white-space: nowrap;">unsigned
+    int charCode</var>, <var class="Fa" style="white-space: nowrap;">struct
+    SFT_Char *chr</var>);</p>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="DESCRIPTION"><a class="permalink" href="#DESCRIPTION">DESCRIPTION</a></h1>
+<code class="Fn">sft_version</code>() can be used to determine which version of
+  <code class="Nm">schrift</code> you are using. Since
+  <code class="Nm">schrift</code> uses semantic versioning, the returned string
+  will usually be of the form &#x201C;MAJOR.MINOR.PATCH&#x201D; .
+<p class="Pp"><code class="Fn">sft_loadfile</code>() will load a font from a
+    given filename (by mapping it into memory), whereas
+    <code class="Fn">sft_loadmem</code>() can be given an arbitrary memory
+    address and size (in bytes). This allows users to load fonts from ZIP file
+    streams etc.</p>
+<p class="Pp">Once a user is done with a particular font and does not need to
+    access it any more, he may use <code class="Fn">sft_freefont</code>() to
+    free all memory reserved by the font. If the font has been loaded with
+    <code class="Fn">sft_loadmem</code>() the user has to additionally free the
+    memory they passed to <code class="Fn">sft_loadmem</code>() on their
+  own.</p>
+<p class="Pp">The following functions all take a struct SFT as their primary
+    argument. Details concerning this struct can be found in the next
+  section.</p>
+<p class="Pp"><code class="Fn">sft_linemetrics</code>() can be used to query the
+    typographic ascender, descender, and line gap, in pixels. The ascender
+    refers to the distance of the highest point of a line of text to it's
+    baseline. Analogously, the descender refers to the distance to the lowest
+    point. The line gap measures the suggested blank space between consecutive
+    lines.</p>
+<p class="Pp"><code class="Fn">sft_kerning</code>() can be used to find the
+    kerning between a pair of characters (codepoints). That is, an x and y
+    offset that should be applied to the second character, should it follow the
+    first.</p>
+<p class="Pp">Lastly, the most important public function of
+    <code class="Nm">schrift</code> is <code class="Fn">sft_char</code>() . It
+    lets users query codepoint-specific information, like horizontal advance
+    width, extents, etc. It can also render a specified codepoint to an
+    in-memory image. More details can be found in the following sections.</p>
+<section class="Ss">
+<h2 class="Ss" id="The_SFT_structure"><a class="permalink" href="#The_SFT_structure">The
+  SFT structure</a></h2>
+The struct SFT is a structure to be filled out by the application. It bundles
+  all the different parameters neccessary for drawing, like for example which
+  font to use, or how big the text should be, into a single struct. Most
+  functions in <code class="Nm">schrift</code> take a struct SFT as their
+  primary argument.
+<div class="Bd Pp">
+<pre>
+struct SFT {
+	SFT_Font *font;
+	double xScale;
+	double yScale;
+	double x;
+	double y;
+	unsigned int flags;
+};
+</pre>
+</div>
+The fields are as follows:
+<dl class="Bl-tag">
+  <dt><var class="Va">font</var></dt>
+  <dd>The font to render with.</dd>
+  <dt><var class="Va">xScale</var></dt>
+  <dd>The user-specified width of one em-square in pixels.</dd>
+  <dt><var class="Va">yScale</var></dt>
+  <dd>The user-specified height of one em-square in pixels.</dd>
+  <dt><var class="Va">x</var></dt>
+  <dd>The horizontal offset in pixels to be applied before rendering to an
+      image. Can be used for subpixel-accurate positioning.</dd>
+  <dt><var class="Va">y</var></dt>
+  <dd>The vertical offset in pixels to be applied before rendering to an image.
+      Can be used for subpixel-accurate positioning.</dd>
+  <dt><var class="Va">flags</var></dt>
+  <dd>A bitfield of binary flags that control various functionalities.
+    <p class="Pp">If <code class="Dv">SFT_DOWNWARD_Y</code> is set, the Y axis
+        is interpreted to point downwards. Otherwise, it points upwards.</p>
+    <p class="Pp">If <code class="Dv">SFT_RENDER_IMAGE</code> is set, the
+        function <code class="Fn">sft_char</code>() will, when called, render a
+        specified character into an image buffer. Otherwise,
+        <code class="Fn">sft_char</code>() will only return auxiliary data such
+        as image buffer dimensions and horizontal advance width.</p>
+    <p class="Pp">If <code class="Dv">SFT_CATCH_MISSING</code> is set, the
+        function <code class="Nm">sft_char</code> will return immediately if
+        called on a character that the used font does not have data for. The
+        user then has to check whether this happened by looking at the
+        function's return value.</p>
+  </dd>
+</dl>
+</section>
+<section class="Ss">
+<h2 class="Ss" id="The_SFT_Char_structure"><a class="permalink" href="#The_SFT_Char_structure">The
+  SFT_Char structure</a></h2>
+<code class="Fn">sft_char</code>() returns all relevant information except
+  status code in a struct SFT_Char.
+<div class="Bd Pp">
+<pre>
+struct SFT_Char {
+	void *image;
+	double advance;
+	int x;
+	int y;
+	unsigned int width;
+	unsigned int height;
+};
+</pre>
+</div>
+The fields are as follows:
+<dl class="Bl-tag">
+  <dt><var class="Va">image</var></dt>
+  <dd>An 8-bit grayscale image without any padding, so each byte corresponds to
+      one pixel. The colors are inverse to what you would expect: Text is always
+      drawn white on black. That is because this way it is really convenient to
+      use the image as an alpha mask. This is also the reason why the image is
+      not gamma corrected.
+    <p class="Pp">This field only gets set if the flag
+        <code class="Dv">SFT_RENDER_IMAGE</code> was set. In this case, it is
+        the caller's duty to later release the image's memory again by calling
+        <code class="Fn">free</code>() . Otherwise, if
+        <code class="Dv">SFT_RENDER_IMAGE</code> was not set, this field is set
+        to NULL.</p>
+  </dd>
+  <dt><var class="Va">x</var></dt>
+  <dd>The X offset in pixels that the application should apply when displaying
+      the image on the screen.</dd>
+  <dt><var class="Va">y</var></dt>
+  <dd>The Y offset in pixels that the application should apply when displaying
+      the image on the screen.
+    <p class="Pp">The flag <code class="Dv">SFT_DOWNWARD_Y</code> controls the
+        orientation of the coordinate system that this field is relative to.</p>
+  </dd>
+  <dt><var class="Va">width</var></dt>
+  <dd>The width of the image in pixels.
+    <p class="Pp">This field gets set even if
+        <code class="Dv">SFT_RENDER_IMAGE</code> was not set.</p>
+  </dd>
+  <dt><var class="Va">height</var></dt>
+  <dd>The height of the image in pixels.
+    <p class="Pp">This field gets set even if
+        <code class="Dv">SFT_RENDER_IMAGE</code> was not set.</p>
+  </dd>
+  <dt><var class="Va">missing</var></dt>
+  <dd>Contains a positive value if the used font doesn't have data for the
+      specified character, and a fallback character (the missing glyph) has been
+      selected instead. It is 0 otherwise.</dd>
+</dl>
+</section>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="RETURN_VALUES"><a class="permalink" href="#RETURN_VALUES">RETURN
+  VALUES</a></h1>
+<code class="Fn">sft_loadmem</code>() and <code class="Fn">sft_loadfile</code>()
+  return NULL on error. <code class="Fn">sft_linemetrics</code>() and
+  <code class="Fn">sft_kerning</code>() return 0 on success and -1 on error.
+<p class="Pp"><code class="Fn">sft_char</code>() returns -1 on error, 1 if the
+    character code isn't covered by the font and a fallback character (the
+    missing glyph) was used instead, and 0 otherwise.</p>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="EXAMPLES"><a class="permalink" href="#EXAMPLES">EXAMPLES</a></h1>
+See the source code of <b class="Sy">sftdemo</b> for a detailed example of
+  real-world usage of <code class="Nm">schrift</code> .
+</section>
+<section class="Sh">
+<h1 class="Sh" id="AUTHORS"><a class="permalink" href="#AUTHORS">AUTHORS</a></h1>
+<span class="An">Thomas Oltmann</span>
+  &lt;<a class="Mt" href="mailto:thomas.oltmann.hhg@gmail.com">thomas.oltmann.hhg@gmail.com</a>&gt;
+</section>
+<section class="Sh">
+<h1 class="Sh" id="CAVEATS"><a class="permalink" href="#CAVEATS">CAVEATS</a></h1>
+The only text encoding that <code class="Nm">schrift</code> understands is
+  Unicode. Similarly, the only kind of font file supported right now are
+  TrueType (.ttf) fonts (Some OpenType fonts might work too, as OpenType is
+  effectively a superset of TrueType). <code class="Nm">schrift</code> currently
+  does not implement font hinting and probably never will.
+</section>
+</div>
+<table class="foot">
+  <tr>
+    <td class="foot-date">June 5, 2020</td>
+    <td class="foot-os">suckless.org</td>
+  </tr>
+</table>
+</body>
+</html>

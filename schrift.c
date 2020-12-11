@@ -146,7 +146,7 @@ static int  simple_outline(SFT_Font *font, uint_fast32_t offset, unsigned int nu
 static int  compound_outline(SFT_Font *font, uint_fast32_t offset, int recDepth, struct outline *outl);
 static int  decode_outline(SFT_Font *font, uint_fast32_t offset, int recDepth, struct outline *outl);
 /* tesselation */
-static int  is_flat(struct outline *outl, struct curve curve, double flatness);
+static int  is_flat(struct outline *outl, struct curve curve);
 static int  tesselate_curve(struct curve curve, struct outline *outl);
 static int  tesselate_curves(struct outline *outl);
 /* silhouette rasterization */
@@ -1250,15 +1250,16 @@ decode_outline(SFT_Font *font, uint_fast32_t offset, int recDepth, struct outlin
 
 /* A heuristic to tell whether a given curve can be approximated closely enough by a line. */
 static int
-is_flat(struct outline *outl, struct curve curve, double flatness)
+is_flat(struct outline *outl, struct curve curve)
 {
+	const double maxArea2 = 2.0;
 	struct point a = outl->points[curve.beg];
 	struct point b = outl->points[curve.ctrl];
 	struct point c = outl->points[curve.end];
 	struct point g = { b.x-a.x, b.y-a.y };
 	struct point h = { c.x-a.x, c.y-a.y };
-	double area = fabs(g.x*h.y-h.x*g.y) / 2.0;
-	return area <= flatness;
+	double area2 = fabs(g.x*h.y-h.x*g.y);
+	return area2 <= maxArea2;
 }
 
 static int
@@ -1272,7 +1273,7 @@ tesselate_curve(struct curve curve, struct outline *outl)
 	struct curve stack[STACK_SIZE];
 	unsigned int top = 0;
 	for (;;) {
-		if (is_flat(outl, curve, 1.0) || top >= STACK_SIZE) {
+		if (is_flat(outl, curve) || top >= STACK_SIZE) {
 			if (outl->numLines >= outl->capLines && grow_lines(outl) < 0)
 				return -1;
 			outl->lines[outl->numLines++] = (struct line) { curve.beg, curve.end };

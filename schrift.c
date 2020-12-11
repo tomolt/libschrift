@@ -1323,6 +1323,7 @@ draw_dot(struct buffer buf, int px, int py, double xAvg, double yDiff)
 	struct cell *restrict ptr = &buf.rows[py][px];
 	struct cell cell = *ptr;
 	cell.cover += yDiff;
+	xAvg -= (double) px;
 	cell.area += (1.0 - xAvg) * yDiff;
 	*ptr = cell;
 }
@@ -1335,6 +1336,10 @@ draw_line(struct buffer buf, struct point origin, struct point goal)
 	struct point nextCrossing;
 	struct point crossingGap;
 	double prevDistance = 0.0;
+	double closestCrossing;
+	double xAverage;
+	double yDifference;
+	double halfDeltaX;
 	struct { int x, y; } pixel;
 	int iter, numIters = 0;
 	struct { int x, y; } sign;
@@ -1378,13 +1383,13 @@ draw_line(struct buffer buf, struct point origin, struct point goal)
 		numIters += fast_ceil(origin.y) - fast_floor(goal.y) - 1;
 	}
 
-	double closestCrossing = MIN(nextCrossing.x, nextCrossing.y);
+	closestCrossing = MIN(nextCrossing.x, nextCrossing.y);
+	halfDeltaX = 0.5 * delta.x;
 
 	for (iter = 0; iter < numIters; ++iter) {
-		double deltaDistance = closestCrossing - prevDistance;
-		double x = origin.x - pixel.x + closestCrossing * delta.x;
-		double averageX = x - 0.5 * delta.x * deltaDistance;
-		draw_dot(buf, pixel.x, pixel.y, averageX, delta.y * deltaDistance);
+		xAverage = origin.x + (prevDistance + closestCrossing) * halfDeltaX;
+		yDifference = (closestCrossing - prevDistance) * delta.y;
+		draw_dot(buf, pixel.x, pixel.y, xAverage, yDifference);
 		if (nextCrossing.x < nextCrossing.y) {
 			prevDistance = nextCrossing.x;
 			pixel.x += sign.x;
@@ -1397,9 +1402,9 @@ draw_line(struct buffer buf, struct point origin, struct point goal)
 		closestCrossing = MIN(nextCrossing.x, nextCrossing.y);
 	}
 
-	double deltaDistance = 1.0 - prevDistance;
-	double averageX = (goal.x - pixel.x) - 0.5 * delta.x * deltaDistance;
-	draw_dot(buf, pixel.x, pixel.y, averageX, delta.y * deltaDistance);
+	xAverage = origin.x + (prevDistance + 1.0) * halfDeltaX;
+	yDifference = (1.0 - prevDistance) * delta.y;
+	draw_dot(buf, pixel.x, pixel.y, xAverage, yDifference);
 }
 
 static void

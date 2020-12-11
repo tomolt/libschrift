@@ -1370,20 +1370,23 @@ draw_line(struct buffer buf, struct point origin, struct point goal)
 	}
 
 	for (iter = 0; iter < numIters; ++iter) {
+		double deltaDistance, averageX;
 		if (nextCrossing.x < nextCrossing.y) {
-			double deltaDistance = nextCrossing.x - prevDistance;
-			double averageX = (delta.x > 0) - 0.5 * delta.x * deltaDistance;
-			draw_dot(buf, pixel.x, pixel.y, averageX, delta.y * deltaDistance);
-			pixel.x += SIGN(delta.x);
+			deltaDistance = nextCrossing.x - prevDistance;
+			averageX = (delta.x > 0) - 0.5 * delta.x * deltaDistance;
+		} else {
+			deltaDistance = nextCrossing.y - prevDistance;
+			double x = origin.x - pixel.x + nextCrossing.y * delta.x;
+			averageX = x - 0.5 * delta.x * deltaDistance;
+		}
+		draw_dot(buf, pixel.x, pixel.y, averageX, delta.y * deltaDistance);
+		if (nextCrossing.x < nextCrossing.y) {
 			prevDistance = nextCrossing.x;
+			pixel.x += SIGN(delta.x);
 			nextCrossing.x += crossingGap.x;
 		} else {
-			double deltaDistance = nextCrossing.y - prevDistance;
-			double x = origin.x - pixel.x + nextCrossing.y * delta.x;
-			double averageX = x - 0.5 * delta.x * deltaDistance;
-			draw_dot(buf, pixel.x, pixel.y, averageX, delta.y * deltaDistance);
-			pixel.y += SIGN(delta.y);
 			prevDistance = nextCrossing.y;
+			pixel.y += SIGN(delta.y);
 			nextCrossing.y += crossingGap.y;
 		}
 	}

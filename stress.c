@@ -37,7 +37,7 @@ main(int argc, char *argv[])
 	int i;
 
 	filename = "resources/Ubuntu-R.ttf";
-	size = 16.0;
+	size = 20.0;
 
 	ARGBEGIN {
 	case 'f':
@@ -63,7 +63,7 @@ main(int argc, char *argv[])
 	sft.xScale = size;
 	sft.yScale = size;
 	sft.flags = SFT_DOWNWARD_Y | SFT_RENDER_IMAGE;
-	for (i = 0; i < 1000; ++i) {
+	for (i = 0; i < 5000; ++i) {
 		for (c = 32; c < 128; ++c) {
 			if (!(sft_char(&sft, c, &chr) < 0))
 				free(chr.image);

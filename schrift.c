@@ -1375,8 +1375,9 @@ draw_line(struct buffer buf, struct point origin, struct point goal)
 		numIters += fast_ceil(origin.y) - fast_floor(goal.y) - 1;
 	}
 
+	double closestCrossing = MIN(nextCrossing.x, nextCrossing.y);
+
 	for (iter = 0; iter < numIters; ++iter) {
-		double closestCrossing = MIN(nextCrossing.x, nextCrossing.y);
 		double deltaDistance = closestCrossing - prevDistance;
 		double x = origin.x - pixel.x + closestCrossing * delta.x;
 		double averageX = x - 0.5 * delta.x * deltaDistance;
@@ -1390,6 +1391,7 @@ draw_line(struct buffer buf, struct point origin, struct point goal)
 			pixel.y += SIGN(delta.y);
 			nextCrossing.y += crossingGap.y;
 		}
+		closestCrossing = MIN(nextCrossing.x, nextCrossing.y);
 	}
 
 	double deltaDistance = 1.0 - prevDistance;

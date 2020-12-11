@@ -52,7 +52,7 @@
 
 /* macros */
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
-#define SIGN(x) ((x) >= 0 ? 1 : -1)
+#define SIGN(x) (((x) > 0) - ((x) < 0))
 /* Allocate values on the stack if they are small enough, else spill to heap. */
 #define STACK_ALLOC(var, type, thresh, count) \
 	type var##_stack_[thresh]; \
@@ -1337,22 +1337,25 @@ draw_line(struct buffer buf, struct point origin, struct point goal)
 	double prevDistance = 0.0;
 	struct { int x, y; } pixel;
 	int iter, numIters = 0;
+	struct { int x, y; } sign;
 
 	delta.x = goal.x - origin.x;
 	delta.y = goal.y - origin.y;
+	sign.x = SIGN(delta.x);
+	sign.y = SIGN(delta.y);
 
-	if (delta.y == 0.0) {
+	if (!sign.y) {
 		return;
 	}
 	
-	crossingGap.x = delta.x == 0.0 ? 1.0 : fabs(1.0 / delta.x);
+	crossingGap.x = sign.x ? fabs(1.0 / delta.x) : 1.0;
 	crossingGap.y = fabs(1.0 / delta.y);
 
-	if (delta.x == 0.0) {
+	if (!sign.x) {
 		pixel.x = fast_floor(origin.x);
 		nextCrossing.x = 100.0;
 	} else {
-		if (delta.x > 0.0) {
+		if (sign.x > 0) {
 			pixel.x = fast_floor(origin.x);
 			nextCrossing.x = (origin.x - pixel.x) * crossingGap.x;
 			nextCrossing.x = crossingGap.x - nextCrossing.x;
@@ -1364,7 +1367,7 @@ draw_line(struct buffer buf, struct point origin, struct point goal)
 		}
 	}
 
-	if (delta.y > 0.0) {
+	if (sign.y > 0) {
 		pixel.y = fast_floor(origin.y);
 		nextCrossing.y = (origin.y - pixel.y) * crossingGap.y;
 		nextCrossing.y = crossingGap.y - nextCrossing.y;
@@ -1384,11 +1387,11 @@ draw_line(struct buffer buf, struct point origin, struct point goal)
 		draw_dot(buf, pixel.x, pixel.y, averageX, delta.y * deltaDistance);
 		if (nextCrossing.x < nextCrossing.y) {
 			prevDistance = nextCrossing.x;
-			pixel.x += SIGN(delta.x);
+			pixel.x += sign.x;
 			nextCrossing.x += crossingGap.x;
 		} else {
 			prevDistance = nextCrossing.y;
-			pixel.y += SIGN(delta.y);
+			pixel.y += sign.y;
 			nextCrossing.y += crossingGap.y;
 		}
 		closestCrossing = MIN(nextCrossing.x, nextCrossing.y);

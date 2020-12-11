@@ -1344,16 +1344,18 @@ draw_line(struct buffer buf, struct point origin, struct point goal)
 	if (delta.y == 0.0) {
 		return;
 	}
+	
+	crossingGap.x = delta.x == 0.0 ? 1.0 : fabs(1.0 / delta.x);
+	crossingGap.y = fabs(1.0 / delta.y);
 
 	if (delta.x == 0.0) {
-		crossingGap.x = 0.0;
 		pixel.x = fast_floor(origin.x);
 		nextCrossing.x = 100.0;
 	} else {
-		crossingGap.x = fabs(1.0 / delta.x);
 		if (delta.x > 0.0) {
 			pixel.x = fast_floor(origin.x);
-			nextCrossing.x = (1.0 - (origin.x - pixel.x)) * crossingGap.x;
+			nextCrossing.x = (origin.x - pixel.x) * crossingGap.x;
+			nextCrossing.x = crossingGap.x - nextCrossing.x;
 			numIters += fast_ceil(goal.x) - fast_floor(origin.x) - 1;
 		} else {
 			pixel.x = fast_ceil(origin.x) - 1;
@@ -1361,11 +1363,11 @@ draw_line(struct buffer buf, struct point origin, struct point goal)
 			numIters += fast_ceil(origin.x) - fast_floor(goal.x) - 1;
 		}
 	}
-	
-	crossingGap.y = fabs(1.0 / delta.y);
+
 	if (delta.y > 0.0) {
 		pixel.y = fast_floor(origin.y);
-		nextCrossing.y = (1.0 - (origin.y - pixel.y)) * crossingGap.y;
+		nextCrossing.y = (origin.y - pixel.y) * crossingGap.y;
+		nextCrossing.y = crossingGap.y - nextCrossing.y;
 		numIters += fast_ceil(goal.y) - fast_floor(origin.y) - 1;
 	} else {
 		pixel.y = fast_ceil(origin.y) - 1;

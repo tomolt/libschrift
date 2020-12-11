@@ -1376,15 +1376,10 @@ draw_line(struct buffer buf, struct point origin, struct point goal)
 	}
 
 	for (iter = 0; iter < numIters; ++iter) {
-		double deltaDistance, averageX;
-		if (nextCrossing.x < nextCrossing.y) {
-			deltaDistance = nextCrossing.x - prevDistance;
-			averageX = (delta.x > 0) - 0.5 * delta.x * deltaDistance;
-		} else {
-			deltaDistance = nextCrossing.y - prevDistance;
-			double x = origin.x - pixel.x + nextCrossing.y * delta.x;
-			averageX = x - 0.5 * delta.x * deltaDistance;
-		}
+		double closestCrossing = MIN(nextCrossing.x, nextCrossing.y);
+		double deltaDistance = closestCrossing - prevDistance;
+		double x = origin.x - pixel.x + closestCrossing * delta.x;
+		double averageX = x - 0.5 * delta.x * deltaDistance;
 		draw_dot(buf, pixel.x, pixel.y, averageX, delta.y * deltaDistance);
 		if (nextCrossing.x < nextCrossing.y) {
 			prevDistance = nextCrossing.x;

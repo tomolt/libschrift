@@ -1252,13 +1252,13 @@ decode_outline(SFT_Font *font, uint_fast32_t offset, int recDepth, struct outlin
 static int
 is_flat(struct outline *outl, struct curve curve, double flatness)
 {
-	struct point beg = outl->points[curve.beg];
-	struct point end = outl->points[curve.end];
-	struct point ctrl = outl->points[curve.ctrl];
-	struct point mid = midpoint(beg, end);
-	double x = ctrl.x - mid.x;
-	double y = ctrl.y - mid.y;
-	return x * x + y * y <= flatness * flatness;
+	struct point a = outl->points[curve.beg];
+	struct point b = outl->points[curve.ctrl];
+	struct point c = outl->points[curve.end];
+	struct point g = { b.x-a.x, b.y-a.y };
+	struct point h = { c.x-a.x, c.y-a.y };
+	double area = fabs(g.x*h.y-h.x*g.y) / 2.0;
+	return area <= flatness;
 }
 
 static int
@@ -1272,7 +1272,7 @@ tesselate_curve(struct curve curve, struct outline *outl)
 	struct curve stack[STACK_SIZE];
 	unsigned int top = 0;
 	for (;;) {
-		if (is_flat(outl, curve, 0.5) || top >= STACK_SIZE) {
+		if (is_flat(outl, curve, 1.0) || top >= STACK_SIZE) {
 			if (outl->numLines >= outl->capLines && grow_lines(outl) < 0)
 				return -1;
 			outl->lines[outl->numLines++] = (struct line) { curve.beg, curve.end };

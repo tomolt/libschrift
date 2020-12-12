@@ -1405,22 +1405,17 @@ draw_lines(struct outline *outl, struct buffer buf)
 static void
 post_process(struct buffer buf, uint8_t *image)
 {
-	struct cell *restrict in, cell;
-	uint8_t *restrict out;
-	double accum, value;
-	unsigned int x, y;
-	out = image;
-	for (y = 0; y < buf.height; ++y) {
-		accum = 0.0;
-		in = &buf.cells[y*buf.width];
-		for (x = 0; x < buf.width; ++x) {
-			cell = *in++;
-			value = fabs(accum + cell.area);
-			value = MIN(value, 1.0);
-			value = value * 255.0 + 0.5;
-			*out++ = (uint8_t) value;
-			accum += cell.cover;
-		}
+	struct cell cell;
+	double accum = 0.0, value;
+	unsigned int i, num;
+	num = buf.width * buf.height;
+	for (i = 0; i < num; ++i) {
+		cell     = buf.cells[i];
+		value    = fabs(accum + cell.area);
+		value    = MIN(value, 1.0);
+		value    = value * 255.0 + 0.5;
+		image[i] = (uint8_t) value;
+		accum   += cell.cover;
 	}
 }
 

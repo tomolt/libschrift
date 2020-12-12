@@ -1388,15 +1388,12 @@ draw_line(struct buffer buf, struct point origin, struct point goal)
 		xAverage = origin.x + (prevDistance + nextDistance) * halfDeltaX;
 		yDifference = (nextDistance - prevDistance) * delta.y;
 		draw_dot(buf, pixel.x, pixel.y, xAverage, yDifference);
-		if (nextCrossing.x < nextCrossing.y) {
-			prevDistance = nextCrossing.x;
-			pixel.x += dir.x;
-			nextCrossing.x += crossingIncr.x;
-		} else {
-			prevDistance = nextCrossing.y;
-			pixel.y += dir.y;
-			nextCrossing.y += crossingIncr.y;
-		}
+		prevDistance = nextDistance;
+		int alongX = nextCrossing.x < nextCrossing.y;
+		pixel.x += alongX ? dir.x : 0;
+		pixel.y += alongX ? 0 : dir.y;
+		nextCrossing.x += alongX ? crossingIncr.x : 0.0;
+		nextCrossing.y += alongX ? 0.0 : crossingIncr.y;
 		nextDistance = MIN(nextCrossing.x, nextCrossing.y);
 	}
 

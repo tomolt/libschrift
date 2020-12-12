@@ -79,7 +79,7 @@ struct outline
 
 struct buffer
 {
-	struct cell **rows;
+	struct cell *cells;
 	unsigned int width, height;
 };
 
@@ -1305,7 +1305,7 @@ tesselate_curves(struct outline *outl)
 static void
 draw_dot(struct buffer buf, int px, int py, double xAvg, double yDiff)
 {
-	struct cell *restrict ptr = &buf.rows[py][px];
+	struct cell *restrict ptr = &buf.cells[(unsigned int)py*buf.width+(unsigned int)px];
 	struct cell cell = *ptr;
 	cell.cover += yDiff;
 	xAvg -= (double) px;
@@ -1412,7 +1412,7 @@ post_process(struct buffer buf, uint8_t *image)
 	out = image;
 	for (y = 0; y < buf.height; ++y) {
 		accum = 0.0;
-		in = buf.rows[y];
+		in = &buf.cells[y*buf.width];
 		for (x = 0; x < buf.width; ++x) {
 			cell = *in++;
 			value = fabs(accum + cell.area);
@@ -1427,10 +1427,9 @@ post_process(struct buffer buf, uint8_t *image)
 static int
 render_image(const struct SFT *sft, uint_fast32_t offset, double transform[6], struct SFT_Char *chr)
 {
-	struct cell *cells = NULL, **rows = NULL, *cellsPtr;
+	struct cell *cells = NULL;
 	struct outline outl;
 	struct buffer buf;
-	unsigned int i;
 
 	memset(&outl, 0, sizeof(outl));
 	if (init_outline(&outl) < 0)
@@ -1439,16 +1438,8 @@ render_image(const struct SFT *sft, uint_fast32_t offset, double transform[6], s
 	STACK_ALLOC(cells, struct cell, 128 * 128, chr->width * chr->height);
 	if (cells == NULL)
 		goto failure;
-	STACK_ALLOC(rows, struct cell *, 128, chr->height);
-	if (rows == NULL)
-		goto failure;
-	memset(cells, 0, chr->width * chr->height * sizeof(*cells));
-	cellsPtr = cells;
-	for (i = 0; i < chr->height; ++i) {
-		rows[i] = cellsPtr;
-		cellsPtr += chr->width;
-	}
-	buf.rows = rows;
+	memset(cells, 0, chr->width * chr->height * sizeof *cells);
+	buf.cells = cells;
 	buf.width = chr->width;
 	buf.height = chr->height;
 
@@ -1476,12 +1467,10 @@ render_image(const struct SFT *sft, uint_fast32_t offset, double transform[6], s
 
 	free_outline(&outl);
 	STACK_FREE(cells);
-	STACK_FREE(rows);
 	return 0;
 
 failure:
 	free_outline(&outl);
 	STACK_FREE(cells);
-	STACK_FREE(rows);
 	return -1;
 }

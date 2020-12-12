@@ -110,8 +110,6 @@ static int  init_font(SFT_Font *font);
 static struct point midpoint(struct point a, struct point b);
 static void transform_points(uint_fast16_t numPts, struct point *points, double trf[6]);
 static void clip_points(uint_fast16_t numPts, struct point *points, unsigned int width, unsigned int height);
-/* 'buffer' data structure management */
-static void flip_buffer(struct buffer *buf);
 /* 'outline' data structure management */
 static int  init_outline(struct outline *outl);
 static void free_outline(struct outline *outl);
@@ -571,19 +569,6 @@ clip_points(uint_fast16_t numPts, struct point *points, unsigned int width, unsi
 		if (pt.y >= height) {
 			points[i].y = nextafter(height, 0.0);
 		}
-	}
-}
-
-static void
-flip_buffer(struct buffer *buf)
-{
-	struct cell *row;
-	unsigned int front = 0, back = buf->height - 1;
-	while (front < back) {
-		row = buf->rows[front];
-		buf->rows[front] = buf->rows[back];
-		buf->rows[back] = row;
-		++front, --back;
 	}
 }
 
@@ -1469,14 +1454,20 @@ render_image(const struct SFT *sft, uint_fast32_t offset, double transform[6], s
 
 	if (decode_outline(sft->font, offset, 0, &outl) < 0)
 		goto failure;
+
+	if (sft->flags & SFT_DOWNWARD_Y) {
+		transform[1] = -transform[1];
+		transform[3] = -transform[3];
+		transform[5] = (double) buf.height - transform[5];
+	}
+
 	transform_points(outl.numPoints, outl.points, transform);
+
 	clip_points(outl.numPoints, outl.points, chr->width, chr->height);
 	if (tesselate_curves(&outl) < 0)
 		goto failure;
 
 	draw_lines(&outl, buf);
-	if (sft->flags & SFT_DOWNWARD_Y)
-		flip_buffer(&buf);
 
 	chr->image = calloc(chr->width * chr->height, 1);
 	if (chr->image == NULL)

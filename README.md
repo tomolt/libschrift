@@ -33,6 +33,11 @@ You can also view the man page in your browser at
 
 Progress
 --------
-libschrift isn't ready for serious use yet.
-Altough *most* features are in place by now, there is still a lot
-of testing against real-world font files to be done.
+In terms of security and performance, libschrift is already pretty solid.
+However, it is still missing some important features, like right-to-left text support.
+Also, you can probably expect a redesign of the public API before version 1.0.
+
+Visual Quality
+--------------
+A screenshot from the bundled example program `sftdemo`:
+![demo screenshot](resources/demo-screenshot.png)

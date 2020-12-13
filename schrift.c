@@ -52,7 +52,7 @@
 
 /* macros */
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
-#define SIGN(x) (((x) > 0) - ((x) < 0))
+#define SIGN(x)   (((x) > 0) - ((x) < 0))
 /* Allocate values on the stack if they are small enough, else spill to heap. */
 #define STACK_ALLOC(var, type, thresh, count) \
 	type var##_stack_[thresh]; \
@@ -70,30 +70,35 @@ struct cell  { double area, cover; };
 
 struct outline
 {
-	struct point *points;
-	struct curve *curves;
-	struct line *lines;
-	uint_least16_t numPoints, numCurves, numLines;
-	uint_least16_t capPoints, capCurves, capLines;
+	struct point  *points;
+	struct curve  *curves;
+	struct line   *lines;
+	uint_least16_t numPoints;
+	uint_least16_t capPoints;
+	uint_least16_t numCurves;
+	uint_least16_t capCurves;
+	uint_least16_t numLines;
+	uint_least16_t capLines;
 };
 
 struct buffer
 {
 	struct cell *cells;
-	unsigned int width, height;
+	unsigned int width;
+	unsigned int height;
 };
 
 struct SFT_Font
 {
 	const uint8_t *memory;
-	uint_fast32_t size;
+	uint_fast32_t  size;
 #if defined(_WIN32)
-	HANDLE mapping;
+	HANDLE         mapping;
 #endif
-	int source;
+	int            source;
 	
 	uint_least16_t unitsPerEm;
-	int_least16_t locaFormat;
+	int_least16_t  locaFormat;
 	uint_least16_t numLongHmtx;
 };
 
@@ -106,7 +111,7 @@ static inline int fast_ceil(double x);
 static int  map_file(SFT_Font *font, const char *filename);
 static void unmap_file(SFT_Font *font);
 static int  init_font(SFT_Font *font);
-/* mathematical utilities */
+/* simple mathematical operations */
 static struct point midpoint(struct point a, struct point b);
 static void transform_points(uint_fast16_t numPts, struct point *points, double trf[6]);
 static void clip_points(uint_fast16_t numPts, struct point *points, unsigned int width, unsigned int height);
@@ -117,7 +122,7 @@ static int  grow_points(struct outline *outl);
 static int  grow_curves(struct outline *outl);
 static int  grow_lines(struct outline *outl);
 /* TTF parsing utilities */
-static int  is_safe_offset(SFT_Font *font, uint_fast32_t offset, uint_fast32_t margin);
+static inline int is_safe_offset(SFT_Font *font, uint_fast32_t offset, uint_fast32_t margin);
 static void *csearch(const void *key, const void *base,
 	size_t nmemb, size_t size, int (*compar)(const void *, const void *));
 static int  cmpu16(const void *a, const void *b);
@@ -128,15 +133,14 @@ static inline uint_least16_t getu16(SFT_Font *font, uint_fast32_t offset);
 static inline int_least16_t  geti16(SFT_Font *font, uint_fast32_t offset);
 static inline uint_least32_t getu32(SFT_Font *font, uint_fast32_t offset);
 static int gettable(SFT_Font *font, char tag[4], uint_fast32_t *offset);
-/* codepoint -> glyph */
+/* codepoint to glyph id translation */
 static int  cmap_fmt4(SFT_Font *font, uint_fast32_t table, uint_fast32_t charCode, uint_fast32_t *glyph);
 static int  cmap_fmt6(SFT_Font *font, uint_fast32_t table, uint_fast32_t charCode, uint_fast32_t *glyph);
 static int  glyph_id(SFT_Font *font, uint_fast32_t charCode, uint_fast32_t *glyph);
-/* glyph -> hmtx */
+/* glyph metrics lookup */
 static int  hor_metrics(SFT_Font *font, uint_fast32_t glyph, int *advanceWidth, int *leftSideBearing);
-/* glyph -> outline */
-static int  outline_offset(SFT_Font *font, uint_fast32_t glyph, uint_fast32_t *offset);
 /* decoding outlines */
+static int  outline_offset(SFT_Font *font, uint_fast32_t glyph, uint_fast32_t *offset);
 static int  simple_flags(SFT_Font *font, uint_fast32_t *offset, uint_fast16_t numPts, uint8_t *flags);
 static int  simple_points(SFT_Font *font, uint_fast32_t offset, uint_fast16_t numPts, uint8_t *flags, struct point *points);
 static int  decode_contour(uint8_t *flags, uint_fast16_t basePoint, uint_fast16_t count, struct outline *outl);
@@ -148,7 +152,6 @@ static int  is_flat(struct outline *outl, struct curve curve);
 static int  tesselate_curve(struct curve curve, struct outline *outl);
 static int  tesselate_curves(struct outline *outl);
 /* silhouette rasterization */
-static void draw_dot(struct buffer buf, int px, int py, double xAvg, double yDiff);
 static void draw_line(struct buffer buf, struct point origin, struct point goal);
 static void draw_lines(struct outline *outl, struct buffer buf);
 /* post-processing */
@@ -169,15 +172,14 @@ SFT_Font *
 sft_loadmem(const void *mem, unsigned long size)
 {
 	SFT_Font *font;
-	if ((font = calloc(1, sizeof(SFT_Font))) == NULL) {
+	if (size > UINT32_MAX) {
+		return NULL;
+	}
+	if (!(font = calloc(1, sizeof *font))) {
 		return NULL;
 	}
 	font->memory = mem;
-	if (size > UINT32_MAX) {
-		sft_freefont(font);
-		return NULL;
-	}
-	font->size = (uint_fast32_t) size;
+	font->size   = (uint_fast32_t) size;
 	font->source = SrcUser;
 	if (init_font(font) < 0) {
 		sft_freefont(font);
@@ -191,7 +193,7 @@ SFT_Font *
 sft_loadfile(char const *filename)
 {
 	SFT_Font *font;
-	if ((font = calloc(1, sizeof(SFT_Font))) == NULL) {
+	if (!(font = calloc(1, sizeof *font))) {
 		return NULL;
 	}
 	if (map_file(font, filename) < 0) {
@@ -208,37 +210,11 @@ sft_loadfile(char const *filename)
 void
 sft_freefont(SFT_Font *font)
 {
-	if (font == NULL) return;
+	if (!font) return;
 	/* Only unmap if we mapped it ourselves. */
 	if (font->source == SrcMapping)
 		unmap_file(font);
 	free(font);
-}
-
-static int
-init_font(SFT_Font *font)
-{
-	uint_fast32_t scalerType, head, hhea;
-
-	/* Check for a compatible scalerType (magic number). */
-	scalerType = getu32(font, 0);
-	if (scalerType != FILE_MAGIC_ONE && scalerType != FILE_MAGIC_TWO)
-		return -1;
-
-	if (gettable(font, "head", &head) < 0)
-		return -1;
-	if (!is_safe_offset(font, head, 54))
-		return -1;
-	font->unitsPerEm = getu16(font, head + 18);
-	font->locaFormat = geti16(font, head + 50);
-	
-	if (gettable(font, "hhea", &hhea) < 0)
-		return -1;
-	if (!is_safe_offset(font, hhea, 36))
-		return -1;
-	font->numLongHmtx = getu16(font, hhea + 34);
-
-	return 0;
 }
 
 int
@@ -332,7 +308,7 @@ sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 	int advance, leftSideBearing;
 	int x1, y1, x2, y2;
 
-	memset(chr, 0, sizeof(*chr));
+	memset(chr, 0, sizeof *chr);
 
 	if (charCode > UINT32_MAX)
 		return -1;
@@ -461,7 +437,7 @@ map_file(SFT_Font *font, const char *filename)
 	DWORD high, low;
 
 	font->mapping = NULL;
-	font->memory = NULL;
+	font->memory  = NULL;
 
 	file = CreateFileA(filename, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
 	if (file == INVALID_HANDLE_VALUE) {
@@ -477,7 +453,7 @@ map_file(SFT_Font *font, const char *filename)
 	font->size = (size_t)high << (8 * sizeof(DWORD)) | low;
 
 	font->mapping = CreateFileMapping(file, NULL, PAGE_READONLY, high, low, NULL);
-	if (font->mapping == NULL) {
+	if (!font->mapping) {
 		CloseHandle(file);
 		return -1;
 	}
@@ -485,7 +461,7 @@ map_file(SFT_Font *font, const char *filename)
 	CloseHandle(file);
 
 	font->memory = MapViewOfFile(font->mapping, FILE_MAP_READ, 0, 0, 0);
-	if (font->memory == NULL) {
+	if (!font->memory) {
 		CloseHandle(font->mapping);
 		font->mapping = NULL;
 		return -1;
@@ -497,11 +473,11 @@ map_file(SFT_Font *font, const char *filename)
 static void
 unmap_file(SFT_Font *font)
 {
-	if (font->memory != NULL) {
+	if (font->memory) {
 		UnmapViewOfFile(font->memory);
 		font->memory = NULL;
 	}
-	if (font->mapping != NULL) {
+	if (font->mapping) {
 		CloseHandle(font->mapping);
 		font->mapping = NULL;
 	}
@@ -515,7 +491,7 @@ map_file(SFT_Font *font, const char *filename)
 	struct stat info;
 	int fd;
 	font->memory = MAP_FAILED;
-	font->size = 0;
+	font->size   = 0;
 	font->source = SrcMapping;
 	if ((fd = open(filename, O_RDONLY)) < 0) {
 		return -1;
@@ -526,7 +502,7 @@ map_file(SFT_Font *font, const char *filename)
 	}
 	/* FIXME do some basic validation on info.st_size maybe - it is signed for example, so it *could* be negative .. */
 	font->memory = mmap(NULL, (size_t) info.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
-	font->size = (uint_fast32_t) info.st_size;
+	font->size   = (uint_fast32_t) info.st_size;
 	close(fd);
 	return font->memory == MAP_FAILED ? -1 : 0;
 }
@@ -540,12 +516,38 @@ unmap_file(SFT_Font *font)
 
 #endif
 
+static int
+init_font(SFT_Font *font)
+{
+	uint_fast32_t scalerType, head, hhea;
+
+	/* Check for a compatible scalerType (magic number). */
+	scalerType = getu32(font, 0);
+	if (scalerType != FILE_MAGIC_ONE && scalerType != FILE_MAGIC_TWO)
+		return -1;
+
+	if (gettable(font, "head", &head) < 0)
+		return -1;
+	if (!is_safe_offset(font, head, 54))
+		return -1;
+	font->unitsPerEm = getu16(font, head + 18);
+	font->locaFormat = geti16(font, head + 50);
+	
+	if (gettable(font, "hhea", &hhea) < 0)
+		return -1;
+	if (!is_safe_offset(font, hhea, 36))
+		return -1;
+	font->numLongHmtx = getu16(font, hhea + 34);
+
+	return 0;
+}
+
 static struct point
 midpoint(struct point a, struct point b)
 {
 	return (struct point) {
-		0.5 * a.x + 0.5 * b.x,
-		0.5 * a.y + 0.5 * b.y
+		0.5 * (a.x + b.x),
+		0.5 * (a.y + b.y)
 	};
 }
 
@@ -553,13 +555,13 @@ midpoint(struct point a, struct point b)
 static void
 transform_points(uint_fast16_t numPts, struct point *points, double trf[6])
 {
-	struct point *restrict pt;
+	struct point pt;
 	uint_fast16_t i;
 	for (i = 0; i < numPts; ++i) {
-		pt = &points[i];
-		*pt = (struct point) {
-			pt->x * trf[0] + pt->y * trf[2] + trf[4],
-			pt->x * trf[1] + pt->y * trf[3] + trf[5]
+		pt = points[i];
+		points[i] = (struct point) {
+			pt.x * trf[0] + pt.y * trf[2] + trf[4],
+			pt.x * trf[1] + pt.y * trf[3] + trf[5]
 		};
 	}
 }
@@ -591,17 +593,18 @@ clip_points(uint_fast16_t numPts, struct point *points, unsigned int width, unsi
 static int
 init_outline(struct outline *outl)
 {
+	/* TODO Smaller initial allocations */
 	outl->numPoints = 0;
 	outl->capPoints = 64;
-	if ((outl->points = malloc(outl->capPoints * sizeof(outl->points[0]))) == NULL)
+	if (!(outl->points = malloc(outl->capPoints * sizeof *outl->points)))
 		return -1;
 	outl->numCurves = 0;
 	outl->capCurves = 64;
-	if ((outl->curves = malloc(outl->capCurves * sizeof(outl->curves[0]))) == NULL)
+	if (!(outl->curves = malloc(outl->capCurves * sizeof *outl->curves)))
 		return -1;
 	outl->numLines = 0;
 	outl->capLines = 64;
-	if ((outl->lines = malloc(outl->capLines * sizeof(outl->lines[0]))) == NULL)
+	if (!(outl->lines = malloc(outl->capLines * sizeof *outl->lines)))
 		return -1;
 	return 0;
 }
@@ -624,10 +627,10 @@ grow_points(struct outline *outl)
 	if (outl->capPoints > UINT16_MAX / 2)
 		return -1;
 	cap = (uint_fast16_t) (2U * outl->capPoints);
-	if ((mem = sft_reallocarray(outl->points, cap, sizeof(outl->points[0]))) == NULL)
+	if (!(mem = sft_reallocarray(outl->points, cap, sizeof *outl->points)))
 		return -1;
 	outl->capPoints = (uint_least16_t) cap;
-	outl->points = mem;
+	outl->points    = mem;
 	return 0;
 }
 
@@ -640,10 +643,10 @@ grow_curves(struct outline *outl)
 	if (outl->capCurves > UINT16_MAX / 2)
 		return -1;
 	cap = (uint_fast16_t) (2U * outl->capCurves);
-	if ((mem = sft_reallocarray(outl->curves, cap, sizeof(outl->curves[0]))) == NULL)
+	if (!(mem = sft_reallocarray(outl->curves, cap, sizeof *outl->curves)))
 		return -1;
 	outl->capCurves = (uint_least16_t) cap;
-	outl->curves = mem;
+	outl->curves    = mem;
 	return 0;
 }
 
@@ -656,14 +659,14 @@ grow_lines(struct outline *outl)
 	if (outl->capLines > UINT16_MAX / 2)
 		return -1;
 	cap = (uint_fast16_t) (2U * outl->capLines);
-	if ((mem = sft_reallocarray(outl->lines, cap, sizeof(outl->lines[0]))) == NULL)
+	if (!(mem = sft_reallocarray(outl->lines, cap, sizeof *outl->lines)))
 		return -1;
 	outl->capLines = (uint_least16_t) cap;
-	outl->lines = mem;
+	outl->lines    = mem;
 	return 0;
 }
 
-static int
+static inline int
 is_safe_offset(SFT_Font *font, uint_fast32_t offset, uint_fast32_t margin)
 {
 	if (offset > font->size) return 0;
@@ -679,8 +682,7 @@ csearch(const void *key, const void *base,
 {
 	const uint8_t *bytes = base, *sample;
 	size_t low = 0, high = nmemb - 1, mid;
-	if (nmemb == 0)
-		return NULL;
+	if (!nmemb) return NULL;
 	while (low != high) {
 		mid = low + (high - low) / 2;
 		sample = bytes + mid * size;
@@ -754,7 +756,7 @@ gettable(SFT_Font *font, char tag[4], uint_fast32_t *offset)
 	numTables = getu16(font, 4);
 	if (!is_safe_offset(font, 12, (uint_fast32_t) numTables * 16))
 		return -1;
-	if ((match = bsearch(tag, font->memory + 12, numTables, 16, cmpu32)) == NULL)
+	if (!(match = bsearch(tag, font->memory + 12, numTables, 16, cmpu32)))
 		return -1;
 	*offset = getu32(font, (uint_fast32_t) ((uint8_t *) match - font->memory + 8));
 	return 0;
@@ -779,9 +781,9 @@ cmap_fmt4(SFT_Font *font, uint_fast32_t table, uint_fast32_t charCode, uint_fast
 	if ((segCountX2 & 1) || !segCountX2)
 		return -1;
 	/* Find starting positions of the relevant arrays. */
-	endCodes = table + 8;
-	startCodes = endCodes + segCountX2 + 2;
-	idDeltas = startCodes + segCountX2;
+	endCodes       = table + 8;
+	startCodes     = endCodes + segCountX2 + 2;
+	idDeltas       = startCodes + segCountX2;
 	idRangeOffsets = idDeltas + segCountX2;
 	if (!is_safe_offset(font, idRangeOffsets, segCountX2))
 		return -1;
@@ -818,7 +820,7 @@ cmap_fmt6(SFT_Font *font, uint_fast32_t table, uint_fast32_t charCode, uint_fast
 	}
 	if (!is_safe_offset(font, table, 4))
 		return -1;
-	firstCode = getu16(font, table);
+	firstCode  = getu16(font, table);
 	entryCount = getu16(font, table + 2);
 	if (!is_safe_offset(font, table, 4 + 2 * entryCount))
 		return -1;
@@ -1162,12 +1164,12 @@ compound_outline(SFT_Font *font, uint_fast32_t offset, int recDepth, struct outl
 {
 	double local[6];
 	uint_fast32_t outline;
-	unsigned int flags, glyph;
+	unsigned int flags, glyph, basePoint;
 	/* Guard against infinite recursion (compound glyphs that have themselves as component). */
 	if (recDepth >= 4)
 		return -1;
 	do {
-		memset(local, 0, sizeof(local));
+		memset(local, 0, sizeof local);
 		if (!is_safe_offset(font, offset, 4))
 			return -1;
 		flags = getu16(font, offset);
@@ -1221,7 +1223,7 @@ compound_outline(SFT_Font *font, uint_fast32_t offset, int recDepth, struct outl
 		if (outline_offset(font, glyph, &outline) < 0)
 			return -1;
 		if (outline) {
-			unsigned int basePoint = outl->numPoints;
+			basePoint = outl->numPoints;
 			if (decode_outline(font, outline, recDepth + 1, outl) < 0)
 				return -1;
 			transform_points(outl->numPoints - basePoint, outl->points + basePoint, local);
@@ -1408,12 +1410,10 @@ draw_lines(struct outline *outl, struct buffer buf)
 {
 	unsigned int i;
 	for (i = 0; i < outl->numLines; ++i) {
-		struct line line = outl->lines[i];
+		struct line  line   = outl->lines[i];
 		struct point origin = outl->points[line.beg];
-		struct point goal = outl->points[line.end];
-		if (origin.y != goal.y) {
-			draw_line(buf, origin, goal);
-		}
+		struct point goal   = outl->points[line.end];
+		draw_line(buf, origin, goal);
 	}
 }
 
@@ -1441,17 +1441,18 @@ render_image(const struct SFT *sft, uint_fast32_t offset, double transform[6], s
 	struct cell *cells = NULL;
 	struct outline outl;
 	struct buffer buf;
+	unsigned int numPixels = chr->width * chr->height;
 
-	memset(&outl, 0, sizeof(outl));
+	memset(&outl, 0, sizeof outl);
 	if (init_outline(&outl) < 0)
 		goto failure;
 
-	STACK_ALLOC(cells, struct cell, 128 * 128, chr->width * chr->height);
-	if (cells == NULL)
+	STACK_ALLOC(cells, struct cell, 128 * 128, numPixels);
+	if (!cells)
 		goto failure;
-	memset(cells, 0, chr->width * chr->height * sizeof *cells);
-	buf.cells = cells;
-	buf.width = chr->width;
+	memset(cells, 0, numPixels * sizeof *cells);
+	buf.cells  = cells;
+	buf.width  = chr->width;
 	buf.height = chr->height;
 
 	if (decode_outline(sft->font, offset, 0, &outl) < 0)
@@ -1465,8 +1466,7 @@ render_image(const struct SFT *sft, uint_fast32_t offset, double transform[6], s
 
 	draw_lines(&outl, buf);
 
-	chr->image = calloc(chr->width * chr->height, 1);
-	if (chr->image == NULL)
+	if (!(chr->image = malloc(numPixels)))
 		goto failure;
 	post_process(buf, chr->image);
 

@@ -32,10 +32,7 @@ char *argv0;
 static char lines[MAX_LINES][LINE_LEN];
 static int numlines;
 
-/* Any X11 program needs the following variables.
- * If you already know some of Xlib, they should be very familiar to you.
- * If not, it might be a good idea to brush up Xlib before continuing.
- * This is not a Xlib intro. */
+/* We need the following variables to open an X11 window. */
 static Display *dpy;
 static int screen;
 static Window win;
@@ -54,7 +51,7 @@ static XRenderPictFormat *format;
  * It bundles commonly needed parameters such as font and size and has to
  * be filled out by the application. Any fields that the application does
  * not need to set must be initialized with zero.
- * (This happens automatically for global variables.) */
+ * (Global variables are always zero-initialized in C.) */
 static struct SFT sft;
 
 /* When using XRender we have to manually keep track of which glyphs we already rendered

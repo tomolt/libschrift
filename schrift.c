@@ -375,8 +375,8 @@ sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 	/* Transform the bounding box into SFT coordinate space. */
 	x1 = (int) floor(x1 * xScale + xOff);
 	y1 = (int) floor(y1 * yScale + yOff);
-	x2 = (int) ceil(x2 * xScale + xOff) + 1;
-	y2 = (int) ceil(y2 * yScale + yOff) + 1;
+	x2 = (int) ceil(x2 * xScale + xOff);
+	y2 = (int) ceil(y2 * yScale + yOff);
 
 	/* Compute the user-facing bounding box, respecting Y direction etc. */
 	chr->x = (int) floor(leftSideBearing * xScale + xOff);
@@ -384,18 +384,34 @@ sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 	chr->width = (unsigned int) (x2 - x1);
 	chr->height = (unsigned int) (y2 - y1);
 
+	/* It is possible for points to lie exactly on the right or bottom edge of the bbox.
+	 * clip_points() will nudge such points up or to the left so they won't result in
+	 * out of bounds accesses, but this is slow because it is only there as a security measure.
+	 * So, to avoid such cases from ever occurring, we simply expand our canvas by one pixel
+	 * to the right and bottom. */
+	++chr->width, ++chr->height;
+
 	/* Render the outline (if requested). */
 	if (sft->flags & SFT_RENDER_IMAGE) {
 		/* Set up the transformation matrix such that
 		 * the transformed bounding boxes min corner lines
 		 * up with the (0, 0) point. */
-		transform[0] = xScale;
-		transform[1] = 0.0;
-		transform[2] = 0.0;
-		transform[3] = yScale;
-		transform[4] = xOff - x1;
-		transform[5] = yOff - y1;
-	
+		if (sft->flags & SFT_DOWNWARD_Y) {
+			transform[0] = xScale;
+			transform[1] = 0.0;
+			transform[2] = 0.0;
+			transform[3] = -yScale;
+			transform[4] = xOff - x1;
+			transform[5] = y2 - yOff;
+		} else {
+			transform[0] = xScale;
+			transform[1] = 0.0;
+			transform[2] = 0.0;
+			transform[3] = yScale;
+			transform[4] = xOff - x1;
+			transform[5] = yOff - y1;
+		}
+
 		if (render_image(sft, outline, transform, chr) < 0)
 			return -1;
 	}
@@ -1440,12 +1456,6 @@ render_image(const struct SFT *sft, uint_fast32_t offset, double transform[6], s
 
 	if (decode_outline(sft->font, offset, 0, &outl) < 0)
 		goto failure;
-
-	if (sft->flags & SFT_DOWNWARD_Y) {
-		transform[1] = -transform[1];
-		transform[3] = -transform[3];
-		transform[5] = (double) buf.height - transform[5];
-	}
 
 	transform_points(outl.numPoints, outl.points, transform);
 

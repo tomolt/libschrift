@@ -1320,17 +1320,6 @@ tesselate_curves(struct outline *outl)
 	return 0;
 }
 
-static void
-draw_dot(struct buffer buf, int px, int py, double xAvg, double yDiff)
-{
-	struct cell *restrict ptr = &buf.cells[(unsigned int)py*buf.width+(unsigned int)px];
-	struct cell cell = *ptr;
-	cell.cover += yDiff;
-	xAvg -= (double) px;
-	cell.area += (1.0 - xAvg) * yDiff;
-	*ptr = cell;
-}
-
 /* Draws a line into the buffer. Uses a custom 2D raycasting algorithm to do so. */
 static void
 draw_line(struct buffer buf, struct point origin, struct point goal)
@@ -1344,6 +1333,7 @@ draw_line(struct buffer buf, struct point origin, struct point goal)
 	struct { int x, y; } pixel;
 	struct { int x, y; } dir;
 	int step, numSteps = 0;
+	struct cell *restrict cptr, cell;
 
 	delta.x = goal.x - origin.x;
 	delta.y = goal.y - origin.y;
@@ -1390,7 +1380,12 @@ draw_line(struct buffer buf, struct point origin, struct point goal)
 	for (step = 0; step < numSteps; ++step) {
 		xAverage = origin.x + (prevDistance + nextDistance) * halfDeltaX;
 		yDifference = (nextDistance - prevDistance) * delta.y;
-		draw_dot(buf, pixel.x, pixel.y, xAverage, yDifference);
+		cptr = &buf.cells[(unsigned int) pixel.y * buf.width + (unsigned int) pixel.x];
+		cell = *cptr;
+		cell.cover += yDifference;
+		xAverage -= (double) pixel.x;
+		cell.area += (1.0 - xAverage) * yDifference;
+		*cptr = cell;
 		prevDistance = nextDistance;
 		int alongX = nextCrossing.x < nextCrossing.y;
 		pixel.x += alongX ? dir.x : 0;
@@ -1402,7 +1397,12 @@ draw_line(struct buffer buf, struct point origin, struct point goal)
 
 	xAverage = origin.x + (prevDistance + 1.0) * halfDeltaX;
 	yDifference = (1.0 - prevDistance) * delta.y;
-	draw_dot(buf, pixel.x, pixel.y, xAverage, yDifference);
+	cptr = &buf.cells[(unsigned int) pixel.y * buf.width + (unsigned int) pixel.x];
+	cell = *cptr;
+	cell.cover += yDifference;
+	xAverage -= (double) pixel.x;
+	cell.area += (1.0 - xAverage) * yDifference;
+	*cptr = cell;
 }
 
 static void

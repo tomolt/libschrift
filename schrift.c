@@ -351,17 +351,11 @@ int
 sft_render_glyph(const struct SFT *sft, unsigned long glyph, void **image)
 {
 	double transform[6];
-	double xScale, yScale;
 	uint_fast32_t outline;
 	int box[4];
 	unsigned int width, height;
 
 	*image = NULL;
-
-	/* Set up the initial transformation from
-	 * glyph coordinate space to SFT coordinate space. */
-	xScale = sft->xScale / sft->font->unitsPerEm;
-	yScale = sft->yScale / sft->font->unitsPerEm;
 
 	if (outline_offset(sft->font, glyph, &outline) < 0)
 		return -1;
@@ -372,7 +366,6 @@ sft_render_glyph(const struct SFT *sft, unsigned long glyph, void **image)
 	if (glyph_bbox(sft, outline, box) < 0)
 		return -1;
 
-	/* Compute the user-facing bounding box, respecting Y direction etc. */
 	width  = (unsigned int) (box[2] - box[0]);
 	height = (unsigned int) (box[3] - box[1]);
 	++width, ++height;
@@ -380,19 +373,15 @@ sft_render_glyph(const struct SFT *sft, unsigned long glyph, void **image)
 	/* Set up the transformation matrix such that
 	 * the transformed bounding boxes min corner lines
 	 * up with the (0, 0) point. */
+	transform[0] = sft->xScale / sft->font->unitsPerEm;
+	transform[1] = 0.0;
+	transform[2] = 0.0;
+	transform[4] = sft->x - box[0];
 	if (sft->flags & SFT_DOWNWARD_Y) {
-		transform[0] = xScale;
-		transform[1] = 0.0;
-		transform[2] = 0.0;
-		transform[3] = -yScale;
-		transform[4] = sft->x - box[0];
+		transform[3] = -sft->yScale / sft->font->unitsPerEm;
 		transform[5] = box[3] - sft->y;
 	} else {
-		transform[0] = xScale;
-		transform[1] = 0.0;
-		transform[2] = 0.0;
-		transform[3] = yScale;
-		transform[4] = sft->x - box[0];
+		transform[3] = +sft->yScale / sft->font->unitsPerEm;
 		transform[5] = sft->y - box[1];
 	}
 
@@ -918,37 +907,23 @@ hor_metrics(SFT_Font *font, uint_fast32_t glyph, int *advanceWidth, int *leftSid
 static int
 glyph_bbox(const struct SFT *sft, unsigned long outline, int box[4])
 {
-	double xScale, yScale, xOff, yOff;
-	int x1, y1, x2, y2;
-
-	/* Set up the initial transformation from
-	 * glyph coordinate space to SFT coordinate space. */
+	double xScale, yScale;
+	/* Read the bounding box from the font file verbatim. */
+	if (!is_safe_offset(sft->font, outline, 10))
+		return -1;
+	box[0] = geti16(sft->font, outline + 2);
+	box[1] = geti16(sft->font, outline + 4);
+	box[2] = geti16(sft->font, outline + 6);
+	box[3] = geti16(sft->font, outline + 8);
+	if (box[2] <= box[0] || box[3] <= box[1])
+		return -1;
+	/* Transform the bounding box into SFT coordinate space. */
 	xScale = sft->xScale / sft->font->unitsPerEm;
 	yScale = sft->yScale / sft->font->unitsPerEm;
-	xOff = sft->x;
-	yOff = sft->y;
-
-	/* Read the bounding box from the font file verbatim. */
-	if (sft->font->size < (uint_fast32_t) outline + 10)
-		return -1;
-	x1 = geti16(sft->font, outline + 2);
-	y1 = geti16(sft->font, outline + 4);
-	x2 = geti16(sft->font, outline + 6);
-	y2 = geti16(sft->font, outline + 8);
-	if (x2 <= x1 || y2 <= y1)
-		return -1;
-
-	/* Transform the bounding box into SFT coordinate space. */
-	x1 = (int) floor(x1 * xScale + xOff);
-	y1 = (int) floor(y1 * yScale + yOff);
-	x2 = (int) ceil(x2 * xScale + xOff);
-	y2 = (int) ceil(y2 * yScale + yOff);
-	
-	box[0] = x1;
-	box[1] = y1;
-	box[2] = x2;
-	box[3] = y2;
-
+	box[0] = (int) floor(box[0] * xScale + sft->x);
+	box[1] = (int) floor(box[1] * yScale + sft->y);
+	box[2] = (int) ceil (box[2] * xScale + sft->x);
+	box[3] = (int) ceil (box[3] * yScale + sft->y);
 	return 0;
 }
 

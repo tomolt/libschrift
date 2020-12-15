@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.9.1
+For any user of the library, nothing should have changed at al since v0.9.0, except that
+performance should be noticeably improved.
+
+- Cleaned up the internals. For example, the struct buffer row pointer array is now gone.
+  Instead, we just use a flat cell array.
+- More suitable tesselation heuristic. The old one was based on the distance of the middle
+  control point to the halfway point between the two other control points.
+  The new one is instead based on the area of the triangles that the three points generate.
+- A lot of minor performance improvements building up to a relatively significant speedup.
+  Mostly achieved by reducing branch mispredictions and reordering or removing pipeline hazards
+  in the raycaster and the post-processor.
+
 ## v0.9.0
 - Improved/fixed glyph positioning calculations.
 - Perform less internal heap allocations when rendering small glyphs.

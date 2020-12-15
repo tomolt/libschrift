@@ -135,6 +135,7 @@ loadglyph(struct SFT *sft, unsigned long codepoint)
 	Glyph glyph;
 	unsigned long gid;
 	unsigned int stride, i;
+	void *image;
 
 	/* Render the character with libschrift. If successfull, we get a struct SFT_Char back
 	 * which contains various useful pieces of information about the character as well as
@@ -147,7 +148,7 @@ loadglyph(struct SFT *sft, unsigned long codepoint)
 		printf("Couldn't load codepoint 0x%02lX.\n", codepoint);
 		return;
 	}
-	if (sft_render_glyph(sft, gid, &chr) < 0) {
+	if (sft_render_glyph(sft, gid, &chr, &image) < 0) {
 		printf("Couldn't load codepoint 0x%02lX.\n", codepoint);
 		return;
 	}
@@ -160,8 +161,8 @@ loadglyph(struct SFT *sft, unsigned long codepoint)
 	char paddedImage[stride * chr.height];
 	memset(paddedImage, 0, stride * chr.height);
 	for (i = 0; i < chr.height; ++i)
-		memcpy(paddedImage + i * stride, (char *) chr.image + i * chr.width, chr.width);
-	free(chr.image);
+		memcpy(paddedImage + i * stride, (char *) image + i * chr.width, chr.width);
+	free(image);
 
 	/* Fill in the XRender XGlyphInfo struct with the info we get in the SFT_Char struct. */
 	glyph = codepoint;

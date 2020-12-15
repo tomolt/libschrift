@@ -157,7 +157,7 @@ static void draw_lines(struct outline *outl, struct buffer buf);
 /* post-processing */
 static void post_process(struct buffer buf, uint8_t *image);
 /* glyph rendering */
-static int render_image(const struct SFT *sft, uint_fast32_t offset, double transform[6], struct SFT_Char *chr);
+static int render_image(const struct SFT *sft, uint_fast32_t offset, double transform[6], struct SFT_Char *chr, void **image);
 
 /* function implementations */
 
@@ -368,7 +368,7 @@ sft_glyph_dimensions(const struct SFT *sft, unsigned long glyph, struct SFT_Char
 }
 
 int
-sft_render_glyph(const struct SFT *sft, unsigned long glyph, struct SFT_Char *chr)
+sft_render_glyph(const struct SFT *sft, unsigned long glyph, struct SFT_Char *chr, void **image)
 {
 	double transform[6];
 	double xScale, yScale, xOff, yOff;
@@ -377,6 +377,7 @@ sft_render_glyph(const struct SFT *sft, unsigned long glyph, struct SFT_Char *ch
 	int x1, y1, x2, y2;
 
 	memset(chr, 0, sizeof *chr);
+	*image = NULL;
 
 	/* Set up the initial transformation from
 	 * glyph coordinate space to SFT coordinate space. */
@@ -446,7 +447,7 @@ sft_render_glyph(const struct SFT *sft, unsigned long glyph, struct SFT_Char *ch
 		transform[5] = yOff - y1;
 	}
 
-	if (render_image(sft, outline, transform, chr) < 0)
+	if (render_image(sft, outline, transform, chr, image) < 0)
 		return -1;
 	
 	return 0;
@@ -1495,7 +1496,7 @@ post_process(struct buffer buf, uint8_t *image)
 }
 
 static int
-render_image(const struct SFT *sft, uint_fast32_t offset, double transform[6], struct SFT_Char *chr)
+render_image(const struct SFT *sft, uint_fast32_t offset, double transform[6], struct SFT_Char *chr, void **image)
 {
 	struct cell *cells = NULL;
 	struct outline outl;
@@ -1525,9 +1526,9 @@ render_image(const struct SFT *sft, uint_fast32_t offset, double transform[6], s
 
 	draw_lines(&outl, buf);
 
-	if (!(chr->image = malloc(numPixels)))
+	if (!(*image = malloc(numPixels)))
 		goto failure;
-	post_process(buf, chr->image);
+	post_process(buf, *image);
 
 	free_outline(&outl);
 	STACK_FREE(cells);

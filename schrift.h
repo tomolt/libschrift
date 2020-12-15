@@ -39,7 +39,6 @@ struct SFT
 
 struct SFT_Char
 {
-	void *image;
 	double advance;
 	int x;
 	int y;
@@ -59,7 +58,7 @@ int sft_kerning(const struct SFT *sft, unsigned long leftChar, unsigned long rig
 
 int sft_codepoint_to_glyph(const struct SFT *sft, unsigned long codepoint, unsigned long *glyph);
 int sft_glyph_dimensions(const struct SFT *sft, unsigned long glyph, struct SFT_Char *chr);
-int sft_render_glyph(const struct SFT *sft, unsigned long glyph, struct SFT_Char *chr);
+int sft_render_glyph(const struct SFT *sft, unsigned long glyph, struct SFT_Char *chr, void **image);
 
 #ifdef __cplusplus
 }

@@ -34,6 +34,7 @@ main(int argc, char *argv[])
 	const char *filename;
 	double size;
 	unsigned long cp, gid;
+	void *image;
 	int i;
 
 	filename = "resources/Ubuntu-R.ttf";
@@ -55,10 +56,9 @@ main(int argc, char *argv[])
 		exit(1);
 	}
 
-	font = sft_loadfile(filename);
-	if (font == NULL)
+	if (!(font = sft_loadfile(filename)))
 		die("Can't load font file.");
-	memset(&sft, 0, sizeof(sft));
+	memset(&sft, 0, sizeof sft);
 	sft.font = font;
 	sft.xScale = size;
 	sft.yScale = size;
@@ -67,8 +67,8 @@ main(int argc, char *argv[])
 		for (cp = 32; cp < 128; ++cp) {
 			if (sft_codepoint_to_glyph(&sft, cp, &gid) < 0)
 				continue;
-			if (!(sft_render_glyph(&sft, gid, &chr) < 0))
-				free(chr.image);
+			if (!(sft_render_glyph(&sft, gid, &chr, &image) < 0))
+				free(image);
 		}
 	}
 	sft_freefont(font);

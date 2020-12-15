@@ -29,11 +29,13 @@ int
 main(int argc, char *argv[])
 {
 	struct SFT sft;
-	struct SFT_Char chr;
 	SFT_Font *font;
 	const char *filename;
 	double size;
-	unsigned long cp, gid;
+	unsigned long cp, gid, outline;
+	int advanceWidth, leftSideBearing;
+	unsigned int width, height;
+	int bbox[4];
 	void *image;
 	int i;
 
@@ -67,10 +69,16 @@ main(int argc, char *argv[])
 		for (cp = 32; cp < 128; ++cp) {
 			if (sft_codepoint_to_glyph(&sft, cp, &gid) < 0)
 				continue;
-			if (sft_glyph_dimensions(&sft, gid, &chr) < 0)
+			if (sft_glyph_hmtx(&sft, gid, &advanceWidth, &leftSideBearing) < 0)
 				continue;
-			if (!(sft_render_glyph(&sft, gid, &image) < 0))
-				free(image);
+			if (sft_glyph_outline(&sft, gid, &outline) < 0)
+				continue;
+			if (sft_outline_bbox(&sft, outline, bbox) < 0)
+				continue;
+			width  = (unsigned int) SFT_BBOX_WIDTH(bbox);
+			height = (unsigned int) SFT_BBOX_HEIGHT(bbox);
+			sft_render_outline(&sft, outline, bbox, width, height, &image);
+			free(image);
 		}
 	}
 	sft_freefont(font);

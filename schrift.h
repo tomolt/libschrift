@@ -24,6 +24,10 @@ extern "C" {
 #define SFT_DOWNWARD_Y    0x01
 #define SFT_RENDER_IMAGE  0x02
 
+#define SFT_BBOX_WIDTH(bbox)  ((bbox)[2] - (bbox)[0] + 1)
+#define SFT_BBOX_HEIGHT(bbox) ((bbox)[3] - (bbox)[1] + 1)
+#define SFT_BBOX_YOFFSET(sft, bbox) ((sft)->flags & SFT_DOWNWARD_Y ? -(bbox)[3] : (bbox)[1])
+
 struct SFT_Font;
 typedef struct SFT_Font SFT_Font;
 
@@ -37,15 +41,6 @@ struct SFT
 	unsigned int flags;
 };
 
-struct SFT_Char
-{
-	double advance;
-	int x;
-	int y;
-	unsigned int width;
-	unsigned int height;
-};
-
 /* libschrift uses semantic versioning. */
 const char *sft_version(void);
 
@@ -55,10 +50,11 @@ void sft_freefont(SFT_Font *font);
 
 int sft_linemetrics(const struct SFT *sft, double *ascent, double *descent, double *gap);
 int sft_kerning(const struct SFT *sft, unsigned long leftChar, unsigned long rightChar, double kerning[2]);
-
 int sft_codepoint_to_glyph(const struct SFT *sft, unsigned long codepoint, unsigned long *glyph);
-int sft_glyph_dimensions(const struct SFT *sft, unsigned long glyph, struct SFT_Char *chr);
-int sft_render_glyph(const struct SFT *sft, unsigned long glyph, void **image);
+int sft_glyph_hmtx(const struct SFT *sft, unsigned long glyph, int *advanceWidth, int *leftSideBearing);
+int sft_glyph_outline(const struct SFT *sft, unsigned long glyph, unsigned long *outline);
+int sft_outline_bbox(const struct SFT *sft, unsigned long outline, int bbox[4]);
+int sft_render_outline(const struct SFT *sft, unsigned long outline, int bbox[4], unsigned int width, unsigned int height, void **image);
 
 #ifdef __cplusplus
 }

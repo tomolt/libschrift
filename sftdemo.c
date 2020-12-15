@@ -130,25 +130,35 @@ usage(void)
 static void
 loadglyph(struct SFT *sft, unsigned long codepoint)
 {
-	struct SFT_Char chr;
 	XGlyphInfo info;
 	Glyph glyph;
-	unsigned long gid;
+	unsigned long gid, outline;
 	unsigned int stride, i;
 	void *image;
+	int advanceWidth, leftSideBearing;
+	int bbox[4];
+	unsigned int width, height;
 
-	/* Render the character with libschrift. If successfull, we get a struct SFT_Char back
-	 * which contains various useful pieces of information about the character as well as
-	 * a rendered image of the character. */
 	if (sft_codepoint_to_glyph(sft, codepoint, &gid) < 0) {
 		printf("Couldn't load codepoint 0x%02lX.\n", codepoint);
 		return;
 	}
-	if (sft_glyph_dimensions(sft, gid, &chr) < 0) {
+	if (sft_glyph_hmtx(sft, gid, &advanceWidth, &leftSideBearing) < 0) {
 		printf("Couldn't load codepoint 0x%02lX.\n", codepoint);
 		return;
 	}
-	if (sft_render_glyph(sft, gid, &image) < 0) {
+	if (sft_glyph_outline(sft, gid, &outline) < 0) {
+		printf("Couldn't load codepoint 0x%02lX.\n", codepoint);
+		return;
+	}
+	if (!outline) return;
+	if (sft_outline_bbox(sft, outline, bbox) < 0) {
+		printf("Couldn't load codepoint 0x%02lX.\n", codepoint);
+		return;
+	}
+	width  = (unsigned int) SFT_BBOX_WIDTH(bbox);
+	height = (unsigned int) SFT_BBOX_HEIGHT(bbox);
+	if (sft_render_outline(sft, outline, bbox, width, height, &image) < 0) {
 		printf("Couldn't load codepoint 0x%02lX.\n", codepoint);
 		return;
 	}
@@ -157,23 +167,23 @@ loadglyph(struct SFT *sft, unsigned long codepoint)
 	 * That means we have to copy the image into a separate buffer row by row,
 	 * padding the end of each row with a couple of extra bytes.
 	 * The stride is simply the number of bytes / pixels per row including the padding. */
-	stride = (chr.width + 3) & ~3U;
-	char paddedImage[stride * chr.height];
-	memset(paddedImage, 0, stride * chr.height);
-	for (i = 0; i < chr.height; ++i)
-		memcpy(paddedImage + i * stride, (char *) image + i * chr.width, chr.width);
+	stride = (width + 3) & ~3U;
+	char paddedImage[stride * height];
+	memset(paddedImage, 0, stride * height);
+	for (i = 0; i < height; ++i)
+		memcpy(paddedImage + i * stride, (char *) image + i * width, width);
 	free(image);
 
 	/* Fill in the XRender XGlyphInfo struct with the info we get in the SFT_Char struct. */
 	glyph = codepoint;
-	info.x = (short) -chr.x;
-	info.y = (short) -chr.y;
-	info.width = (unsigned short) chr.width;
-	info.height = (unsigned short) chr.height;
-	info.xOff = (short) round(chr.advance);
+	info.x = (short) -leftSideBearing;
+	info.y = (short) -SFT_BBOX_YOFFSET(sft, bbox);
+	info.width = (unsigned short) width;
+	info.height = (unsigned short) height;
+	info.xOff = (short) round(advanceWidth);
 	info.yOff = 0;
 	/* Upload the XGlyphInfo and padded image to the X11 server. */
-	XRenderAddGlyphs(dpy, glyphset, &glyph, &info, 1, paddedImage, (int) (stride * chr.height));
+	XRenderAddGlyphs(dpy, glyphset, &glyph, &info, 1, paddedImage, (int) (stride * height));
 }
 
 /* Free memory and exit cleanly. */

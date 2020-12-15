@@ -307,88 +307,57 @@ sft_codepoint_to_glyph(const struct SFT *sft, unsigned long codepoint, unsigned 
 }
 
 int
-sft_glyph_dimensions(const struct SFT *sft, unsigned long glyph, struct SFT_Char *chr)
+sft_glyph_hmtx(const struct SFT *sft, unsigned long glyph, int *advanceWidth, int *leftSideBearing)
 {
-	uint_fast32_t outline;
-	int advance, leftSideBearing;
-	int box[4];
-
-	memset(chr, 0, sizeof *chr);
-
-	if (hor_metrics(sft->font, glyph, &advance, &leftSideBearing) < 0)
+	int adv, lsb;
+	double xScale = sft->xScale / sft->font->unitsPerEm;
+	*advanceWidth    = 0;
+	*leftSideBearing = 0;
+	if (hor_metrics(sft->font, glyph, &adv, &lsb) < 0)
 		return -1;
-	/* We can compute the advance width early because the scaling factors
-	 * won't be changed. This is neccessary for glyphs with completely
-	 * empty outlines. */
-	chr->advance = (int) round(advance * sft->xScale / sft->font->unitsPerEm);
-
-	if (outline_offset(sft->font, glyph, &outline) < 0)
-		return -1;
-	/* A glyph may have a completely empty outline. */
-	if (!outline)
-		return 0;
-
-	if (glyph_bbox(sft, outline, box) < 0)
-		return -1;
-
-	/* Compute the user-facing bounding box, respecting Y direction etc. */
-	chr->x = (int) floor(leftSideBearing * sft->xScale / sft->font->unitsPerEm + sft->x);
-	chr->y = sft->flags & SFT_DOWNWARD_Y ? -box[3] : box[1];
-	chr->width  = (unsigned int) (box[2] - box[0]);
-	chr->height = (unsigned int) (box[3] - box[1]);
-
-	/* It is possible for points to lie exactly on the right or bottom edge of the bbox.
-	 * clip_points() will nudge such points up or to the left so they won't result in
-	 * out of bounds accesses, but this is slow because it is only there as a security measure.
-	 * So, to avoid such cases from ever occurring, we simply expand our canvas by one pixel
-	 * to the right and bottom. */
-	++chr->width, ++chr->height;
-	
+	*advanceWidth    = (int) round(adv * xScale);
+	*leftSideBearing = (int) floor(lsb * xScale + sft->x);
 	return 0;
 }
 
 int
-sft_render_glyph(const struct SFT *sft, unsigned long glyph, void **image)
+sft_glyph_outline(const struct SFT *sft, unsigned long glyph, unsigned long *outline)
+{
+	return outline_offset(sft->font, glyph, outline);
+}
+
+int
+sft_outline_bbox(const struct SFT *sft, unsigned long outline, int bbox[4])
+{
+	if (outline) {
+		return glyph_bbox(sft, outline, bbox);
+	} else {
+		memset(bbox, 0, 4 * sizeof (int));
+		return 0;
+	}
+}
+
+int
+sft_render_outline(const struct SFT *sft, unsigned long outline, int bbox[4], unsigned int width, unsigned int height, void **image)
 {
 	double transform[6];
-	uint_fast32_t outline;
-	int box[4];
-	unsigned int width, height;
-
 	*image = NULL;
-
-	if (outline_offset(sft->font, glyph, &outline) < 0)
-		return -1;
-	/* A glyph may have a completely empty outline. */
-	if (!outline)
-		return 0;
-
-	if (glyph_bbox(sft, outline, box) < 0)
-		return -1;
-
-	width  = (unsigned int) (box[2] - box[0]);
-	height = (unsigned int) (box[3] - box[1]);
-	++width, ++height;
-
+	if (!outline) return 0;
 	/* Set up the transformation matrix such that
 	 * the transformed bounding boxes min corner lines
 	 * up with the (0, 0) point. */
 	transform[0] = sft->xScale / sft->font->unitsPerEm;
 	transform[1] = 0.0;
 	transform[2] = 0.0;
-	transform[4] = sft->x - box[0];
+	transform[4] = sft->x - bbox[0];
 	if (sft->flags & SFT_DOWNWARD_Y) {
 		transform[3] = -sft->yScale / sft->font->unitsPerEm;
-		transform[5] = box[3] - sft->y;
+		transform[5] = bbox[3] - sft->y;
 	} else {
 		transform[3] = +sft->yScale / sft->font->unitsPerEm;
-		transform[5] = sft->y - box[1];
+		transform[5] = sft->y - bbox[1];
 	}
-
-	if (render_image(sft, outline, transform, width, height, image) < 0)
-		return -1;
-	
-	return 0;
+	return render_image(sft, outline, transform, width, height, image);
 }
 
 /* This is sqrt(SIZE_MAX+1), as s1*s2 <= SIZE_MAX

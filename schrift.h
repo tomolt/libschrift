@@ -23,10 +23,6 @@ extern "C" {
 
 #define SFT_DOWNWARD_Y    0x01
 #define SFT_RENDER_IMAGE  0x02
-#define SFT_CATCH_MISSING 0x04
-
-/* Deprecated. Use SFT_RENDER_IMAGE instead (Only the name has changed). */
-#define SFT_CHAR_IMAGE 0x02
 
 struct SFT_Font;
 typedef struct SFT_Font SFT_Font;
@@ -60,7 +56,10 @@ void sft_freefont(SFT_Font *font);
 
 int sft_linemetrics(const struct SFT *sft, double *ascent, double *descent, double *gap);
 int sft_kerning(const struct SFT *sft, unsigned long leftChar, unsigned long rightChar, double kerning[2]);
-int sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr);
+
+int sft_codepoint_to_glyph(const struct SFT *sft, unsigned long codepoint, unsigned long *glyph);
+int sft_glyph_dimensions(const struct SFT *sft, unsigned long glyph, struct SFT_Char *chr);
+int sft_render_glyph(const struct SFT *sft, unsigned long glyph, struct SFT_Char *chr);
 
 #ifdef __cplusplus
 }

@@ -300,23 +300,83 @@ sft_kerning(const struct SFT *sft, unsigned long leftChar, unsigned long rightCh
 }
 
 int
-sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
+sft_codepoint_to_glyph(const struct SFT *sft, unsigned long codepoint, unsigned long *glyph)
 {
-	double transform[6];
+	return glyph_id(sft->font, codepoint, glyph);
+}
+
+int
+sft_glyph_dimensions(const struct SFT *sft, unsigned long glyph, struct SFT_Char *chr)
+{
 	double xScale, yScale, xOff, yOff;
-	uint_fast32_t outline, glyph = 0;
+	uint_fast32_t outline;
 	int advance, leftSideBearing;
 	int x1, y1, x2, y2;
 
 	memset(chr, 0, sizeof *chr);
 
-	if (charCode > UINT32_MAX)
+	/* Set up the initial transformation from
+	 * glyph coordinate space to SFT coordinate space. */
+	xScale = sft->xScale / sft->font->unitsPerEm;
+	yScale = sft->yScale / sft->font->unitsPerEm;
+	xOff = sft->x;
+	yOff = sft->y;
+
+	if (hor_metrics(sft->font, glyph, &advance, &leftSideBearing) < 0)
+		return -1;
+	/* We can compute the advance width early because the scaling factors
+	 * won't be changed. This is neccessary for glyphs with completely
+	 * empty outlines. */
+	chr->advance = (int) round(advance * xScale);
+
+	if (outline_offset(sft->font, glyph, &outline) < 0)
+		return -1;
+	/* A glyph may have a completely empty outline. */
+	if (!outline)
+		return 0;
+
+	/* Read the bounding box from the font file verbatim. */
+	if (sft->font->size < (uint_fast32_t) outline + 10)
+		return -1;
+	x1 = geti16(sft->font, outline + 2);
+	y1 = geti16(sft->font, outline + 4);
+	x2 = geti16(sft->font, outline + 6);
+	y2 = geti16(sft->font, outline + 8);
+	if (x2 <= x1 || y2 <= y1)
 		return -1;
 
-	if (glyph_id(sft->font, (uint_fast32_t) charCode, &glyph) < 0)
-		return -1;
-	if (glyph == 0 && (sft->flags & SFT_CATCH_MISSING))
-		return 1;
+	/* Transform the bounding box into SFT coordinate space. */
+	x1 = (int) floor(x1 * xScale + xOff);
+	y1 = (int) floor(y1 * yScale + yOff);
+	x2 = (int) ceil(x2 * xScale + xOff);
+	y2 = (int) ceil(y2 * yScale + yOff);
+
+	/* Compute the user-facing bounding box, respecting Y direction etc. */
+	chr->x = (int) floor(leftSideBearing * xScale + xOff);
+	chr->y = sft->flags & SFT_DOWNWARD_Y ? -y2 : y1;
+	chr->width = (unsigned int) (x2 - x1);
+	chr->height = (unsigned int) (y2 - y1);
+
+	/* It is possible for points to lie exactly on the right or bottom edge of the bbox.
+	 * clip_points() will nudge such points up or to the left so they won't result in
+	 * out of bounds accesses, but this is slow because it is only there as a security measure.
+	 * So, to avoid such cases from ever occurring, we simply expand our canvas by one pixel
+	 * to the right and bottom. */
+	++chr->width, ++chr->height;
+	
+	return 0;
+}
+
+int
+sft_render_glyph(const struct SFT *sft, unsigned long glyph, struct SFT_Char *chr)
+{
+	double transform[6];
+	double xScale, yScale, xOff, yOff;
+	uint_fast32_t outline;
+	int advance, leftSideBearing;
+	int x1, y1, x2, y2;
+
+	memset(chr, 0, sizeof *chr);
 
 	/* Set up the initial transformation from
 	 * glyph coordinate space to SFT coordinate space. */
@@ -367,32 +427,29 @@ sft_char(const struct SFT *sft, unsigned long charCode, struct SFT_Char *chr)
 	 * to the right and bottom. */
 	++chr->width, ++chr->height;
 
-	/* Render the outline (if requested). */
-	if (sft->flags & SFT_RENDER_IMAGE) {
-		/* Set up the transformation matrix such that
-		 * the transformed bounding boxes min corner lines
-		 * up with the (0, 0) point. */
-		if (sft->flags & SFT_DOWNWARD_Y) {
-			transform[0] = xScale;
-			transform[1] = 0.0;
-			transform[2] = 0.0;
-			transform[3] = -yScale;
-			transform[4] = xOff - x1;
-			transform[5] = y2 - yOff;
-		} else {
-			transform[0] = xScale;
-			transform[1] = 0.0;
-			transform[2] = 0.0;
-			transform[3] = yScale;
-			transform[4] = xOff - x1;
-			transform[5] = yOff - y1;
-		}
-
-		if (render_image(sft, outline, transform, chr) < 0)
-			return -1;
+	/* Set up the transformation matrix such that
+	 * the transformed bounding boxes min corner lines
+	 * up with the (0, 0) point. */
+	if (sft->flags & SFT_DOWNWARD_Y) {
+		transform[0] = xScale;
+		transform[1] = 0.0;
+		transform[2] = 0.0;
+		transform[3] = -yScale;
+		transform[4] = xOff - x1;
+		transform[5] = y2 - yOff;
+	} else {
+		transform[0] = xScale;
+		transform[1] = 0.0;
+		transform[2] = 0.0;
+		transform[3] = yScale;
+		transform[4] = xOff - x1;
+		transform[5] = yOff - y1;
 	}
 
-	return glyph == 0;
+	if (render_image(sft, outline, transform, chr) < 0)
+		return -1;
+	
+	return 0;
 }
 
 /* This is sqrt(SIZE_MAX+1), as s1*s2 <= SIZE_MAX
@@ -840,6 +897,8 @@ glyph_id(SFT_Font *font, uint_fast32_t charCode, uint_fast32_t *glyph)
 	uint_fast32_t cmap, entry, table;
 	unsigned int idx, numEntries;
 	int type;
+	
+	*glyph = 0;
 
 	if (gettable(font, "cmap", &cmap) < 0)
 		return -1;

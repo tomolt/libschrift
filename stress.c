@@ -33,7 +33,7 @@ main(int argc, char *argv[])
 	SFT_Font *font;
 	const char *filename;
 	double size;
-	unsigned long c;
+	unsigned long cp, gid;
 	int i;
 
 	filename = "resources/Ubuntu-R.ttf";
@@ -64,8 +64,10 @@ main(int argc, char *argv[])
 	sft.yScale = size;
 	sft.flags = SFT_DOWNWARD_Y | SFT_RENDER_IMAGE;
 	for (i = 0; i < 5000; ++i) {
-		for (c = 32; c < 128; ++c) {
-			if (!(sft_char(&sft, c, &chr) < 0))
+		for (cp = 32; cp < 128; ++cp) {
+			if (sft_codepoint_to_glyph(&sft, cp, &gid) < 0)
+				continue;
+			if (!(sft_render_glyph(&sft, gid, &chr) < 0))
 				free(chr.image);
 		}
 	}

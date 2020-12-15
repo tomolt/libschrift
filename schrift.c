@@ -139,6 +139,7 @@ static int  cmap_fmt6(SFT_Font *font, uint_fast32_t table, uint_fast32_t charCod
 static int  glyph_id(SFT_Font *font, uint_fast32_t charCode, uint_fast32_t *glyph);
 /* glyph metrics lookup */
 static int  hor_metrics(SFT_Font *font, uint_fast32_t glyph, int *advanceWidth, int *leftSideBearing);
+static int  glyph_bbox(const struct SFT *sft, unsigned long outline, int box[4]);
 /* decoding outlines */
 static int  outline_offset(SFT_Font *font, uint_fast32_t glyph, uint_fast32_t *offset);
 static int  simple_flags(SFT_Font *font, uint_fast32_t *offset, uint_fast16_t numPts, uint8_t *flags);
@@ -308,26 +309,18 @@ sft_codepoint_to_glyph(const struct SFT *sft, unsigned long codepoint, unsigned 
 int
 sft_glyph_dimensions(const struct SFT *sft, unsigned long glyph, struct SFT_Char *chr)
 {
-	double xScale, yScale, xOff, yOff;
 	uint_fast32_t outline;
 	int advance, leftSideBearing;
-	int x1, y1, x2, y2;
+	int box[4];
 
 	memset(chr, 0, sizeof *chr);
-
-	/* Set up the initial transformation from
-	 * glyph coordinate space to SFT coordinate space. */
-	xScale = sft->xScale / sft->font->unitsPerEm;
-	yScale = sft->yScale / sft->font->unitsPerEm;
-	xOff = sft->x;
-	yOff = sft->y;
 
 	if (hor_metrics(sft->font, glyph, &advance, &leftSideBearing) < 0)
 		return -1;
 	/* We can compute the advance width early because the scaling factors
 	 * won't be changed. This is neccessary for glyphs with completely
 	 * empty outlines. */
-	chr->advance = (int) round(advance * xScale);
+	chr->advance = (int) round(advance * sft->xScale / sft->font->unitsPerEm);
 
 	if (outline_offset(sft->font, glyph, &outline) < 0)
 		return -1;
@@ -335,27 +328,14 @@ sft_glyph_dimensions(const struct SFT *sft, unsigned long glyph, struct SFT_Char
 	if (!outline)
 		return 0;
 
-	/* Read the bounding box from the font file verbatim. */
-	if (sft->font->size < (uint_fast32_t) outline + 10)
+	if (glyph_bbox(sft, outline, box) < 0)
 		return -1;
-	x1 = geti16(sft->font, outline + 2);
-	y1 = geti16(sft->font, outline + 4);
-	x2 = geti16(sft->font, outline + 6);
-	y2 = geti16(sft->font, outline + 8);
-	if (x2 <= x1 || y2 <= y1)
-		return -1;
-
-	/* Transform the bounding box into SFT coordinate space. */
-	x1 = (int) floor(x1 * xScale + xOff);
-	y1 = (int) floor(y1 * yScale + yOff);
-	x2 = (int) ceil(x2 * xScale + xOff);
-	y2 = (int) ceil(y2 * yScale + yOff);
 
 	/* Compute the user-facing bounding box, respecting Y direction etc. */
-	chr->x = (int) floor(leftSideBearing * xScale + xOff);
-	chr->y = sft->flags & SFT_DOWNWARD_Y ? -y2 : y1;
-	chr->width = (unsigned int) (x2 - x1);
-	chr->height = (unsigned int) (y2 - y1);
+	chr->x = (int) floor(leftSideBearing * sft->xScale / sft->font->unitsPerEm + sft->x);
+	chr->y = sft->flags & SFT_DOWNWARD_Y ? -box[3] : box[1];
+	chr->width  = (unsigned int) (box[2] - box[0]);
+	chr->height = (unsigned int) (box[3] - box[1]);
 
 	/* It is possible for points to lie exactly on the right or bottom edge of the bbox.
 	 * clip_points() will nudge such points up or to the left so they won't result in
@@ -371,9 +351,9 @@ int
 sft_render_glyph(const struct SFT *sft, unsigned long glyph, void **image)
 {
 	double transform[6];
-	double xScale, yScale, xOff, yOff;
+	double xScale, yScale;
 	uint_fast32_t outline;
-	int x1, y1, x2, y2;
+	int box[4];
 	unsigned int width, height;
 
 	*image = NULL;
@@ -382,8 +362,6 @@ sft_render_glyph(const struct SFT *sft, unsigned long glyph, void **image)
 	 * glyph coordinate space to SFT coordinate space. */
 	xScale = sft->xScale / sft->font->unitsPerEm;
 	yScale = sft->yScale / sft->font->unitsPerEm;
-	xOff = sft->x;
-	yOff = sft->y;
 
 	if (outline_offset(sft->font, glyph, &outline) < 0)
 		return -1;
@@ -391,25 +369,12 @@ sft_render_glyph(const struct SFT *sft, unsigned long glyph, void **image)
 	if (!outline)
 		return 0;
 
-	/* Read the bounding box from the font file verbatim. */
-	if (sft->font->size < (uint_fast32_t) outline + 10)
+	if (glyph_bbox(sft, outline, box) < 0)
 		return -1;
-	x1 = geti16(sft->font, outline + 2);
-	y1 = geti16(sft->font, outline + 4);
-	x2 = geti16(sft->font, outline + 6);
-	y2 = geti16(sft->font, outline + 8);
-	if (x2 <= x1 || y2 <= y1)
-		return -1;
-
-	/* Transform the bounding box into SFT coordinate space. */
-	x1 = (int) floor(x1 * xScale + xOff);
-	y1 = (int) floor(y1 * yScale + yOff);
-	x2 = (int) ceil(x2 * xScale + xOff);
-	y2 = (int) ceil(y2 * yScale + yOff);
 
 	/* Compute the user-facing bounding box, respecting Y direction etc. */
-	width  = (unsigned int) (x2 - x1);
-	height = (unsigned int) (y2 - y1);
+	width  = (unsigned int) (box[2] - box[0]);
+	height = (unsigned int) (box[3] - box[1]);
 	++width, ++height;
 
 	/* Set up the transformation matrix such that
@@ -420,15 +385,15 @@ sft_render_glyph(const struct SFT *sft, unsigned long glyph, void **image)
 		transform[1] = 0.0;
 		transform[2] = 0.0;
 		transform[3] = -yScale;
-		transform[4] = xOff - x1;
-		transform[5] = y2 - yOff;
+		transform[4] = sft->x - box[0];
+		transform[5] = box[3] - sft->y;
 	} else {
 		transform[0] = xScale;
 		transform[1] = 0.0;
 		transform[2] = 0.0;
 		transform[3] = yScale;
-		transform[4] = xOff - x1;
-		transform[5] = yOff - y1;
+		transform[4] = sft->x - box[0];
+		transform[5] = sft->y - box[1];
 	}
 
 	if (render_image(sft, outline, transform, width, height, image) < 0)
@@ -948,6 +913,43 @@ hor_metrics(SFT_Font *font, uint_fast32_t glyph, int *advanceWidth, int *leftSid
 		*leftSideBearing = geti16(font, offset);
 		return 0;
 	}
+}
+
+static int
+glyph_bbox(const struct SFT *sft, unsigned long outline, int box[4])
+{
+	double xScale, yScale, xOff, yOff;
+	int x1, y1, x2, y2;
+
+	/* Set up the initial transformation from
+	 * glyph coordinate space to SFT coordinate space. */
+	xScale = sft->xScale / sft->font->unitsPerEm;
+	yScale = sft->yScale / sft->font->unitsPerEm;
+	xOff = sft->x;
+	yOff = sft->y;
+
+	/* Read the bounding box from the font file verbatim. */
+	if (sft->font->size < (uint_fast32_t) outline + 10)
+		return -1;
+	x1 = geti16(sft->font, outline + 2);
+	y1 = geti16(sft->font, outline + 4);
+	x2 = geti16(sft->font, outline + 6);
+	y2 = geti16(sft->font, outline + 8);
+	if (x2 <= x1 || y2 <= y1)
+		return -1;
+
+	/* Transform the bounding box into SFT coordinate space. */
+	x1 = (int) floor(x1 * xScale + xOff);
+	y1 = (int) floor(y1 * yScale + yOff);
+	x2 = (int) ceil(x2 * xScale + xOff);
+	y2 = (int) ceil(y2 * yScale + yOff);
+	
+	box[0] = x1;
+	box[1] = y1;
+	box[2] = x2;
+	box[3] = y2;
+
+	return 0;
 }
 
 /* Returns the offset into the font that the glyph's outline is stored at. */

@@ -157,7 +157,7 @@ static void draw_lines(struct outline *outl, struct buffer buf);
 /* post-processing */
 static void post_process(struct buffer buf, uint8_t *image);
 /* glyph rendering */
-static int render_image(const struct SFT *sft, uint_fast32_t offset, double transform[6], struct SFT_Char *chr, void **image);
+static int render_image(const struct SFT *sft, uint_fast32_t offset, double transform[6], unsigned int width, unsigned int height, void **image);
 
 /* function implementations */
 
@@ -368,15 +368,14 @@ sft_glyph_dimensions(const struct SFT *sft, unsigned long glyph, struct SFT_Char
 }
 
 int
-sft_render_glyph(const struct SFT *sft, unsigned long glyph, struct SFT_Char *chr, void **image)
+sft_render_glyph(const struct SFT *sft, unsigned long glyph, void **image)
 {
 	double transform[6];
 	double xScale, yScale, xOff, yOff;
 	uint_fast32_t outline;
-	int advance, leftSideBearing;
 	int x1, y1, x2, y2;
+	unsigned int width, height;
 
-	memset(chr, 0, sizeof *chr);
 	*image = NULL;
 
 	/* Set up the initial transformation from
@@ -385,13 +384,6 @@ sft_render_glyph(const struct SFT *sft, unsigned long glyph, struct SFT_Char *ch
 	yScale = sft->yScale / sft->font->unitsPerEm;
 	xOff = sft->x;
 	yOff = sft->y;
-
-	if (hor_metrics(sft->font, glyph, &advance, &leftSideBearing) < 0)
-		return -1;
-	/* We can compute the advance width early because the scaling factors
-	 * won't be changed. This is neccessary for glyphs with completely
-	 * empty outlines. */
-	chr->advance = (int) round(advance * xScale);
 
 	if (outline_offset(sft->font, glyph, &outline) < 0)
 		return -1;
@@ -416,17 +408,9 @@ sft_render_glyph(const struct SFT *sft, unsigned long glyph, struct SFT_Char *ch
 	y2 = (int) ceil(y2 * yScale + yOff);
 
 	/* Compute the user-facing bounding box, respecting Y direction etc. */
-	chr->x = (int) floor(leftSideBearing * xScale + xOff);
-	chr->y = sft->flags & SFT_DOWNWARD_Y ? -y2 : y1;
-	chr->width = (unsigned int) (x2 - x1);
-	chr->height = (unsigned int) (y2 - y1);
-
-	/* It is possible for points to lie exactly on the right or bottom edge of the bbox.
-	 * clip_points() will nudge such points up or to the left so they won't result in
-	 * out of bounds accesses, but this is slow because it is only there as a security measure.
-	 * So, to avoid such cases from ever occurring, we simply expand our canvas by one pixel
-	 * to the right and bottom. */
-	++chr->width, ++chr->height;
+	width  = (unsigned int) (x2 - x1);
+	height = (unsigned int) (y2 - y1);
+	++width, ++height;
 
 	/* Set up the transformation matrix such that
 	 * the transformed bounding boxes min corner lines
@@ -447,7 +431,7 @@ sft_render_glyph(const struct SFT *sft, unsigned long glyph, struct SFT_Char *ch
 		transform[5] = yOff - y1;
 	}
 
-	if (render_image(sft, outline, transform, chr, image) < 0)
+	if (render_image(sft, outline, transform, width, height, image) < 0)
 		return -1;
 	
 	return 0;
@@ -1496,12 +1480,12 @@ post_process(struct buffer buf, uint8_t *image)
 }
 
 static int
-render_image(const struct SFT *sft, uint_fast32_t offset, double transform[6], struct SFT_Char *chr, void **image)
+render_image(const struct SFT *sft, uint_fast32_t offset, double transform[6], unsigned int width, unsigned int height, void **image)
 {
 	struct cell *cells = NULL;
 	struct outline outl;
 	struct buffer buf;
-	unsigned int numPixels = chr->width * chr->height;
+	unsigned int numPixels = width * height;
 
 	memset(&outl, 0, sizeof outl);
 	if (init_outline(&outl) < 0)
@@ -1512,15 +1496,15 @@ render_image(const struct SFT *sft, uint_fast32_t offset, double transform[6], s
 		goto failure;
 	memset(cells, 0, numPixels * sizeof *cells);
 	buf.cells  = cells;
-	buf.width  = chr->width;
-	buf.height = chr->height;
+	buf.width  = width;
+	buf.height = height;
 
 	if (decode_outline(sft->font, offset, 0, &outl) < 0)
 		goto failure;
 
 	transform_points(outl.numPoints, outl.points, transform);
 
-	clip_points(outl.numPoints, outl.points, chr->width, chr->height);
+	clip_points(outl.numPoints, outl.points, width, height);
 	if (tesselate_curves(&outl) < 0)
 		goto failure;
 
@@ -1539,3 +1523,4 @@ failure:
 	STACK_FREE(cells);
 	return -1;
 }
+

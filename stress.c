@@ -67,7 +67,9 @@ main(int argc, char *argv[])
 		for (cp = 32; cp < 128; ++cp) {
 			if (sft_codepoint_to_glyph(&sft, cp, &gid) < 0)
 				continue;
-			if (!(sft_render_glyph(&sft, gid, &chr, &image) < 0))
+			if (sft_glyph_dimensions(&sft, gid, &chr) < 0)
+				continue;
+			if (!(sft_render_glyph(&sft, gid, &image) < 0))
 				free(image);
 		}
 	}

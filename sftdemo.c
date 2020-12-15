@@ -148,7 +148,7 @@ loadglyph(struct SFT *sft, unsigned long codepoint)
 		printf("Couldn't load codepoint 0x%02lX.\n", codepoint);
 		return;
 	}
-	if (sft_render_glyph(sft, gid, &chr, &image) < 0) {
+	if (sft_render_glyph(sft, gid, &image) < 0) {
 		printf("Couldn't load codepoint 0x%02lX.\n", codepoint);
 		return;
 	}

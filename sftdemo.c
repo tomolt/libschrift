@@ -133,10 +133,9 @@ loadglyph(struct SFT *sft, unsigned long codepoint)
 	XGlyphInfo info;
 	Glyph glyph;
 	unsigned long gid;
-	unsigned int stride, i;
 	struct SFT_HMetrics hmtx;
-	struct SFT_Box box;
-	struct SFT_Image image;
+	struct SFT_Box      box;
+	struct SFT_Image    image;
 
 	if (sft_lookup(sft, codepoint, &gid) < 0) {
 		printf("Couldn't load codepoint 0x%02lX.\n", codepoint);
@@ -150,26 +149,15 @@ loadglyph(struct SFT *sft, unsigned long codepoint)
 		printf("Couldn't load codepoint 0x%02lX.\n", codepoint);
 		return;
 	}
-	if (!box.minWidth || !box.minHeight) return;
-	image.width  = box.minWidth;
+	image.width  = (box.minWidth + 3) & ~3U;
 	image.height = box.minHeight;
 	image.pixels = malloc(image.width * image.height);
+	/* XRender expects every row of the glyph image to be aligned to a multiple of four. */
 	if (sft_render(sft, gid, image) < 0) {
 		printf("Couldn't load codepoint 0x%02lX.\n", codepoint);
 		free(image.pixels);
 		return;
 	}
-
-	/* XRender expects every row of the glyph image to be aligned to a multiple of four.
-	 * That means we have to copy the image into a separate buffer row by row,
-	 * padding the end of each row with a couple of extra bytes.
-	 * The stride is simply the number of bytes / pixels per row including the padding. */
-	stride = (image.width + 3) & ~3U;
-	char paddedImage[stride * image.height];
-	memset(paddedImage, 0, stride * image.height);
-	for (i = 0; i < image.height; ++i)
-		memcpy(paddedImage + i * stride, (char *) image.pixels + i * image.width, image.width);
-	free(image.pixels);
 
 	/* Fill in the XRender XGlyphInfo struct with the info we get in the SFT_Char struct. */
 	glyph = codepoint;
@@ -180,7 +168,9 @@ loadglyph(struct SFT *sft, unsigned long codepoint)
 	info.xOff = (short) hmtx.advanceWidth;
 	info.yOff = 0;
 	/* Upload the XGlyphInfo and padded image to the X11 server. */
-	XRenderAddGlyphs(dpy, glyphset, &glyph, &info, 1, paddedImage, (int) (stride * image.height));
+	XRenderAddGlyphs(dpy, glyphset, &glyph, &info, 1, image.pixels, (int) (image.width * image.height));
+
+	free(image.pixels);
 }
 
 /* Free memory and exit cleanly. */
@@ -358,9 +348,7 @@ main(int argc, char *argv[])
 	}
 	sft.xScale = size;
 	sft.yScale = size;
-	/* Tell libschrift that our Y axis points downward and
-	 * that we want it to actually render images of the characters
-	 * (per default libschrift only returns information about characters). */
+	/* Tell libschrift that our Y axis points downward. */
 	sft.flags = SFT_DOWNWARD_Y;
 
 	bitfield_init();

@@ -23,10 +23,6 @@ extern "C" {
 
 #define SFT_DOWNWARD_Y    0x01
 
-#define SFT_BBOX_WIDTH(bbox)  ((bbox)[2] - (bbox)[0] + 1)
-#define SFT_BBOX_HEIGHT(bbox) ((bbox)[3] - (bbox)[1] + 1)
-#define SFT_BBOX_YOFFSET(sft, bbox) ((sft)->flags & SFT_DOWNWARD_Y ? -(bbox)[3] : (bbox)[1])
-
 struct SFT_Font;
 typedef struct SFT_Font SFT_Font;
 

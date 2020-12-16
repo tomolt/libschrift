@@ -158,7 +158,7 @@ static void draw_lines(struct outline *outl, struct buffer buf);
 /* post-processing */
 static void post_process(struct buffer buf, uint8_t *image);
 /* glyph rendering */
-static int render_image(const struct SFT *sft, uint_fast32_t offset, double transform[6], unsigned int width, unsigned int height, void **image);
+static int render_image(const struct SFT *sft, uint_fast32_t offset, double transform[6], struct SFT_Image image);
 
 /* function implementations */
 
@@ -301,48 +301,54 @@ sft_kerning(const struct SFT *sft, unsigned long leftChar, unsigned long rightCh
 }
 
 int
-sft_codepoint_to_glyph(const struct SFT *sft, unsigned long codepoint, unsigned long *glyph)
+sft_lookup(const struct SFT *sft, unsigned long codepoint, unsigned long *glyph)
 {
 	return glyph_id(sft->font, codepoint, glyph);
 }
 
 int
-sft_glyph_hmtx(const struct SFT *sft, unsigned long glyph, int *advanceWidth, int *leftSideBearing)
+sft_hmetrics(const struct SFT *sft, unsigned long glyph, struct SFT_HMetrics *metrics)
 {
 	int adv, lsb;
 	double xScale = sft->xScale / sft->font->unitsPerEm;
-	*advanceWidth    = 0;
-	*leftSideBearing = 0;
+	memset(metrics, 0, sizeof *metrics);
 	if (hor_metrics(sft->font, glyph, &adv, &lsb) < 0)
 		return -1;
-	*advanceWidth    = (int) round(adv * xScale);
-	*leftSideBearing = (int) floor(lsb * xScale + sft->x);
+	metrics->advanceWidth    = (int) round(adv * xScale);
+	metrics->leftSideBearing = (int) floor(lsb * xScale + sft->x);
 	return 0;
 }
 
 int
-sft_glyph_outline(const struct SFT *sft, unsigned long glyph, unsigned long *outline)
+sft_box(const struct SFT *sft, unsigned long glyph, struct SFT_Box *box)
 {
-	return outline_offset(sft->font, glyph, outline);
-}
-
-int
-sft_outline_bbox(const struct SFT *sft, unsigned long outline, int bbox[4])
-{
-	if (outline) {
-		return glyph_bbox(sft, outline, bbox);
-	} else {
-		memset(bbox, 0, 4 * sizeof (int));
+	unsigned long outline;
+	int bbox[4];
+	memset(box, 0, sizeof *box);
+	if (outline_offset(sft->font, glyph, &outline) < 0)
+		return -1;
+	if (!outline)
 		return 0;
-	}
+	if (glyph_bbox(sft, outline, bbox) < 0)
+		return -1;
+	box->minWidth  = (unsigned int) (bbox[2] - bbox[0] + 1);
+	box->minHeight = (unsigned int) (bbox[3] - bbox[1] + 1);
+	box->yOffset   = sft->flags & SFT_DOWNWARD_Y ? -bbox[3] : bbox[1];
+	return 0;
 }
 
 int
-sft_render_outline(const struct SFT *sft, unsigned long outline, int bbox[4], unsigned int width, unsigned int height, void **image)
+sft_render(const struct SFT *sft, unsigned long glyph, struct SFT_Image image)
 {
+	unsigned long outline;
 	double transform[6];
-	*image = NULL;
-	if (!outline) return 0;
+	int bbox[4];
+	if (outline_offset(sft->font, glyph, &outline) < 0)
+		return -1;
+	if (!outline)
+		return 0;
+	if (glyph_bbox(sft, outline, bbox) < 0)
+		return -1;
 	/* Set up the transformation matrix such that
 	 * the transformed bounding boxes min corner lines
 	 * up with the (0, 0) point. */
@@ -357,7 +363,7 @@ sft_render_outline(const struct SFT *sft, unsigned long outline, int bbox[4], un
 		transform[3] = +sft->yScale / sft->font->unitsPerEm;
 		transform[5] = sft->y - bbox[1];
 	}
-	return render_image(sft, outline, transform, width, height, image);
+	return render_image(sft, outline, transform, image);
 }
 
 /* This is sqrt(SIZE_MAX+1), as s1*s2 <= SIZE_MAX
@@ -1426,12 +1432,12 @@ post_process(struct buffer buf, uint8_t *image)
 }
 
 static int
-render_image(const struct SFT *sft, uint_fast32_t offset, double transform[6], unsigned int width, unsigned int height, void **image)
+render_image(const struct SFT *sft, uint_fast32_t offset, double transform[6], struct SFT_Image image)
 {
 	struct cell *cells = NULL;
 	struct outline outl;
 	struct buffer buf;
-	unsigned int numPixels = width * height;
+	unsigned int numPixels = image.width * image.height;
 
 	memset(&outl, 0, sizeof outl);
 	if (init_outline(&outl) < 0)
@@ -1442,23 +1448,21 @@ render_image(const struct SFT *sft, uint_fast32_t offset, double transform[6], u
 		goto failure;
 	memset(cells, 0, numPixels * sizeof *cells);
 	buf.cells  = cells;
-	buf.width  = width;
-	buf.height = height;
+	buf.width  = image.width;
+	buf.height = image.height;
 
 	if (decode_outline(sft->font, offset, 0, &outl) < 0)
 		goto failure;
 
 	transform_points(outl.numPoints, outl.points, transform);
 
-	clip_points(outl.numPoints, outl.points, width, height);
+	clip_points(outl.numPoints, outl.points, image.width, image.height);
 	if (tesselate_curves(&outl) < 0)
 		goto failure;
 
 	draw_lines(&outl, buf);
 
-	if (!(*image = malloc(numPixels)))
-		goto failure;
-	post_process(buf, *image);
+	post_process(buf, image.pixels);
 
 	free_outline(&outl);
 	STACK_FREE(cells);

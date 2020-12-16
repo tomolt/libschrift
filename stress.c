@@ -32,11 +32,10 @@ main(int argc, char *argv[])
 	SFT_Font *font;
 	const char *filename;
 	double size;
-	unsigned long cp, gid, outline;
-	int advanceWidth, leftSideBearing;
-	unsigned int width, height;
-	int bbox[4];
-	void *image;
+	unsigned long cp, gid;
+	struct SFT_HMetrics hmtx;
+	struct SFT_Box box;
+	struct SFT_Image image;
 	int i;
 
 	filename = "resources/Ubuntu-R.ttf";
@@ -64,21 +63,20 @@ main(int argc, char *argv[])
 	sft.font = font;
 	sft.xScale = size;
 	sft.yScale = size;
-	sft.flags = SFT_DOWNWARD_Y | SFT_RENDER_IMAGE;
+	sft.flags = SFT_DOWNWARD_Y;
 	for (i = 0; i < 5000; ++i) {
 		for (cp = 32; cp < 128; ++cp) {
-			if (sft_codepoint_to_glyph(&sft, cp, &gid) < 0)
+			if (sft_lookup(&sft, cp, &gid) < 0)
 				continue;
-			if (sft_glyph_hmtx(&sft, gid, &advanceWidth, &leftSideBearing) < 0)
+			if (sft_hmetrics(&sft, gid, &hmtx) < 0)
 				continue;
-			if (sft_glyph_outline(&sft, gid, &outline) < 0)
+			if (sft_box(&sft, gid, &box) < 0)
 				continue;
-			if (sft_outline_bbox(&sft, outline, bbox) < 0)
-				continue;
-			width  = (unsigned int) SFT_BBOX_WIDTH(bbox);
-			height = (unsigned int) SFT_BBOX_HEIGHT(bbox);
-			sft_render_outline(&sft, outline, bbox, width, height, &image);
-			free(image);
+			image.width  = box.minWidth;
+			image.height = box.minHeight;
+			image.pixels = malloc(image.width * image.height);
+			sft_render(&sft, gid, image);
+			free(image.pixels);
 		}
 	}
 	sft_freefont(font);

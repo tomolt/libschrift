@@ -36,6 +36,13 @@ struct SFT
 	unsigned int flags;
 };
 
+struct SFT_LMetrics
+{
+	double ascender;
+	double descender;
+	double lineGap;
+};
+
 struct SFT_HMetrics
 {
 	int advanceWidth;
@@ -56,21 +63,25 @@ struct SFT_Image
 	unsigned int height;
 };
 
+struct SFT_Kerning
+{
+	double x;
+	double y;
+};
+
 /* libschrift uses semantic versioning. */
 const char *sft_version(void);
 
-SFT_Font *sft_loadmem(const void *mem, unsigned long size);
+SFT_Font *sft_loadmem (const void *mem, unsigned long size);
 SFT_Font *sft_loadfile(const char *filename);
-void sft_freefont(SFT_Font *font);
+void      sft_freefont(SFT_Font *font);
 
-int sft_linemetrics(const struct SFT *sft, double *ascent, double *descent, double *gap);
-int sft_kerning    (const struct SFT *sft, unsigned long leftChar, unsigned long rightChar, double kerning[2]);
-
-
+int sft_lmetrics(const struct SFT *sft, struct SFT_LMetrics *metrics);
 int sft_lookup  (const struct SFT *sft, unsigned long codepoint, unsigned long *glyph);
 int sft_hmetrics(const struct SFT *sft, unsigned long glyph, struct SFT_HMetrics *metrics);
 int sft_box     (const struct SFT *sft, unsigned long glyph, struct SFT_Box *box);
 int sft_render  (const struct SFT *sft, unsigned long glyph, struct SFT_Image image);
+int sft_kerning (const struct SFT *sft, unsigned long leftGlyph, unsigned long rightGlyph, struct SFT_Kerning *kerning);
 
 #ifdef __cplusplus
 }

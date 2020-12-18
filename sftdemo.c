@@ -217,18 +217,19 @@ drawtext(int x, int y, const char *text)
 static void
 draw(unsigned int width, unsigned int height)
 {
+	struct SFT_LMetrics lmtx;
+	
 	/* Clear the window by overwriting everything with our background color. */
 	XRenderFillRectangle(dpy, PictOpOver,
 		pic, &bgcolor, 0, 0, width, height);
 
-	double ascent, descent, gap;
 	/* TODO check return value! */
-	sft_linemetrics(&sft, &ascent, &descent, &gap);
+	sft_lmetrics(&sft, &lmtx);
 
-	double y = ascent + gap;
+	double y = lmtx.ascender + lmtx.lineGap;
 	for (int i = 0; i < numlines; ++i) {
 		drawtext(20, (int) round(y), lines[i]);
-		y += (ascent + descent + gap) * 1.5;
+		y += (lmtx.ascender + lmtx.descender + lmtx.lineGap) * 1.5;
 	}
 }
 

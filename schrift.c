@@ -219,84 +219,19 @@ sft_freefont(SFT_Font *font)
 }
 
 int
-sft_linemetrics(const struct SFT *sft, double *ascent, double *descent, double *gap)
+sft_lmetrics(const struct SFT *sft, struct SFT_LMetrics *metrics)
 {
 	double factor;
 	uint_fast32_t hhea;
+	memset(metrics, 0, sizeof *metrics);
 	if (gettable(sft->font, "hhea", &hhea) < 0)
 		return -1;
 	if (!is_safe_offset(sft->font, hhea, 36))
 		return -1;
 	factor = sft->yScale / sft->font->unitsPerEm;
-	*ascent  = geti16(sft->font, hhea + 4) * factor;
-	*descent = geti16(sft->font, hhea + 6) * factor;
-	*gap     = geti16(sft->font, hhea + 8) * factor;
-	return 0;
-}
-
-int
-sft_kerning(const struct SFT *sft, unsigned long leftChar, unsigned long rightChar, double kerning[2])
-{
-	void *match;
-	uint_fast32_t offset;
-	unsigned int numTables, numPairs, length, format, flags;
-	int value;
-	uint8_t key[4];
-
-	kerning[0] = 0.0;
-	kerning[1] = 0.0;
-
-	if (gettable(sft->font, "kern", &offset) < 0)
-		return 0;
-
-	/* Read kern table header. */
-	if (!is_safe_offset(sft->font, offset, 4))
-		return -1;
-	if (getu16(sft->font, offset) != 0)
-		return 0;
-	numTables = getu16(sft->font, offset + 2);
-	offset += 4;
-
-	while (numTables > 0) {
-		/* Read subtable header. */
-		if (!is_safe_offset(sft->font, offset, 6))
-			return -1;
-		length = getu16(sft->font, offset + 2);
-		format = getu8 (sft->font, offset + 4);
-		flags  = getu8 (sft->font, offset + 5);
-		offset += 6;
-
-		if (format == 0 && (flags & HORIZONTAL_KERNING) && !(flags & MINIMUM_KERNING)) {
-			/* Read format 0 header. */
-			if (!is_safe_offset(sft->font, offset, 8))
-				return -1;
-			numPairs = getu16(sft->font, offset);
-			offset += 8;
-			/* Look up character code pair via binary search. */
-			key[0] = (leftChar >> 8) & 0xFF;
-			key[1] = leftChar & 0xFF;
-			key[2] = (rightChar >> 8) & 0xFF;
-			key[3] = rightChar & 0xFF;
-			if ((match = bsearch(key, sft->font->memory + offset,
-				numPairs, 6, cmpu32)) != NULL) {
-				
-				value = geti16(sft->font, (uint_fast32_t) ((uint8_t *) match - sft->font->memory + 4));
-				if (flags & CROSS_STREAM_KERNING) {
-					kerning[1] += value;
-				} else {
-					kerning[0] += value;
-				}
-			}
-
-		}
-
-		offset += length;
-		--numTables;
-	}
-
-	kerning[0] = kerning[0] / sft->font->unitsPerEm * sft->xScale;
-	kerning[1] = kerning[1] / sft->font->unitsPerEm * sft->yScale;
-
+	metrics->ascender  = geti16(sft->font, hhea + 4) * factor;
+	metrics->descender = geti16(sft->font, hhea + 6) * factor;
+	metrics->lineGap   = geti16(sft->font, hhea + 8) * factor;
 	return 0;
 }
 
@@ -364,6 +299,71 @@ sft_render(const struct SFT *sft, unsigned long glyph, struct SFT_Image image)
 		transform[5] = sft->y - bbox[1];
 	}
 	return render_image(sft, outline, transform, image);
+}
+
+int
+sft_kerning(const struct SFT *sft, unsigned long leftGlyph, unsigned long rightGlyph, struct SFT_Kerning *kerning)
+{
+	void *match;
+	uint_fast32_t offset;
+	unsigned int numTables, numPairs, length, format, flags;
+	int value;
+	uint8_t key[4];
+
+	memset(kerning, 0, sizeof *kerning);
+
+	if (gettable(sft->font, "kern", &offset) < 0)
+		return 0;
+
+	/* Read kern table header. */
+	if (!is_safe_offset(sft->font, offset, 4))
+		return -1;
+	if (getu16(sft->font, offset) != 0)
+		return 0;
+	numTables = getu16(sft->font, offset + 2);
+	offset += 4;
+
+	while (numTables > 0) {
+		/* Read subtable header. */
+		if (!is_safe_offset(sft->font, offset, 6))
+			return -1;
+		length = getu16(sft->font, offset + 2);
+		format = getu8 (sft->font, offset + 4);
+		flags  = getu8 (sft->font, offset + 5);
+		offset += 6;
+
+		if (format == 0 && (flags & HORIZONTAL_KERNING) && !(flags & MINIMUM_KERNING)) {
+			/* Read format 0 header. */
+			if (!is_safe_offset(sft->font, offset, 8))
+				return -1;
+			numPairs = getu16(sft->font, offset);
+			offset += 8;
+			/* Look up character code pair via binary search. */
+			key[0] = (leftGlyph  >> 8) & 0xFF;
+			key[1] =  leftGlyph  & 0xFF;
+			key[2] = (rightGlyph >> 8) & 0xFF;
+			key[3] =  rightGlyph & 0xFF;
+			if ((match = bsearch(key, sft->font->memory + offset,
+				numPairs, 6, cmpu32)) != NULL) {
+				
+				value = geti16(sft->font, (uint_fast32_t) ((uint8_t *) match - sft->font->memory + 4));
+				if (flags & CROSS_STREAM_KERNING) {
+					kerning->y += value;
+				} else {
+					kerning->x += value;
+				}
+			}
+
+		}
+
+		offset += length;
+		--numTables;
+	}
+
+	kerning->x = kerning->x / sft->font->unitsPerEm * sft->xScale;
+	kerning->y = kerning->y / sft->font->unitsPerEm * sft->yScale;
+
+	return 0;
 }
 
 /* This is sqrt(SIZE_MAX+1), as s1*s2 <= SIZE_MAX

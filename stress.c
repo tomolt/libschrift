@@ -74,7 +74,7 @@ main(int argc, char *argv[])
 				continue;
 			image.width  = box.minWidth;
 			image.height = box.minHeight;
-			image.pixels = malloc(image.width * image.height);
+			image.pixels = malloc((size_t) image.width * (size_t) image.height);
 			sft_render(&sft, gid, image);
 			free(image.pixels);
 		}

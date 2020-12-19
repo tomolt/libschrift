@@ -149,9 +149,9 @@ loadglyph(struct SFT *sft, unsigned long codepoint)
 		printf("Couldn't load codepoint 0x%02lX.\n", codepoint);
 		return;
 	}
-	image.width  = (box.minWidth + 3) & ~3U;
+	image.width  = (box.minWidth + 3) & ~3;
 	image.height = box.minHeight;
-	image.pixels = malloc(image.width * image.height);
+	image.pixels = malloc((size_t) image.width * (size_t) image.height);
 	/* XRender expects every row of the glyph image to be aligned to a multiple of four. */
 	if (sft_render(sft, gid, image) < 0) {
 		printf("Couldn't load codepoint 0x%02lX.\n", codepoint);

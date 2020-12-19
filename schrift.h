@@ -51,16 +51,16 @@ struct SFT_HMetrics
 
 struct SFT_Box
 {
-	int          yOffset;
-	unsigned int minWidth;
-	unsigned int minHeight;
+	int yOffset;
+	int minWidth;
+	int minHeight;
 };
 
 struct SFT_Image
 {
-	void        *pixels;
-	unsigned int width;
-	unsigned int height;
+	void *pixels;
+	int   width;
+	int   height;
 };
 
 struct SFT_Kerning

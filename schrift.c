@@ -84,8 +84,8 @@ struct outline
 struct buffer
 {
 	struct cell *cells;
-	unsigned int width;
-	unsigned int height;
+	int width;
+	int height;
 };
 
 struct SFT_Font
@@ -114,7 +114,7 @@ static int  init_font(SFT_Font *font);
 /* simple mathematical operations */
 static struct point midpoint(struct point a, struct point b);
 static void transform_points(uint_fast16_t numPts, struct point *points, double trf[6]);
-static void clip_points(uint_fast16_t numPts, struct point *points, unsigned int width, unsigned int height);
+static void clip_points(uint_fast16_t numPts, struct point *points, int width, int height);
 /* 'outline' data structure management */
 static int  init_outline(struct outline *outl);
 static void free_outline(struct outline *outl);
@@ -266,8 +266,8 @@ sft_box(const struct SFT *sft, SFT_Glyph glyph, struct SFT_Box *box)
 		return 0;
 	if (glyph_bbox(sft, outline, bbox) < 0)
 		return -1;
-	box->minWidth  = (unsigned int) (bbox[2] - bbox[0] + 1);
-	box->minHeight = (unsigned int) (bbox[3] - bbox[1] + 1);
+	box->minWidth  = bbox[2] - bbox[0] + 1;
+	box->minHeight = bbox[3] - bbox[1] + 1;
 	box->yOffset   = sft->flags & SFT_DOWNWARD_Y ? -bbox[3] : bbox[1];
 	return 0;
 }
@@ -538,7 +538,7 @@ transform_points(uint_fast16_t numPts, struct point *points, double trf[6])
 }
 
 static void
-clip_points(uint_fast16_t numPts, struct point *points, unsigned int width, unsigned int height)
+clip_points(uint_fast16_t numPts, struct point *points, int width, int height)
 {
 	struct point pt;
 	uint_fast16_t i;
@@ -1377,7 +1377,7 @@ draw_line(struct buffer buf, struct point origin, struct point goal)
 	for (step = 0; step < numSteps; ++step) {
 		xAverage = origin.x + (prevDistance + nextDistance) * halfDeltaX;
 		yDifference = (nextDistance - prevDistance) * delta.y;
-		cptr = &buf.cells[(unsigned int) pixel.y * buf.width + (unsigned int) pixel.x];
+		cptr = &buf.cells[pixel.y * buf.width + pixel.x];
 		cell = *cptr;
 		cell.cover += yDifference;
 		xAverage -= (double) pixel.x;
@@ -1394,7 +1394,7 @@ draw_line(struct buffer buf, struct point origin, struct point goal)
 
 	xAverage = origin.x + (prevDistance + 1.0) * halfDeltaX;
 	yDifference = (1.0 - prevDistance) * delta.y;
-	cptr = &buf.cells[(unsigned int) pixel.y * buf.width + (unsigned int) pixel.x];
+	cptr = &buf.cells[pixel.y * buf.width + pixel.x];
 	cell = *cptr;
 	cell.cover += yDifference;
 	xAverage -= (double) pixel.x;
@@ -1421,7 +1421,7 @@ post_process(struct buffer buf, uint8_t *image)
 	struct cell cell;
 	double accum = 0.0, value;
 	unsigned int i, num;
-	num = buf.width * buf.height;
+	num = (unsigned int) buf.width * (unsigned int) buf.height;
 	for (i = 0; i < num; ++i) {
 		cell     = buf.cells[i];
 		value    = fabs(accum + cell.area);
@@ -1438,7 +1438,7 @@ render_image(const struct SFT *sft, uint_fast32_t offset, double transform[6], s
 	struct cell *cells = NULL;
 	struct outline outl;
 	struct buffer buf;
-	unsigned int numPixels = image.width * image.height;
+	unsigned int numPixels = (unsigned int) image.width * (unsigned int) image.height;
 
 	memset(&outl, 0, sizeof outl);
 	if (init_outline(&outl) < 0)

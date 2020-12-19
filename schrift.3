@@ -1,6 +1,5 @@
-.Dd June 5, 2020
+.Dd December 19, 2020
 .Dt SCHRIFT 3
-.Os suckless.org
 .Sh NAME
 .Nm schrift ,
 .Nm libschrift
@@ -17,11 +16,17 @@
 .Ft void
 .Fn sft_freefont "SFT_Font *font"
 .Ft int
-.Fn sft_linemetrics "const struct SFT *sft" "double *ascent" "double *descent" "double *gap"
+.Fn sft_lmetrics "const struct SFT *sft" "struct SFT_LMetrics *metrics"
 .Ft int
-.Fn sft_kerning "const struct SFT *sft" "unsigned long leftChar" "unsigned long rightChar" "double kerning[2]"
+.Fn sft_lookup "const struct SFT *sft" "unsigned long codepoint" "SFT_Glyph *glyph"
 .Ft int
-.Fn sft_char "const struct SFT *sft" "unsigned int charCode" "struct SFT_Char *chr"
+.Fn sft_hmetrics "const struct SFT *sft" "SFT_Glyph glyph" "struct SFT_HMetrics *metrics"
+.Ft int
+.Fn sft_box "const struct SFT *sft" "SFT_Glyph glyph" "struct SFT_Box *box"
+.Ft int
+.Fn sft_render "const struct SFT *sft" "SFT_Glyph glyph" "struct SFT_Image image"
+.Ft int
+.Fn sft_kerning "const struct SFT *sft" "SFT_Glyph leftGlyph" "SFT_Glyph rightGlyph" "struct SFT_Kerning *kerning"
 .Sh DESCRIPTION
 .Fn sft_version
 can be used to determine which version of
@@ -29,10 +34,9 @@ can be used to determine which version of
 you are using.
 Since
 .Nm
-uses semantic versioning, the returned string will usually be of the form
-.Qq MAJOR.MINOR.PATCH
-\&.
-.sp
+uses semantic versioning, the returned string is of the form
+.Qq MAJOR.MINOR.PATCH .
+.Ss Loading fonts
 .Fn sft_loadfile
 will load a font from a given filename (by mapping it into memory),
 whereas
@@ -40,8 +44,7 @@ whereas
 can be given an arbitrary memory address and size (in bytes).
 This allows users to load fonts from ZIP file streams etc.
 .sp
-Once a user is done with a particular font and does not need to access it any more,
-he may use
+Once a user is done with a particular font and does not need to access it any more, he may use
 .Fn sft_freefont
 to free all memory reserved by the font.
 If the font has been loaded with
@@ -49,46 +52,11 @@ If the font has been loaded with
 the user has to additionally free the memory they passed to
 .Fn sft_loadmem
 on their own.
-.sp
-The following functions all take a struct SFT as their primary argument.
-Details concerning this struct can be found in the next section.
-.sp
-.Fn sft_linemetrics
-can be used to query the typographic ascender, descender, and line gap, in pixels.
-The ascender refers to the distance of the highest point of a line of text to it's baseline.
-Analogously, the descender refers to the distance to the lowest point.
-The line gap measures the suggested blank space between consecutive lines.
-.sp
-.Fn sft_kerning
-can be used to find the kerning between a pair of characters (codepoints).
-That is, an x and y offset that should be applied to the second character,
-should it follow the first.
-.sp
-Lastly, the most important public function of
-.Nm
-is
-.Fn sft_char
-\&.
-It lets users query codepoint-specific information, like horizontal advance width, extents, etc.
-It can also render a specified codepoint to an in-memory image.
-More details can be found in the following sections.
-.Ss The SFT structure
-The struct SFT is a structure to be filled out by the application.
-It bundles all the different parameters neccessary for drawing,
-like for example which font to use, or how big the text should be, into a single struct.
-Most functions in
-.Nm
-take a struct SFT as their primary argument.
-.Bd -literal
-struct SFT {
-	SFT_Font *font;
-	double xScale;
-	double yScale;
-	double x;
-	double y;
-	unsigned int flags;
-};
-.Ed
+.Ss the SFT structure
+Most functions take a struct SFT as their primary argument.
+This is a structure to be filled out by the application.
+It bundles multiple common parameters,
+for example which font to use, or how big the text should be.
 The fields are as follows:
 .Bl -tag -width 8
 .It Va font
@@ -106,108 +74,105 @@ Can be used for subpixel-accurate positioning.
 .It Va flags
 A bitfield of binary flags that control various functionalities.
 .sp
-If
+If the
 .Dv SFT_DOWNWARD_Y
-is set, the Y axis is interpreted to point downwards.
-Otherwise, it points upwards.
-.sp
-If
-.Dv SFT_RENDER_IMAGE
-is set, the function
-.Fn sft_char
-will, when called, render a specified character into an image buffer.
-Otherwise,
-.Fn sft_char
-will only return auxiliary data such as image buffer dimensions and horizontal advance width.
-.sp
-If
-.Dv SFT_CATCH_MISSING
-is set, the function
-.Nm sft_char
-will return immediately if called on a character that the used font does not have data for.
-The user then has to check whether this happened by looking at the function's return value.
+flag is set, the Y axis is interpreted to point downwards.
+Per default, it points upwards.
 .El
-.Ss The SFT_Char structure
-.Fn sft_char
-returns all relevant information except status code in a struct SFT_Char.
-.Bd -literal
-struct SFT_Char {
-	void *image;
-	double advance;
-	int x;
-	int y;
-	unsigned int width;
-	unsigned int height;
-};
-.Ed
-The fields are as follows:
+.sp
+.Fn sft_lmetrics
 .Bl -tag -width 8
-.It Va image
-An 8-bit grayscale image without any padding, so each byte corresponds to one pixel.
-The colors are inverse to what you would expect: Text is always drawn white on black.
-That is because this way it is really convenient to use the image as an alpha mask.
-This is also the reason why the image is not gamma corrected.
+.It Va ascender
+The distance from the baseline of a line of text to the typographic top of the text
+.It Va descender
+The distance from the baseline of a line of text to the typographic bottom of the text
+.It Va lineGap
+The standard amount of padding between consecutive lines
+.El
 .sp
-This field only gets set if the flag
-.Dv SFT_RENDER_IMAGE
-was set.
-In this case, it is the caller's duty to later release the image's memory again by calling
-.Fn free
-\&.
-Otherwise, if
-.Dv SFT_RENDER_IMAGE
-was not set, this field is set to NULL.
-.It Va x
-The X offset in pixels that the application should apply when displaying the image on the screen.
-.It Va y
-The Y offset in pixels that the application should apply when displaying the image on the screen.
+.Nm
+operates in terms of glyph ids of type SFT_Glyph, which are font-specific numbers assigned to renderable symbols (glyphs).
+The way to obtain a glyph id is to call
+.Fn sft_lookup ,
+where the first argument is a struct SFT,
+the second is the Unicode codepoint / UTF-32 encoding of the symbol that you're interested in,
+and the third is a pointer to the variable which the glyph id should be written to.
 .sp
-The flag
-.Dv SFT_DOWNWARD_Y
-controls the orientation of the coordinate system that this field is relative to.
+.Fn sft_hmetrics
+.Bl -tag -width 8
+.It Va advanceWidth
+The amount of pixels along the X axis that the pen position should advance after rendering this glyph.
+.It Va leftSideBearing
+The offset that should be applied along the X axis from the pen position to the edge of the glyph image.
+.El
+.sp
+.Fn sft_box
+.Bl -tag -width 8
+.It Va yOffset
+.It Va minWidth
+The minimum width that an image needs such that the glyph can be properly rasterized into it.
+.It Va minHeight
+The minimum height that an image needs such that the glyph can be properly rasterized into it.
+.El
+.sp
+To actually render a glyph into a easily-displayable raster image, use
+.Fn sft_render .
+.Bl -tag -width 8
+.It Va pixels
+A pointer to a byte array, width * height in size
 .It Va width
-The width of the image in pixels.
-.sp
-This field gets set even if
-.Dv SFT_RENDER_IMAGE
-was not set.
+The width of the image in pixels
 .It Va height
-The height of the image in pixels.
+The height of the image in pixels
+.El
 .sp
-This field gets set even if
-.Dv SFT_RENDER_IMAGE
-was not set.
-.It Va missing
-Contains a positive value if the used font doesn't have data for the specified character,
-and a fallback character (the missing glyph) has been selected instead.
-It is 0 otherwise.
+Some sequences of glyphs may look awkward if they're layed out naively.
+For example, the gap between the two characters \(dqVA\(dq might look disproportionally large.
+Kerning is a way to combat this phenomenon, by slightly moving the second character closer or further
+away by a small amount.
+.Fn sft_kerning
+.Bl -tag -width 8
+.It Va x
+The offset in pixels along the X axis that should be applied to the second glyph, and any that follow.
+.It Va y
+The offset in pixels along the Y axis that should be applied to the second glyph, and any that follow.
 .El
 .Sh RETURN VALUES
 .Fn sft_loadmem
 and
 .Fn sft_loadfile
-return NULL on error.
-.Fn sft_linemetrics
+return
+.Dv NULL
+on error.
+.sp
+.Fn sft_lmetrics ,
+.Fn sft_lookup ,
+.Fn sft_hmetrics ,
+.Fn sft_box ,
+.Fn sft_render ,
 and
 .Fn sft_kerning
-return 0 on success and -1 on error.
-.sp
-.Fn sft_char
-returns -1 on error, 1 if the character code isn't covered by the font and a fallback character (the missing glyph) was used instead, and 0 otherwise.
+all return 0 on success and -1 on error.
 .Sh EXAMPLES
 See the source code of
 .Sy sftdemo
 for a detailed example of real-world usage of
-.Nm
-\&.
+.Nm .
 .Sh AUTHORS
 .An Thomas Oltmann Aq Mt thomas.oltmann.hhg@gmail.com
 .Sh CAVEATS
 The only text encoding that
 .Nm
 understands is Unicode.
+.sp
 Similarly, the only kind of font file supported right now
 are TrueType (.ttf) fonts (Some OpenType fonts might work too,
 as OpenType is effectively a superset of TrueType).
+.sp
+As of this version of
+.Nm ,
+there is still no support for right-to-left scripts,
+but it is on the roadmap.
+.sp
 .Nm
 currently does not implement font hinting and probably never will.

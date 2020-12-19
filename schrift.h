@@ -25,6 +25,7 @@ extern "C" {
 
 struct SFT_Font;
 typedef struct SFT_Font SFT_Font;
+typedef unsigned long   SFT_Glyph;
 
 struct SFT
 {
@@ -77,11 +78,11 @@ SFT_Font *sft_loadfile(const char *filename);
 void      sft_freefont(SFT_Font *font);
 
 int sft_lmetrics(const struct SFT *sft, struct SFT_LMetrics *metrics);
-int sft_lookup  (const struct SFT *sft, unsigned long codepoint, unsigned long *glyph);
-int sft_hmetrics(const struct SFT *sft, unsigned long glyph, struct SFT_HMetrics *metrics);
-int sft_box     (const struct SFT *sft, unsigned long glyph, struct SFT_Box *box);
-int sft_render  (const struct SFT *sft, unsigned long glyph, struct SFT_Image image);
-int sft_kerning (const struct SFT *sft, unsigned long leftGlyph, unsigned long rightGlyph, struct SFT_Kerning *kerning);
+int sft_lookup  (const struct SFT *sft, unsigned long codepoint, SFT_Glyph *glyph);
+int sft_hmetrics(const struct SFT *sft, SFT_Glyph glyph, struct SFT_HMetrics *metrics);
+int sft_box     (const struct SFT *sft, SFT_Glyph glyph, struct SFT_Box *box);
+int sft_render  (const struct SFT *sft, SFT_Glyph glyph, struct SFT_Image image);
+int sft_kerning (const struct SFT *sft, SFT_Glyph leftGlyph, SFT_Glyph rightGlyph, struct SFT_Kerning *kerning);
 
 #ifdef __cplusplus
 }

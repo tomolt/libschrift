@@ -236,26 +236,26 @@ sft_lmetrics(const struct SFT *sft, struct SFT_LMetrics *metrics)
 }
 
 int
-sft_lookup(const struct SFT *sft, unsigned long codepoint, unsigned long *glyph)
+sft_lookup(const struct SFT *sft, unsigned long codepoint, SFT_Glyph *glyph)
 {
 	return glyph_id(sft->font, codepoint, glyph);
 }
 
 int
-sft_hmetrics(const struct SFT *sft, unsigned long glyph, struct SFT_HMetrics *metrics)
+sft_hmetrics(const struct SFT *sft, SFT_Glyph glyph, struct SFT_HMetrics *metrics)
 {
 	int adv, lsb;
 	double xScale = sft->xScale / sft->font->unitsPerEm;
 	memset(metrics, 0, sizeof *metrics);
 	if (hor_metrics(sft->font, glyph, &adv, &lsb) < 0)
 		return -1;
-	metrics->advanceWidth    = (int) round(adv * xScale);
-	metrics->leftSideBearing = (int) floor(lsb * xScale + sft->x);
+	metrics->advanceWidth    = adv * xScale;
+	metrics->leftSideBearing = lsb * xScale + sft->xOffset;
 	return 0;
 }
 
 int
-sft_box(const struct SFT *sft, unsigned long glyph, struct SFT_Box *box)
+sft_box(const struct SFT *sft, SFT_Glyph glyph, struct SFT_Box *box)
 {
 	unsigned long outline;
 	int bbox[4];
@@ -273,7 +273,7 @@ sft_box(const struct SFT *sft, unsigned long glyph, struct SFT_Box *box)
 }
 
 int
-sft_render(const struct SFT *sft, unsigned long glyph, struct SFT_Image image)
+sft_render(const struct SFT *sft, SFT_Glyph glyph, struct SFT_Image image)
 {
 	unsigned long outline;
 	double transform[6];
@@ -290,19 +290,19 @@ sft_render(const struct SFT *sft, unsigned long glyph, struct SFT_Image image)
 	transform[0] = sft->xScale / sft->font->unitsPerEm;
 	transform[1] = 0.0;
 	transform[2] = 0.0;
-	transform[4] = sft->x - bbox[0];
+	transform[4] = sft->xOffset - bbox[0];
 	if (sft->flags & SFT_DOWNWARD_Y) {
 		transform[3] = -sft->yScale / sft->font->unitsPerEm;
-		transform[5] = bbox[3] - sft->y;
+		transform[5] = bbox[3] - sft->yOffset;
 	} else {
 		transform[3] = +sft->yScale / sft->font->unitsPerEm;
-		transform[5] = sft->y - bbox[1];
+		transform[5] = sft->yOffset - bbox[1];
 	}
 	return render_image(sft, outline, transform, image);
 }
 
 int
-sft_kerning(const struct SFT *sft, unsigned long leftGlyph, unsigned long rightGlyph, struct SFT_Kerning *kerning)
+sft_kerning(const struct SFT *sft, SFT_Glyph leftGlyph, SFT_Glyph rightGlyph, struct SFT_Kerning *kerning)
 {
 	void *match;
 	uint_fast32_t offset;
@@ -348,9 +348,9 @@ sft_kerning(const struct SFT *sft, unsigned long leftGlyph, unsigned long rightG
 				
 				value = geti16(sft->font, (uint_fast32_t) ((uint8_t *) match - sft->font->memory + 4));
 				if (flags & CROSS_STREAM_KERNING) {
-					kerning->y += value;
+					kerning->yShift += value;
 				} else {
-					kerning->x += value;
+					kerning->xShift += value;
 				}
 			}
 
@@ -360,8 +360,8 @@ sft_kerning(const struct SFT *sft, unsigned long leftGlyph, unsigned long rightG
 		--numTables;
 	}
 
-	kerning->x = kerning->x / sft->font->unitsPerEm * sft->xScale;
-	kerning->y = kerning->y / sft->font->unitsPerEm * sft->yScale;
+	kerning->xShift = kerning->xShift / sft->font->unitsPerEm * sft->xScale;
+	kerning->yShift = kerning->yShift / sft->font->unitsPerEm * sft->yScale;
 
 	return 0;
 }
@@ -734,7 +734,7 @@ gettable(SFT_Font *font, char tag[4], uint_fast32_t *offset)
 }
 
 static int
-cmap_fmt4(SFT_Font *font, uint_fast32_t table, uint_fast32_t charCode, uint_fast32_t *glyph)
+cmap_fmt4(SFT_Font *font, uint_fast32_t table, uint_fast32_t charCode, SFT_Glyph *glyph)
 {
 	uintptr_t segIdxX2;
 	uint_fast32_t endCodes, startCodes, idDeltas, idRangeOffsets, idOffset;
@@ -758,7 +758,8 @@ cmap_fmt4(SFT_Font *font, uint_fast32_t table, uint_fast32_t charCode, uint_fast
 	idRangeOffsets = idDeltas + segCountX2;
 	if (!is_safe_offset(font, idRangeOffsets, segCountX2))
 		return -1;
-	/* Find the segment that contains shortCode by binary searching over the highest codes in the segments. */
+	/* Find the segment that contains shortCode by binary searching over
+	 * the highest codes in the segments. */
 	segIdxX2 = (uintptr_t) csearch(key, font->memory + endCodes,
 		segCountX2 / 2, 2, cmpu16) - (uintptr_t) (font->memory + endCodes);
 	/* Look up segment info from the arrays & short circuit if the spec requires. */
@@ -781,7 +782,7 @@ cmap_fmt4(SFT_Font *font, uint_fast32_t table, uint_fast32_t charCode, uint_fast
 }
 
 static int
-cmap_fmt6(SFT_Font *font, uint_fast32_t table, uint_fast32_t charCode, uint_fast32_t *glyph)
+cmap_fmt6(SFT_Font *font, uint_fast32_t table, uint_fast32_t charCode, SFT_Glyph *glyph)
 {
 	unsigned int firstCode, entryCount;
 	/* cmap format 6 only supports the Unicode BMP. */
@@ -806,7 +807,7 @@ cmap_fmt6(SFT_Font *font, uint_fast32_t table, uint_fast32_t charCode, uint_fast
 
 /* Maps Unicode code points to glyph indices. */
 static int
-glyph_id(SFT_Font *font, uint_fast32_t charCode, uint_fast32_t *glyph)
+glyph_id(SFT_Font *font, uint_fast32_t charCode, SFT_Glyph *glyph)
 {
 	uint_fast32_t cmap, entry, table;
 	unsigned int idx, numEntries;
@@ -847,7 +848,7 @@ glyph_id(SFT_Font *font, uint_fast32_t charCode, uint_fast32_t *glyph)
 }
 
 static int
-hor_metrics(SFT_Font *font, uint_fast32_t glyph, int *advanceWidth, int *leftSideBearing)
+hor_metrics(SFT_Font *font, SFT_Glyph glyph, int *advanceWidth, int *leftSideBearing)
 {
 	uint_fast32_t hmtx, offset, boundary;
 	if (gettable(font, "hmtx", &hmtx) < 0)
@@ -895,16 +896,16 @@ glyph_bbox(const struct SFT *sft, unsigned long outline, int box[4])
 	/* Transform the bounding box into SFT coordinate space. */
 	xScale = sft->xScale / sft->font->unitsPerEm;
 	yScale = sft->yScale / sft->font->unitsPerEm;
-	box[0] = (int) floor(box[0] * xScale + sft->x);
-	box[1] = (int) floor(box[1] * yScale + sft->y);
-	box[2] = (int) ceil (box[2] * xScale + sft->x);
-	box[3] = (int) ceil (box[3] * yScale + sft->y);
+	box[0] = (int) floor(box[0] * xScale + sft->xOffset);
+	box[1] = (int) floor(box[1] * yScale + sft->yOffset);
+	box[2] = (int) ceil (box[2] * xScale + sft->xOffset);
+	box[3] = (int) ceil (box[3] * yScale + sft->yOffset);
 	return 0;
 }
 
 /* Returns the offset into the font that the glyph's outline is stored at. */
 static int
-outline_offset(SFT_Font *font, uint_fast32_t glyph, uint_fast32_t *offset)
+outline_offset(SFT_Font *font, SFT_Glyph glyph, uint_fast32_t *offset)
 {
 	uint_fast32_t loca, glyf;
 	uint_fast32_t base, this, next;

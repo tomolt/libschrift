@@ -21,20 +21,19 @@
 extern "C" {
 #endif
 
-#define SFT_DOWNWARD_Y    0x01
+#define SFT_DOWNWARD_Y 0x01
 
-struct SFT_Font;
 typedef struct SFT_Font SFT_Font;
 typedef unsigned long   SFT_Glyph;
 
 struct SFT
 {
-	SFT_Font    *font;
-	double       xScale;
-	double       yScale;
-	double       x;
-	double       y;
-	unsigned int flags;
+	SFT_Font *font;
+	double    xScale;
+	double    yScale;
+	double    xOffset;
+	double    yOffset;
+	int       flags;
 };
 
 struct SFT_LMetrics
@@ -46,8 +45,8 @@ struct SFT_LMetrics
 
 struct SFT_HMetrics
 {
-	int advanceWidth;
-	int leftSideBearing;
+	double advanceWidth;
+	double leftSideBearing;
 };
 
 struct SFT_Box
@@ -66,11 +65,10 @@ struct SFT_Image
 
 struct SFT_Kerning
 {
-	double x;
-	double y;
+	double xShift;
+	double yShift;
 };
 
-/* libschrift uses semantic versioning. */
 const char *sft_version(void);
 
 SFT_Font *sft_loadmem (const void *mem, unsigned long size);
@@ -82,7 +80,8 @@ int sft_lookup  (const struct SFT *sft, unsigned long codepoint, SFT_Glyph *glyp
 int sft_hmetrics(const struct SFT *sft, SFT_Glyph glyph, struct SFT_HMetrics *metrics);
 int sft_box     (const struct SFT *sft, SFT_Glyph glyph, struct SFT_Box *box);
 int sft_render  (const struct SFT *sft, SFT_Glyph glyph, struct SFT_Image image);
-int sft_kerning (const struct SFT *sft, SFT_Glyph leftGlyph, SFT_Glyph rightGlyph, struct SFT_Kerning *kerning);
+int sft_kerning (const struct SFT *sft, SFT_Glyph leftGlyph, SFT_Glyph rightGlyph,
+                 struct SFT_Kerning *kerning);
 
 #ifdef __cplusplus
 }

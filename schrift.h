@@ -49,7 +49,7 @@ struct SFT_HMetrics
 	double leftSideBearing;
 };
 
-struct SFT_Box
+struct SFT_Extents
 {
 	int yOffset;
 	int minWidth;
@@ -78,7 +78,7 @@ void      sft_freefont(SFT_Font *font);
 int sft_lmetrics(const struct SFT *sft, struct SFT_LMetrics *metrics);
 int sft_lookup  (const struct SFT *sft, unsigned long codepoint, SFT_Glyph *glyph);
 int sft_hmetrics(const struct SFT *sft, SFT_Glyph glyph, struct SFT_HMetrics *metrics);
-int sft_box     (const struct SFT *sft, SFT_Glyph glyph, struct SFT_Box *box);
+int sft_extents (const struct SFT *sft, SFT_Glyph glyph, struct SFT_Extents *extents);
 int sft_render  (const struct SFT *sft, SFT_Glyph glyph, struct SFT_Image image);
 int sft_kerning (const struct SFT *sft, SFT_Glyph leftGlyph, SFT_Glyph rightGlyph,
                  struct SFT_Kerning *kerning);

@@ -34,7 +34,7 @@ main(int argc, char *argv[])
 	double size;
 	unsigned long cp, gid;
 	struct SFT_HMetrics hmtx;
-	struct SFT_Box box;
+	struct SFT_Extents  extents;
 	struct SFT_Image image;
 	int i;
 
@@ -70,10 +70,10 @@ main(int argc, char *argv[])
 				continue;
 			if (sft_hmetrics(&sft, gid, &hmtx) < 0)
 				continue;
-			if (sft_box(&sft, gid, &box) < 0)
+			if (sft_extents(&sft, gid, &extents) < 0)
 				continue;
-			image.width  = box.minWidth;
-			image.height = box.minHeight;
+			image.width  = extents.minWidth;
+			image.height = extents.minHeight;
 			image.pixels = malloc((size_t) image.width * (size_t) image.height);
 			sft_render(&sft, gid, image);
 			free(image.pixels);

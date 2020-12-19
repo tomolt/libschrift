@@ -255,20 +255,20 @@ sft_hmetrics(const struct SFT *sft, SFT_Glyph glyph, struct SFT_HMetrics *metric
 }
 
 int
-sft_box(const struct SFT *sft, SFT_Glyph glyph, struct SFT_Box *box)
+sft_extents(const struct SFT *sft, SFT_Glyph glyph, struct SFT_Extents *extents)
 {
 	unsigned long outline;
 	int bbox[4];
-	memset(box, 0, sizeof *box);
+	memset(extents, 0, sizeof *extents);
 	if (outline_offset(sft->font, glyph, &outline) < 0)
 		return -1;
 	if (!outline)
 		return 0;
 	if (glyph_bbox(sft, outline, bbox) < 0)
 		return -1;
-	box->minWidth  = bbox[2] - bbox[0] + 1;
-	box->minHeight = bbox[3] - bbox[1] + 1;
-	box->yOffset   = sft->flags & SFT_DOWNWARD_Y ? -bbox[3] : bbox[1];
+	extents->minWidth  = bbox[2] - bbox[0] + 1;
+	extents->minHeight = bbox[3] - bbox[1] + 1;
+	extents->yOffset   = sft->flags & SFT_DOWNWARD_Y ? -bbox[3] : bbox[1];
 	return 0;
 }
 

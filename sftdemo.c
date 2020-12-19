@@ -134,7 +134,7 @@ loadglyph(struct SFT *sft, unsigned long codepoint)
 	Glyph glyph;
 	unsigned long gid;
 	struct SFT_HMetrics hmtx;
-	struct SFT_Box      box;
+	struct SFT_Extents  extents;
 	struct SFT_Image    image;
 
 	if (sft_lookup(sft, codepoint, &gid) < 0) {
@@ -145,12 +145,12 @@ loadglyph(struct SFT *sft, unsigned long codepoint)
 		printf("Couldn't load codepoint 0x%02lX.\n", codepoint);
 		return;
 	}
-	if (sft_box(sft, gid, &box) < 0) {
+	if (sft_extents(sft, gid, &extents) < 0) {
 		printf("Couldn't load codepoint 0x%02lX.\n", codepoint);
 		return;
 	}
-	image.width  = (box.minWidth + 3) & ~3;
-	image.height = box.minHeight;
+	image.width  = (extents.minWidth + 3) & ~3;
+	image.height = extents.minHeight;
 	image.pixels = malloc((size_t) image.width * (size_t) image.height);
 	/* XRender expects every row of the glyph image to be aligned to a multiple of four. */
 	if (sft_render(sft, gid, image) < 0) {
@@ -161,11 +161,11 @@ loadglyph(struct SFT *sft, unsigned long codepoint)
 
 	/* Fill in the XRender XGlyphInfo struct with the info we get in the SFT_Char struct. */
 	glyph = codepoint;
-	info.x = (short) -hmtx.leftSideBearing;
-	info.y = (short) -box.yOffset;
+	info.x = (short) -floor(hmtx.leftSideBearing);
+	info.y = (short) -extents.yOffset;
 	info.width = (unsigned short) image.width;
 	info.height = (unsigned short) image.height;
-	info.xOff = (short) hmtx.advanceWidth;
+	info.xOff = (short) round(hmtx.advanceWidth);
 	info.yOff = 0;
 	/* Upload the XGlyphInfo and padded image to the X11 server. */
 	XRenderAddGlyphs(dpy, glyphset, &glyph, &info, 1, image.pixels, (int) (image.width * image.height));

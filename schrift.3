@@ -22,7 +22,7 @@
 .Ft int
 .Fn sft_hmetrics "const struct SFT *sft" "SFT_Glyph glyph" "struct SFT_HMetrics *metrics"
 .Ft int
-.Fn sft_box "const struct SFT *sft" "SFT_Glyph glyph" "struct SFT_Box *box"
+.Fn sft_extents "const struct SFT *sft" "SFT_Glyph glyph" "struct SFT_Extents *extents"
 .Ft int
 .Fn sft_render "const struct SFT *sft" "SFT_Glyph glyph" "struct SFT_Image image"
 .Ft int
@@ -34,8 +34,7 @@ can be used to determine which version of
 you are using.
 Since
 .Nm
-uses semantic versioning, the returned string is of the form
-.Qq MAJOR.MINOR.PATCH .
+uses semantic versioning, the returned string is of the form \(dqMAJOR.MINOR.PATH\(dq.
 .Ss Loading fonts
 .Fn sft_loadfile
 will load a font from a given filename (by mapping it into memory),
@@ -56,7 +55,7 @@ on their own.
 Most functions take a struct SFT as their primary argument.
 This is a structure to be filled out by the application.
 It bundles multiple common parameters,
-for example which font to use, or how big the text should be.
+for example which font to use, and how big the text should be.
 The fields are as follows:
 .Bl -tag -width 8
 .It Va font
@@ -79,7 +78,15 @@ If the
 flag is set, the Y axis is interpreted to point downwards.
 Per default, it points upwards.
 .El
-.sp
+.Ss Glyph ids
+.Nm
+operates in terms of glyph ids of type SFT_Glyph, which are font-specific numbers assigned to renderable symbols (glyphs).
+The way to obtain a glyph id is to call
+.Fn sft_lookup ,
+where the first argument is a struct SFT,
+the second is the Unicode codepoint / UTF-32 encoding of the symbol that you're interested in,
+and the third is a pointer to the variable which the glyph id should be written to.
+.Ss Querying metrics
 .Fn sft_lmetrics
 .Bl -tag -width 8
 .It Va ascender
@@ -90,14 +97,6 @@ The distance from the baseline of a line of text to the typographic bottom of th
 The standard amount of padding between consecutive lines
 .El
 .sp
-.Nm
-operates in terms of glyph ids of type SFT_Glyph, which are font-specific numbers assigned to renderable symbols (glyphs).
-The way to obtain a glyph id is to call
-.Fn sft_lookup ,
-where the first argument is a struct SFT,
-the second is the Unicode codepoint / UTF-32 encoding of the symbol that you're interested in,
-and the third is a pointer to the variable which the glyph id should be written to.
-.sp
 .Fn sft_hmetrics
 .Bl -tag -width 8
 .It Va advanceWidth
@@ -105,8 +104,8 @@ The amount of pixels along the X axis that the pen position should advance after
 .It Va leftSideBearing
 The offset that should be applied along the X axis from the pen position to the edge of the glyph image.
 .El
-.sp
-.Fn sft_box
+.Ss Rendering glyphs
+.Fn sft_extents
 .Bl -tag -width 8
 .It Va yOffset
 .It Va minWidth

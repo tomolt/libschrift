@@ -1,4 +1,4 @@
-.Dd December 19, 2020
+.Dd December 20, 2020
 .Dt SCHRIFT 3
 .Os
 .Sh NAME
@@ -42,13 +42,13 @@ will load a font from a given filename (by mapping it into memory),
 whereas
 .Fn sft_loadmem
 can be given an arbitrary memory address and size (in bytes).
-This allows applications to load fonts from ZIP file streams etc.
+This allows loading fonts from ZIP file streams etc.
 .sp
 Once a particular font is no longer needed, its memory should be freed again by calling
 .Fn sft_freefont .
 If the font has been loaded with
 .Fn sft_loadmem ,
-the underlying memory region will have to be separately freed by the applocation.
+the underlying memory region will have to be freed separately.
 .Ss the SFT structure
 Most functions take a
 .Vt struct SFT
@@ -58,37 +58,39 @@ It bundles multiple commonly needed parameters.
 The fields are as follows:
 .Bl -tag -width 8
 .It Va font
-The font to render with.
+The font to render with
 .It Va xScale
-The user-specified width of one em-square in pixels.
+The width of one em-square in pixels
 .It Va yScale
-The user-specified height of one em-square in pixels.
+The height of one em-square in pixels
 .It Va xOffset
-The horizontal offset in pixels to be applied before rendering to an image.
-Can be used for subpixel-accurate positioning.
+The horizontal offset to be applied before rendering to an image
+(Useful for subpixel-accurate positioning)
 .It Va yOffset
-The vertical offset in pixels to be applied before rendering to an image.
-Can be used for subpixel-accurate positioning.
+The vertical offset to be applied before rendering to an image
+(Useful for subpixel-accurate positioning)
 .It Va flags
-A bitfield of binary flags that control various functionalities.
+A bitfield of binary flags
+.El
 .sp
 If the
 .Dv SFT_DOWNWARD_Y
 flag is set, the Y axis is interpreted to point downwards.
 Per default, it points upwards.
-.El
 .Ss Glyph ids
 .Nm
 operates in terms of glyph ids (of type
 .Vt SFT_Glyph ) ,
 which are font-specific identifiers assigned to renderable symbols (glyphs).
 The way to obtain a glyph id is to call
-.Fn sft_lookup ,
-where the first argument is a struct SFT,
-the second is the Unicode codepoint of the symbol,
-and the third is a pointer to the variable which the glyph id should be written to.
+.Fn sft_lookup .
+This function takes a Unicode codepoint in
+.Va codepoint
+and writes its corresponding glyph id into the variable pointed to by
+.Va glyph .
 .Ss Querying metrics
-.Fn sft_lmetrics .
+.Fn sft_lmetrics
+calculates the typographic metrics neccessary for laying out multiple lines of text.
 .sp
 This function writes its output into the structure pointed to by
 .Va metrics .
@@ -114,50 +116,73 @@ The fields are as follows:
 .It Va advanceWidth
 How much the pen position should advance to the right after rendering the glyph
 .It Va leftSideBearing
-The offset that should be applied along the X axis from the pen position to the edge of the glyph image.
+The offset that should be applied along the X axis from the pen position to the edge of the glyph image
 .El
 .sp
 Some sequences of glyphs may look awkward if they're layed out naively.
 For example, the gap between the two characters \(dqVA\(dq might look disproportionally large.
 Kerning is a way to combat this phenomenon, by slightly moving the second character closer or further
 away by a small amount.
-.Fn sft_kerning .
+.Fn sft_kerning
+may be used to retrieve kerning information for a given pair of glyph ids.
 .sp
 This function writes its output into the structure pointed to by
 .Va kerning .
 The fields are as follows:
 .Bl -tag -width 8
 .It Va xShift
-The offset along the X axis that should be applied to the second glyph, and any that follow.
+An amount that should be added to the pen's X position in-between the two glyphs
 .It Va yShift
-The offset along the Y axis that should be applied to the second glyph, and any that follow.
+An amount that should be added to the pen's Y position in-between the two glyphs
 .El
 .Ss Rendering glyphs
-.Fn sft_extents .
+.Fn sft_extents
+computes bounding box information of a glyph without having to render it.
 .sp
 This function writes its output into the structure pointed to by
 .Va extents .
 The fields are as follows:
 .Bl -tag -width 8
 .It Va yOffset
+An offset along the Y axis relative to the pen position that should be applied when
+displaying the glyph
 .It Va minWidth
-The minimum width that an image needs such that the glyph can be properly rasterized into it.
+The minimum width that an image needs such that the glyph can be properly rendered into it
 .It Va minHeight
-The minimum height that an image needs such that the glyph can be properly rasterized into it.
+The minimum height that an image needs such that the glyph can be properly rendered into it
 .El
 .sp
 To actually render a glyph into a easily-displayable raster image, use
 .Fn sft_render .
 .sp
+Other than most functions,
+.Fn sft_render
+takes a structure in
+.Va image
+that is to be filled out by the caller.
 The fields are as follows:
 .Bl -tag -width 8
 .It Va pixels
-A pointer to a byte array, width * height in size
+A pointer to an array of bytes, width * height in size
 .It Va width
-The width of the image in pixels
+The number of pixels in a row of the image
 .It Va height
-The height of the image in pixels
+The number of pixels in a column of the image
 .El
+.sp
+The image will be rendered into the memory provided in
+.Va pixels .
+Each byte corresponds to one pixel,
+with rows of the image being directly adjacent in memory without padding between them.
+Glyphs are rendered \(dqwhite on black\(dq,
+meaning the background has a pixel value of 0,
+and the foreground goes up to a value of 255.
+Pixel values follow a linear color ramp, unlike conventional computer screens.
+That is to say, they are
+.Em not gamma-corrected .
+These properties make it very easy to use images rendered with
+.Fn sft_render
+as alpha masks.
 .Sh RETURN VALUES
 .Fn sft_loadmem
 and
@@ -190,10 +215,8 @@ Similarly, the only kind of font file supported right now
 are TrueType (.ttf) fonts (Some OpenType fonts might work too,
 as OpenType is effectively a superset of TrueType).
 .sp
-As of this version of
-.Nm ,
-there is still no support for right-to-left scripts,
-but it is on the roadmap.
+As of v0.10.0, there is no support for right-to-left scripts
+.Em yet .
 .sp
 .Nm
 currently does not implement font hinting and probably never will.

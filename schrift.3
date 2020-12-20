@@ -1,5 +1,6 @@
 .Dd December 19, 2020
 .Dt SCHRIFT 3
+.Os
 .Sh NAME
 .Nm schrift ,
 .Nm libschrift
@@ -22,40 +23,38 @@
 .Ft int
 .Fn sft_hmetrics "const struct SFT *sft" "SFT_Glyph glyph" "struct SFT_HMetrics *metrics"
 .Ft int
+.Fn sft_kerning "const struct SFT *sft" "SFT_Glyph leftGlyph" "SFT_Glyph rightGlyph" "struct SFT_Kerning *kerning"
+.Ft int
 .Fn sft_extents "const struct SFT *sft" "SFT_Glyph glyph" "struct SFT_Extents *extents"
 .Ft int
 .Fn sft_render "const struct SFT *sft" "SFT_Glyph glyph" "struct SFT_Image image"
-.Ft int
-.Fn sft_kerning "const struct SFT *sft" "SFT_Glyph leftGlyph" "SFT_Glyph rightGlyph" "struct SFT_Kerning *kerning"
 .Sh DESCRIPTION
+The function
 .Fn sft_version
-can be used to determine which version of
-.Nm
-you are using.
+may be called to determine the version of
+.Nm .
 Since
 .Nm
-uses semantic versioning, the returned string is of the form \(dqMAJOR.MINOR.PATH\(dq.
+uses semantic versioning, the returned string is of the form \(dqMAJOR.MINOR.PATCH\(dq.
 .Ss Loading fonts
 .Fn sft_loadfile
 will load a font from a given filename (by mapping it into memory),
 whereas
 .Fn sft_loadmem
 can be given an arbitrary memory address and size (in bytes).
-This allows users to load fonts from ZIP file streams etc.
+This allows applications to load fonts from ZIP file streams etc.
 .sp
-Once a user is done with a particular font and does not need to access it any more, he may use
-.Fn sft_freefont
-to free all memory reserved by the font.
+Once a particular font is no longer needed, its memory should be freed again by calling
+.Fn sft_freefont .
 If the font has been loaded with
-.Fn sft_loadmem
-the user has to additionally free the memory they passed to
-.Fn sft_loadmem
-on their own.
+.Fn sft_loadmem ,
+the underlying memory region will have to be separately freed by the applocation.
 .Ss the SFT structure
-Most functions take a struct SFT as their primary argument.
-This is a structure to be filled out by the application.
-It bundles multiple common parameters,
-for example which font to use, and how big the text should be.
+Most functions take a
+.Vt struct SFT
+as their primary argument.
+This is a structure to be filled out by the caller.
+It bundles multiple commonly needed parameters.
 The fields are as follows:
 .Bl -tag -width 8
 .It Va font
@@ -64,10 +63,10 @@ The font to render with.
 The user-specified width of one em-square in pixels.
 .It Va yScale
 The user-specified height of one em-square in pixels.
-.It Va x
+.It Va xOffset
 The horizontal offset in pixels to be applied before rendering to an image.
 Can be used for subpixel-accurate positioning.
-.It Va y
+.It Va yOffset
 The vertical offset in pixels to be applied before rendering to an image.
 Can be used for subpixel-accurate positioning.
 .It Va flags
@@ -80,32 +79,65 @@ Per default, it points upwards.
 .El
 .Ss Glyph ids
 .Nm
-operates in terms of glyph ids of type SFT_Glyph, which are font-specific numbers assigned to renderable symbols (glyphs).
+operates in terms of glyph ids (of type
+.Vt SFT_Glyph ) ,
+which are font-specific identifiers assigned to renderable symbols (glyphs).
 The way to obtain a glyph id is to call
 .Fn sft_lookup ,
 where the first argument is a struct SFT,
-the second is the Unicode codepoint / UTF-32 encoding of the symbol that you're interested in,
+the second is the Unicode codepoint of the symbol,
 and the third is a pointer to the variable which the glyph id should be written to.
 .Ss Querying metrics
-.Fn sft_lmetrics
+.Fn sft_lmetrics .
+.sp
+This function writes its output into the structure pointed to by
+.Va metrics .
+The fields are as follows:
 .Bl -tag -width 8
 .It Va ascender
-The distance from the baseline of a line of text to the typographic top of the text
+The distance from the baseline to the visual top of the text
 .It Va descender
-The distance from the baseline of a line of text to the typographic bottom of the text
+The distance from the baseline to the visual bottom of the text
 .It Va lineGap
-The standard amount of padding between consecutive lines
+The default amount of horizontal padding between consecutive lines
 .El
 .sp
+When displaying multiple glyphs in a line, you have to keep track of the pen position.
 .Fn sft_hmetrics
+tells you where to draw the next glyph with respect to the pen position,
+and how to update it after rendering the glyph.
+.sp
+This function writes its output into the structure pointed to by
+.Va metrics .
+The fields are as follows:
 .Bl -tag -width 8
 .It Va advanceWidth
-The amount of pixels along the X axis that the pen position should advance after rendering this glyph.
+How much the pen position should advance to the right after rendering the glyph
 .It Va leftSideBearing
 The offset that should be applied along the X axis from the pen position to the edge of the glyph image.
 .El
+.sp
+Some sequences of glyphs may look awkward if they're layed out naively.
+For example, the gap between the two characters \(dqVA\(dq might look disproportionally large.
+Kerning is a way to combat this phenomenon, by slightly moving the second character closer or further
+away by a small amount.
+.Fn sft_kerning .
+.sp
+This function writes its output into the structure pointed to by
+.Va kerning .
+The fields are as follows:
+.Bl -tag -width 8
+.It Va xShift
+The offset along the X axis that should be applied to the second glyph, and any that follow.
+.It Va yShift
+The offset along the Y axis that should be applied to the second glyph, and any that follow.
+.El
 .Ss Rendering glyphs
-.Fn sft_extents
+.Fn sft_extents .
+.sp
+This function writes its output into the structure pointed to by
+.Va extents .
+The fields are as follows:
 .Bl -tag -width 8
 .It Va yOffset
 .It Va minWidth
@@ -116,6 +148,8 @@ The minimum height that an image needs such that the glyph can be properly raste
 .sp
 To actually render a glyph into a easily-displayable raster image, use
 .Fn sft_render .
+.sp
+The fields are as follows:
 .Bl -tag -width 8
 .It Va pixels
 A pointer to a byte array, width * height in size
@@ -123,18 +157,6 @@ A pointer to a byte array, width * height in size
 The width of the image in pixels
 .It Va height
 The height of the image in pixels
-.El
-.sp
-Some sequences of glyphs may look awkward if they're layed out naively.
-For example, the gap between the two characters \(dqVA\(dq might look disproportionally large.
-Kerning is a way to combat this phenomenon, by slightly moving the second character closer or further
-away by a small amount.
-.Fn sft_kerning
-.Bl -tag -width 8
-.It Va x
-The offset in pixels along the X axis that should be applied to the second glyph, and any that follow.
-.It Va y
-The offset in pixels along the Y axis that should be applied to the second glyph, and any that follow.
 .El
 .Sh RETURN VALUES
 .Fn sft_loadmem
@@ -147,10 +169,10 @@ on error.
 .Fn sft_lmetrics ,
 .Fn sft_lookup ,
 .Fn sft_hmetrics ,
-.Fn sft_box ,
-.Fn sft_render ,
+.Fn sft_kerning ,
+.Fn sft_extents ,
 and
-.Fn sft_kerning
+.Fn sft_render
 all return 0 on success and -1 on error.
 .Sh EXAMPLES
 See the source code of

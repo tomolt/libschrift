@@ -255,54 +255,8 @@ sft_hmetrics(const struct SFT *sft, SFT_Glyph glyph, struct SFT_HMetrics *metric
 }
 
 int
-sft_extents(const struct SFT *sft, SFT_Glyph glyph, struct SFT_Extents *extents)
-{
-	unsigned long outline;
-	int bbox[4];
-	memset(extents, 0, sizeof *extents);
-	if (outline_offset(sft->font, glyph, &outline) < 0)
-		return -1;
-	if (!outline)
-		return 0;
-	if (glyph_bbox(sft, outline, bbox) < 0)
-		return -1;
-	extents->minWidth  = bbox[2] - bbox[0] + 1;
-	extents->minHeight = bbox[3] - bbox[1] + 1;
-	extents->yOffset   = sft->flags & SFT_DOWNWARD_Y ? -bbox[3] : bbox[1];
-	return 0;
-}
-
-int
-sft_render(const struct SFT *sft, SFT_Glyph glyph, struct SFT_Image image)
-{
-	unsigned long outline;
-	double transform[6];
-	int bbox[4];
-	if (outline_offset(sft->font, glyph, &outline) < 0)
-		return -1;
-	if (!outline)
-		return 0;
-	if (glyph_bbox(sft, outline, bbox) < 0)
-		return -1;
-	/* Set up the transformation matrix such that
-	 * the transformed bounding boxes min corner lines
-	 * up with the (0, 0) point. */
-	transform[0] = sft->xScale / sft->font->unitsPerEm;
-	transform[1] = 0.0;
-	transform[2] = 0.0;
-	transform[4] = sft->xOffset - bbox[0];
-	if (sft->flags & SFT_DOWNWARD_Y) {
-		transform[3] = -sft->yScale / sft->font->unitsPerEm;
-		transform[5] = bbox[3] - sft->yOffset;
-	} else {
-		transform[3] = +sft->yScale / sft->font->unitsPerEm;
-		transform[5] = sft->yOffset - bbox[1];
-	}
-	return render_image(sft, outline, transform, image);
-}
-
-int
-sft_kerning(const struct SFT *sft, SFT_Glyph leftGlyph, SFT_Glyph rightGlyph, struct SFT_Kerning *kerning)
+sft_kerning(const struct SFT *sft, SFT_Glyph leftGlyph, SFT_Glyph rightGlyph,
+            struct SFT_Kerning *kerning)
 {
 	void *match;
 	uint_fast32_t offset;
@@ -364,6 +318,53 @@ sft_kerning(const struct SFT *sft, SFT_Glyph leftGlyph, SFT_Glyph rightGlyph, st
 	kerning->yShift = kerning->yShift / sft->font->unitsPerEm * sft->yScale;
 
 	return 0;
+}
+
+int
+sft_extents(const struct SFT *sft, SFT_Glyph glyph, struct SFT_Extents *extents)
+{
+	unsigned long outline;
+	int bbox[4];
+	memset(extents, 0, sizeof *extents);
+	if (outline_offset(sft->font, glyph, &outline) < 0)
+		return -1;
+	if (!outline)
+		return 0;
+	if (glyph_bbox(sft, outline, bbox) < 0)
+		return -1;
+	extents->minWidth  = bbox[2] - bbox[0] + 1;
+	extents->minHeight = bbox[3] - bbox[1] + 1;
+	extents->yOffset   = sft->flags & SFT_DOWNWARD_Y ? -bbox[3] : bbox[1];
+	return 0;
+}
+
+int
+sft_render(const struct SFT *sft, SFT_Glyph glyph, struct SFT_Image image)
+{
+	unsigned long outline;
+	double transform[6];
+	int bbox[4];
+	if (outline_offset(sft->font, glyph, &outline) < 0)
+		return -1;
+	if (!outline)
+		return 0;
+	if (glyph_bbox(sft, outline, bbox) < 0)
+		return -1;
+	/* Set up the transformation matrix such that
+	 * the transformed bounding boxes min corner lines
+	 * up with the (0, 0) point. */
+	transform[0] = sft->xScale / sft->font->unitsPerEm;
+	transform[1] = 0.0;
+	transform[2] = 0.0;
+	transform[4] = sft->xOffset - bbox[0];
+	if (sft->flags & SFT_DOWNWARD_Y) {
+		transform[3] = -sft->yScale / sft->font->unitsPerEm;
+		transform[5] = bbox[3] - sft->yOffset;
+	} else {
+		transform[3] = +sft->yScale / sft->font->unitsPerEm;
+		transform[5] = sft->yOffset - bbox[1];
+	}
+	return render_image(sft, outline, transform, image);
 }
 
 /* This is sqrt(SIZE_MAX+1), as s1*s2 <= SIZE_MAX

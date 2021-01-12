@@ -63,16 +63,23 @@
 enum { SrcMapping, SrcUser };
 
 /* structs */
-struct point { double x, y; };
-struct line  { uint_least16_t beg, end; };
-struct curve { uint_least16_t beg, end, ctrl; };
-struct cell  { double area, cover; };
+typedef struct Point   Point;
+typedef struct Line    Line;
+typedef struct Curve   Curve;
+typedef struct Cell    Cell;
+typedef struct Outline Outline;
+typedef struct Raster  Raster;
 
-struct outline
+struct Point { double x, y; };
+struct Line  { uint_least16_t beg, end; };
+struct Curve { uint_least16_t beg, end, ctrl; };
+struct Cell  { double area, cover; };
+
+struct Outline
 {
-	struct point  *points;
-	struct curve  *curves;
-	struct line   *lines;
+	Point *points;
+	Curve *curves;
+	Line  *lines;
 	uint_least16_t numPoints;
 	uint_least16_t capPoints;
 	uint_least16_t numCurves;
@@ -81,9 +88,9 @@ struct outline
 	uint_least16_t capLines;
 };
 
-struct buffer
+struct Raster
 {
-	struct cell *cells;
+	Cell *cells;
 	int width;
 	int height;
 };
@@ -112,15 +119,15 @@ static int  map_file(SFT_Font *font, const char *filename);
 static void unmap_file(SFT_Font *font);
 static int  init_font(SFT_Font *font);
 /* simple mathematical operations */
-static struct point midpoint(struct point a, struct point b);
-static void transform_points(uint_fast16_t numPts, struct point *points, double trf[6]);
-static void clip_points(uint_fast16_t numPts, struct point *points, int width, int height);
+static Point midpoint(Point a, Point b);
+static void transform_points(uint_fast16_t numPts, Point *points, double trf[6]);
+static void clip_points(uint_fast16_t numPts, Point *points, int width, int height);
 /* 'outline' data structure management */
-static int  init_outline(struct outline *outl);
-static void free_outline(struct outline *outl);
-static int  grow_points(struct outline *outl);
-static int  grow_curves(struct outline *outl);
-static int  grow_lines(struct outline *outl);
+static int  init_outline(Outline *outl);
+static void free_outline(Outline *outl);
+static int  grow_points(Outline *outl);
+static int  grow_curves(Outline *outl);
+static int  grow_lines(Outline *outl);
 /* TTF parsing utilities */
 static inline int is_safe_offset(SFT_Font *font, uint_fast32_t offset, uint_fast32_t margin);
 static void *csearch(const void *key, const void *base,
@@ -143,22 +150,22 @@ static int  glyph_bbox(const SFT *sft, unsigned long outline, int box[4]);
 /* decoding outlines */
 static int  outline_offset(SFT_Font *font, uint_fast32_t glyph, uint_fast32_t *offset);
 static int  simple_flags(SFT_Font *font, uint_fast32_t *offset, uint_fast16_t numPts, uint8_t *flags);
-static int  simple_points(SFT_Font *font, uint_fast32_t offset, uint_fast16_t numPts, uint8_t *flags, struct point *points);
-static int  decode_contour(uint8_t *flags, uint_fast16_t basePoint, uint_fast16_t count, struct outline *outl);
-static int  simple_outline(SFT_Font *font, uint_fast32_t offset, unsigned int numContours, struct outline *outl);
-static int  compound_outline(SFT_Font *font, uint_fast32_t offset, int recDepth, struct outline *outl);
-static int  decode_outline(SFT_Font *font, uint_fast32_t offset, int recDepth, struct outline *outl);
+static int  simple_points(SFT_Font *font, uint_fast32_t offset, uint_fast16_t numPts, uint8_t *flags, Point *points);
+static int  decode_contour(uint8_t *flags, uint_fast16_t basePoint, uint_fast16_t count, Outline *outl);
+static int  simple_outline(SFT_Font *font, uint_fast32_t offset, unsigned int numContours, Outline *outl);
+static int  compound_outline(SFT_Font *font, uint_fast32_t offset, int recDepth, Outline *outl);
+static int  decode_outline(SFT_Font *font, uint_fast32_t offset, int recDepth, Outline *outl);
 /* tesselation */
-static int  is_flat(struct outline *outl, struct curve curve);
-static int  tesselate_curve(struct curve curve, struct outline *outl);
-static int  tesselate_curves(struct outline *outl);
+static int  is_flat(Outline *outl, Curve curve);
+static int  tesselate_curve(Curve curve, Outline *outl);
+static int  tesselate_curves(Outline *outl);
 /* silhouette rasterization */
-static void draw_line(struct buffer buf, struct point origin, struct point goal);
-static void draw_lines(struct outline *outl, struct buffer buf);
+static void draw_line(Raster buf, Point origin, Point goal);
+static void draw_lines(Outline *outl, Raster buf);
 /* post-processing */
-static void post_process(struct buffer buf, uint8_t *image);
+static void post_process(Raster buf, uint8_t *image);
 /* glyph rendering */
-static int  render_outline(struct outline *outl, double transform[6], SFT_Image image);
+static int  render_outline(Outline *outl, double transform[6], SFT_Image image);
 
 /* function implementations */
 
@@ -344,7 +351,7 @@ sft_render(const SFT *sft, SFT_Glyph glyph, SFT_Image image)
 	unsigned long outline;
 	double transform[6];
 	int bbox[4];
-	struct outline outl;
+	Outline outl;
 
 	if (outline_offset(sft->font, glyph, &outline) < 0)
 		return -1;
@@ -531,10 +538,10 @@ init_font(SFT_Font *font)
 	return 0;
 }
 
-static struct point
-midpoint(struct point a, struct point b)
+static Point
+midpoint(Point a, Point b)
 {
-	return (struct point) {
+	return (Point) {
 		0.5 * (a.x + b.x),
 		0.5 * (a.y + b.y)
 	};
@@ -542,13 +549,13 @@ midpoint(struct point a, struct point b)
 
 /* Applies an affine linear transformation matrix to a set of points. */
 static void
-transform_points(uint_fast16_t numPts, struct point *points, double trf[6])
+transform_points(uint_fast16_t numPts, Point *points, double trf[6])
 {
-	struct point pt;
+	Point pt;
 	uint_fast16_t i;
 	for (i = 0; i < numPts; ++i) {
 		pt = points[i];
-		points[i] = (struct point) {
+		points[i] = (Point) {
 			pt.x * trf[0] + pt.y * trf[2] + trf[4],
 			pt.x * trf[1] + pt.y * trf[3] + trf[5]
 		};
@@ -556,9 +563,9 @@ transform_points(uint_fast16_t numPts, struct point *points, double trf[6])
 }
 
 static void
-clip_points(uint_fast16_t numPts, struct point *points, int width, int height)
+clip_points(uint_fast16_t numPts, Point *points, int width, int height)
 {
-	struct point pt;
+	Point pt;
 	uint_fast16_t i;
 
 	for (i = 0; i < numPts; ++i) {
@@ -580,7 +587,7 @@ clip_points(uint_fast16_t numPts, struct point *points, int width, int height)
 }
 
 static int
-init_outline(struct outline *outl)
+init_outline(Outline *outl)
 {
 	/* TODO Smaller initial allocations */
 	outl->numPoints = 0;
@@ -599,7 +606,7 @@ init_outline(struct outline *outl)
 }
 
 static void
-free_outline(struct outline *outl)
+free_outline(Outline *outl)
 {
 	free(outl->points);
 	free(outl->curves);
@@ -607,7 +614,7 @@ free_outline(struct outline *outl)
 }
 
 static int
-grow_points(struct outline *outl)
+grow_points(Outline *outl)
 {
 	void *mem;
 	uint_fast16_t cap;
@@ -624,7 +631,7 @@ grow_points(struct outline *outl)
 }
 
 static int
-grow_curves(struct outline *outl)
+grow_curves(Outline *outl)
 {
 	void *mem;
 	uint_fast16_t cap;
@@ -640,7 +647,7 @@ grow_curves(struct outline *outl)
 }
 
 static int
-grow_lines(struct outline *outl)
+grow_lines(Outline *outl)
 {
 	void *mem;
 	uint_fast16_t cap;
@@ -983,7 +990,7 @@ simple_flags(SFT_Font *font, uint_fast32_t *offset, uint_fast16_t numPts, uint8_
 
 /* For a 'simple' outline, decodes both X and Y coordinates for each point of the outline. */
 static int
-simple_points(SFT_Font *font, uint_fast32_t offset, uint_fast16_t numPts, uint8_t *flags, struct point *points)
+simple_points(SFT_Font *font, uint_fast32_t offset, uint_fast16_t numPts, uint8_t *flags, Point *points)
 {
 	long accum, value, bit;
 	uint_fast16_t i;
@@ -1026,7 +1033,7 @@ simple_points(SFT_Font *font, uint_fast32_t offset, uint_fast16_t numPts, uint8_
 }
 
 static int
-decode_contour(uint8_t *flags, uint_fast16_t basePoint, uint_fast16_t count, struct outline *outl)
+decode_contour(uint8_t *flags, uint_fast16_t basePoint, uint_fast16_t count, Outline *outl)
 {
 	uint_fast16_t i;
 	uint_least16_t looseEnd, beg, ctrl, center, cur;
@@ -1066,11 +1073,11 @@ decode_contour(uint8_t *flags, uint_fast16_t basePoint, uint_fast16_t count, str
 			if (gotCtrl) {
 				if (outl->numCurves >= outl->capCurves && grow_curves(outl) < 0)
 					return -1;
-				outl->curves[outl->numCurves++] = (struct curve) { beg, cur, ctrl };
+				outl->curves[outl->numCurves++] = (Curve) { beg, cur, ctrl };
 			} else {
 				if (outl->numLines >= outl->capLines && grow_lines(outl) < 0)
 					return -1;
-				outl->lines[outl->numLines++] = (struct line) { beg, cur };
+				outl->lines[outl->numLines++] = (Line) { beg, cur };
 			}
 			beg = cur;
 			gotCtrl = 0;
@@ -1084,7 +1091,7 @@ decode_contour(uint8_t *flags, uint_fast16_t basePoint, uint_fast16_t count, str
 
 				if (outl->numCurves >= outl->capCurves && grow_curves(outl) < 0)
 					return -1;
-				outl->curves[outl->numCurves++] = (struct curve) { beg, center, ctrl };
+				outl->curves[outl->numCurves++] = (Curve) { beg, center, ctrl };
 
 				beg = center;
 			}
@@ -1095,18 +1102,18 @@ decode_contour(uint8_t *flags, uint_fast16_t basePoint, uint_fast16_t count, str
 	if (gotCtrl) {
 		if (outl->numCurves >= outl->capCurves && grow_curves(outl) < 0)
 			return -1;
-		outl->curves[outl->numCurves++] = (struct curve) { beg, looseEnd, ctrl };
+		outl->curves[outl->numCurves++] = (Curve) { beg, looseEnd, ctrl };
 	} else {
 		if (outl->numLines >= outl->capLines && grow_lines(outl) < 0)
 			return -1;
-		outl->lines[outl->numLines++] = (struct line) { beg, looseEnd };
+		outl->lines[outl->numLines++] = (Line) { beg, looseEnd };
 	}
 
 	return 0;
 }
 
 static int
-simple_outline(SFT_Font *font, uint_fast32_t offset, unsigned int numContours, struct outline *outl)
+simple_outline(SFT_Font *font, uint_fast32_t offset, unsigned int numContours, Outline *outl)
 {
 	uint_fast16_t *endPts = NULL;
 	uint8_t *flags = NULL;
@@ -1175,7 +1182,7 @@ failure:
 }
 
 static int
-compound_outline(SFT_Font *font, uint_fast32_t offset, int recDepth, struct outline *outl)
+compound_outline(SFT_Font *font, uint_fast32_t offset, int recDepth, Outline *outl)
 {
 	double local[6];
 	uint_fast32_t outline;
@@ -1249,7 +1256,7 @@ compound_outline(SFT_Font *font, uint_fast32_t offset, int recDepth, struct outl
 }
 
 static int
-decode_outline(SFT_Font *font, uint_fast32_t offset, int recDepth, struct outline *outl)
+decode_outline(SFT_Font *font, uint_fast32_t offset, int recDepth, Outline *outl)
 {
 	int numContours;
 	if (!is_safe_offset(font, offset, 10))
@@ -1268,33 +1275,33 @@ decode_outline(SFT_Font *font, uint_fast32_t offset, int recDepth, struct outlin
 
 /* A heuristic to tell whether a given curve can be approximated closely enough by a line. */
 static int
-is_flat(struct outline *outl, struct curve curve)
+is_flat(Outline *outl, Curve curve)
 {
 	const double maxArea2 = 2.0;
-	struct point a = outl->points[curve.beg];
-	struct point b = outl->points[curve.ctrl];
-	struct point c = outl->points[curve.end];
-	struct point g = { b.x-a.x, b.y-a.y };
-	struct point h = { c.x-a.x, c.y-a.y };
+	Point a = outl->points[curve.beg];
+	Point b = outl->points[curve.ctrl];
+	Point c = outl->points[curve.end];
+	Point g = { b.x-a.x, b.y-a.y };
+	Point h = { c.x-a.x, c.y-a.y };
 	double area2 = fabs(g.x*h.y-h.x*g.y);
 	return area2 <= maxArea2;
 }
 
 static int
-tesselate_curve(struct curve curve, struct outline *outl)
+tesselate_curve(Curve curve, Outline *outl)
 {
 	/* From my tests I can conclude that this stack barely reaches a top height
 	 * of 4 elements even for the largest font sizes I'm willing to support. And
 	 * as space requirements should only grow logarithmically, I think 10 is
 	 * more than enough. */
 #define STACK_SIZE 10
-	struct curve stack[STACK_SIZE];
+	Curve stack[STACK_SIZE];
 	unsigned int top = 0;
 	for (;;) {
 		if (is_flat(outl, curve) || top >= STACK_SIZE) {
 			if (outl->numLines >= outl->capLines && grow_lines(outl) < 0)
 				return -1;
-			outl->lines[outl->numLines++] = (struct line) { curve.beg, curve.end };
+			outl->lines[outl->numLines++] = (Line) { curve.beg, curve.end };
 			if (top == 0) break;
 			curve = stack[--top];
 		} else {
@@ -1316,8 +1323,8 @@ tesselate_curve(struct curve curve, struct outline *outl)
 			outl->points[pivot] = midpoint(outl->points[ctrl0], outl->points[ctrl1]);
 			++outl->numPoints;
 
-			stack[top++] = (struct curve) { curve.beg, pivot, ctrl0 };
-			curve = (struct curve) { pivot, curve.end, ctrl1 };
+			stack[top++] = (Curve) { curve.beg, pivot, ctrl0 };
+			curve = (Curve) { pivot, curve.end, ctrl1 };
 		}
 	}
 	return 0;
@@ -1325,7 +1332,7 @@ tesselate_curve(struct curve curve, struct outline *outl)
 }
 
 static int
-tesselate_curves(struct outline *outl)
+tesselate_curves(Outline *outl)
 {
 	unsigned int i;
 	for (i = 0; i < outl->numCurves; ++i) {
@@ -1337,18 +1344,18 @@ tesselate_curves(struct outline *outl)
 
 /* Draws a line into the buffer. Uses a custom 2D raycasting algorithm to do so. */
 static void
-draw_line(struct buffer buf, struct point origin, struct point goal)
+draw_line(Raster buf, Point origin, Point goal)
 {
-	struct point delta;
-	struct point nextCrossing;
-	struct point crossingIncr;
+	Point delta;
+	Point nextCrossing;
+	Point crossingIncr;
 	double halfDeltaX;
 	double prevDistance = 0.0, nextDistance;
 	double xAverage, yDifference;
 	struct { int x, y; } pixel;
 	struct { int x, y; } dir;
 	int step, numSteps = 0;
-	struct cell *restrict cptr, cell;
+	Cell *restrict cptr, cell;
 
 	delta.x = goal.x - origin.x;
 	delta.y = goal.y - origin.y;
@@ -1421,22 +1428,22 @@ draw_line(struct buffer buf, struct point origin, struct point goal)
 }
 
 static void
-draw_lines(struct outline *outl, struct buffer buf)
+draw_lines(Outline *outl, Raster buf)
 {
 	unsigned int i;
 	for (i = 0; i < outl->numLines; ++i) {
-		struct line  line   = outl->lines[i];
-		struct point origin = outl->points[line.beg];
-		struct point goal   = outl->points[line.end];
+		Line  line   = outl->lines[i];
+		Point origin = outl->points[line.beg];
+		Point goal   = outl->points[line.end];
 		draw_line(buf, origin, goal);
 	}
 }
 
 /* Integrate the values in the buffer to arrive at the final grayscale image. */
 static void
-post_process(struct buffer buf, uint8_t *image)
+post_process(Raster buf, uint8_t *image)
 {
-	struct cell cell;
+	Cell cell;
 	double accum = 0.0, value;
 	unsigned int i, num;
 	num = (unsigned int) buf.width * (unsigned int) buf.height;
@@ -1451,15 +1458,15 @@ post_process(struct buffer buf, uint8_t *image)
 }
 
 static int
-render_outline(struct outline *outl, double transform[6], SFT_Image image)
+render_outline(Outline *outl, double transform[6], SFT_Image image)
 {
-	struct cell *cells = NULL;
-	struct buffer buf;
+	Cell *cells = NULL;
+	Raster buf;
 	unsigned int numPixels;
 	
 	numPixels = (unsigned int) image.width * (unsigned int) image.height;
 
-	STACK_ALLOC(cells, struct cell, 128 * 128, numPixels);
+	STACK_ALLOC(cells, Cell, 128 * 128, numPixels);
 	if (!cells) {
 		return -1;
 	}

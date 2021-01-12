@@ -158,7 +158,7 @@ static void draw_lines(struct outline *outl, struct buffer buf);
 /* post-processing */
 static void post_process(struct buffer buf, uint8_t *image);
 /* glyph rendering */
-static int render_image(const struct SFT *sft, uint_fast32_t offset, double transform[6], struct SFT_Image image);
+static int  render_outline(struct outline *outl, double transform[6], struct SFT_Image image);
 
 /* function implementations */
 
@@ -364,7 +364,24 @@ sft_render(const struct SFT *sft, SFT_Glyph glyph, struct SFT_Image image)
 		transform[3] = +sft->yScale / sft->font->unitsPerEm;
 		transform[5] = sft->yOffset - bbox[1];
 	}
-	return render_image(sft, outline, transform, image);
+	
+	struct outline outl;
+
+	memset(&outl, 0, sizeof outl);
+	if (init_outline(&outl) < 0)
+		goto failure;
+
+	if (decode_outline(sft->font, outline, 0, &outl) < 0)
+		goto failure;
+	if (render_outline(&outl, transform, image) < 0)
+		goto failure;
+
+	free_outline(&outl);
+	return 0;
+
+failure:
+	free_outline(&outl);
+	return -1;
 }
 
 /* This is sqrt(SIZE_MAX+1), as s1*s2 <= SIZE_MAX
@@ -1434,45 +1451,37 @@ post_process(struct buffer buf, uint8_t *image)
 }
 
 static int
-render_image(const struct SFT *sft, uint_fast32_t offset, double transform[6], struct SFT_Image image)
+render_outline(struct outline *outl, double transform[6], struct SFT_Image image)
 {
 	struct cell *cells = NULL;
-	struct outline outl;
 	struct buffer buf;
-	unsigned int numPixels = (unsigned int) image.width * (unsigned int) image.height;
-
-	memset(&outl, 0, sizeof outl);
-	if (init_outline(&outl) < 0)
-		goto failure;
+	unsigned int numPixels;
+	
+	numPixels = (unsigned int) image.width * (unsigned int) image.height;
 
 	STACK_ALLOC(cells, struct cell, 128 * 128, numPixels);
-	if (!cells)
-		goto failure;
+	if (!cells) {
+		return -1;
+	}
 	memset(cells, 0, numPixels * sizeof *cells);
 	buf.cells  = cells;
 	buf.width  = image.width;
 	buf.height = image.height;
 
-	if (decode_outline(sft->font, offset, 0, &outl) < 0)
-		goto failure;
+	transform_points(outl->numPoints, outl->points, transform);
 
-	transform_points(outl.numPoints, outl.points, transform);
+	clip_points(outl->numPoints, outl->points, image.width, image.height);
 
-	clip_points(outl.numPoints, outl.points, image.width, image.height);
-	if (tesselate_curves(&outl) < 0)
-		goto failure;
+	if (tesselate_curves(outl) < 0) {
+		STACK_FREE(cells);
+		return -1;
+	}
 
-	draw_lines(&outl, buf);
+	draw_lines(outl, buf);
 
 	post_process(buf, image.pixels);
 
-	free_outline(&outl);
 	STACK_FREE(cells);
 	return 0;
-
-failure:
-	free_outline(&outl);
-	STACK_FREE(cells);
-	return -1;
 }
 

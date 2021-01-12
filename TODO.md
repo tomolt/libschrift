@@ -2,15 +2,12 @@
 The following bullet points are listed in no particular order.
 
 ## Bugs
-None reported at the moment.
+- Romanian S-comma (Unicode: `U+0219`) is apparently not displayed.
+  `AnonPro` is a font that *should* have an outline for this character.
 
 ## API redesign
-- Split the work of `sft_char` into smaller user-accessable parts, but still supply some higher-level convenience functions.
-  Something like `sft_glyphid` -> `sft_glyphdims` -> `sft_drawglyph`.
 - Instead of scales and offsets, the user will be able to directly supply a 2x3 matrix. There will be some convenience macros
   for constructing such a matrix from simpler parameters, like from a uniform scale alone.
-- The user should be able to supply the memory region that gets drawn into,
-  so that we can signifanctly reduce the amount of allocations we make.
 - Anything like `sft_char` should take a flags parameter, so the `flags` field in struct SFT can be removed.
 
 ## Features
@@ -43,9 +40,7 @@ None reported at the moment.
 - Refactor `tesselate_curves`
 - `transform_points` probably should take the outline as the primary argument.
 - `clip_points` probably should take the outline as the primary argument.
-- Perhaps rename `struct buffer` to `struct raster` again?
 - The following new functions to map array problems to single instance problems:
   * `decode_contours` / `decode_contour`
-- Remove the deprecated SFT_CHAR_IMAGE alias.
 - Think about using some internal type aliases to make the intentions behind the typing clearer.
 - struct outline is responsible for a lot of allocations, which could at least partially be done on the stack.

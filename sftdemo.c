@@ -47,12 +47,12 @@ static XRenderPictFormat *format;
 
 /* This is the only persistent state that we need for libschrift. */
 
-/* A struct SFT is a kind of 'drawing context' for libschrift.
+/* A SFT is a kind of 'drawing context' for libschrift.
  * It bundles commonly needed parameters such as font and size and has to
  * be filled out by the application. Any fields that the application does
  * not need to set must be initialized with zero.
  * (Global variables are always zero-initialized in C.) */
-static struct SFT sft;
+static SFT sft;
 
 /* When using XRender we have to manually keep track of which glyphs we already rendered
  * and uploaded to the X11 server.
@@ -128,14 +128,14 @@ usage(void)
 
 /* Render a character with libschrift and subsequently upload it to the X11 server. */
 static void
-loadglyph(struct SFT *sft, unsigned long codepoint)
+loadglyph(SFT *sft, unsigned long codepoint)
 {
 	XGlyphInfo info;
 	Glyph glyph;
 	unsigned long gid;
-	struct SFT_HMetrics hmtx;
-	struct SFT_Extents  extents;
-	struct SFT_Image    image;
+	SFT_HMetrics hmtx;
+	SFT_Extents  extents;
+	SFT_Image    image;
 
 	if (sft_lookup(sft, codepoint, &gid) < 0) {
 		printf("Couldn't load codepoint 0x%02lX.\n", codepoint);
@@ -217,7 +217,7 @@ drawtext(int x, int y, const char *text)
 static void
 draw(unsigned int width, unsigned int height)
 {
-	struct SFT_LMetrics lmtx;
+	SFT_LMetrics lmtx;
 	
 	/* Clear the window by overwriting everything with our background color. */
 	XRenderFillRectangle(dpy, PictOpOver,

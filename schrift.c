@@ -139,7 +139,7 @@ static int  cmap_fmt6(SFT_Font *font, uint_fast32_t table, uint_fast32_t charCod
 static int  glyph_id(SFT_Font *font, uint_fast32_t charCode, uint_fast32_t *glyph);
 /* glyph metrics lookup */
 static int  hor_metrics(SFT_Font *font, uint_fast32_t glyph, int *advanceWidth, int *leftSideBearing);
-static int  glyph_bbox(const struct SFT *sft, unsigned long outline, int box[4]);
+static int  glyph_bbox(const SFT *sft, unsigned long outline, int box[4]);
 /* decoding outlines */
 static int  outline_offset(SFT_Font *font, uint_fast32_t glyph, uint_fast32_t *offset);
 static int  simple_flags(SFT_Font *font, uint_fast32_t *offset, uint_fast16_t numPts, uint8_t *flags);
@@ -158,7 +158,7 @@ static void draw_lines(struct outline *outl, struct buffer buf);
 /* post-processing */
 static void post_process(struct buffer buf, uint8_t *image);
 /* glyph rendering */
-static int  render_outline(struct outline *outl, double transform[6], struct SFT_Image image);
+static int  render_outline(struct outline *outl, double transform[6], SFT_Image image);
 
 /* function implementations */
 
@@ -219,7 +219,7 @@ sft_freefont(SFT_Font *font)
 }
 
 int
-sft_lmetrics(const struct SFT *sft, struct SFT_LMetrics *metrics)
+sft_lmetrics(const SFT *sft, SFT_LMetrics *metrics)
 {
 	double factor;
 	uint_fast32_t hhea;
@@ -236,13 +236,13 @@ sft_lmetrics(const struct SFT *sft, struct SFT_LMetrics *metrics)
 }
 
 int
-sft_lookup(const struct SFT *sft, unsigned long codepoint, SFT_Glyph *glyph)
+sft_lookup(const SFT *sft, unsigned long codepoint, SFT_Glyph *glyph)
 {
 	return glyph_id(sft->font, codepoint, glyph);
 }
 
 int
-sft_hmetrics(const struct SFT *sft, SFT_Glyph glyph, struct SFT_HMetrics *metrics)
+sft_hmetrics(const SFT *sft, SFT_Glyph glyph, SFT_HMetrics *metrics)
 {
 	int adv, lsb;
 	double xScale = sft->xScale / sft->font->unitsPerEm;
@@ -255,8 +255,8 @@ sft_hmetrics(const struct SFT *sft, SFT_Glyph glyph, struct SFT_HMetrics *metric
 }
 
 int
-sft_kerning(const struct SFT *sft, SFT_Glyph leftGlyph, SFT_Glyph rightGlyph,
-            struct SFT_Kerning *kerning)
+sft_kerning(const SFT *sft, SFT_Glyph leftGlyph, SFT_Glyph rightGlyph,
+            SFT_Kerning *kerning)
 {
 	void *match;
 	uint_fast32_t offset;
@@ -321,7 +321,7 @@ sft_kerning(const struct SFT *sft, SFT_Glyph leftGlyph, SFT_Glyph rightGlyph,
 }
 
 int
-sft_extents(const struct SFT *sft, SFT_Glyph glyph, struct SFT_Extents *extents)
+sft_extents(const SFT *sft, SFT_Glyph glyph, SFT_Extents *extents)
 {
 	unsigned long outline;
 	int bbox[4];
@@ -339,11 +339,13 @@ sft_extents(const struct SFT *sft, SFT_Glyph glyph, struct SFT_Extents *extents)
 }
 
 int
-sft_render(const struct SFT *sft, SFT_Glyph glyph, struct SFT_Image image)
+sft_render(const SFT *sft, SFT_Glyph glyph, SFT_Image image)
 {
 	unsigned long outline;
 	double transform[6];
 	int bbox[4];
+	struct outline outl;
+
 	if (outline_offset(sft->font, glyph, &outline) < 0)
 		return -1;
 	if (!outline)
@@ -365,8 +367,6 @@ sft_render(const struct SFT *sft, SFT_Glyph glyph, struct SFT_Image image)
 		transform[5] = sft->yOffset - bbox[1];
 	}
 	
-	struct outline outl;
-
 	memset(&outl, 0, sizeof outl);
 	if (init_outline(&outl) < 0)
 		goto failure;
@@ -899,7 +899,7 @@ hor_metrics(SFT_Font *font, SFT_Glyph glyph, int *advanceWidth, int *leftSideBea
 }
 
 static int
-glyph_bbox(const struct SFT *sft, unsigned long outline, int box[4])
+glyph_bbox(const SFT *sft, unsigned long outline, int box[4])
 {
 	double xScale, yScale;
 	/* Read the bounding box from the font file verbatim. */
@@ -1451,7 +1451,7 @@ post_process(struct buffer buf, uint8_t *image)
 }
 
 static int
-render_outline(struct outline *outl, double transform[6], struct SFT_Image image)
+render_outline(struct outline *outl, double transform[6], SFT_Image image)
 {
 	struct cell *cells = NULL;
 	struct buffer buf;

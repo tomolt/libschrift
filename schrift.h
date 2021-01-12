@@ -23,8 +23,14 @@ extern "C" {
 
 #define SFT_DOWNWARD_Y 0x01
 
-typedef struct SFT_Font SFT_Font;
-typedef unsigned long   SFT_Glyph;
+typedef struct SFT          SFT;
+typedef struct SFT_Font     SFT_Font;
+typedef unsigned long       SFT_Glyph;
+typedef struct SFT_LMetrics SFT_LMetrics;
+typedef struct SFT_HMetrics SFT_HMetrics;
+typedef struct SFT_Kerning  SFT_Kerning;
+typedef struct SFT_Extents  SFT_Extents;
+typedef struct SFT_Image    SFT_Image;
 
 struct SFT
 {
@@ -75,13 +81,13 @@ SFT_Font *sft_loadmem (const void *mem, unsigned long size);
 SFT_Font *sft_loadfile(const char *filename);
 void      sft_freefont(SFT_Font *font);
 
-int sft_lmetrics(const struct SFT *sft, struct SFT_LMetrics *metrics);
-int sft_lookup  (const struct SFT *sft, unsigned long codepoint, SFT_Glyph *glyph);
-int sft_hmetrics(const struct SFT *sft, SFT_Glyph glyph, struct SFT_HMetrics *metrics);
-int sft_kerning (const struct SFT *sft, SFT_Glyph leftGlyph, SFT_Glyph rightGlyph,
-                 struct SFT_Kerning *kerning);
-int sft_extents (const struct SFT *sft, SFT_Glyph glyph, struct SFT_Extents *extents);
-int sft_render  (const struct SFT *sft, SFT_Glyph glyph, struct SFT_Image image);
+int sft_lmetrics(const SFT *sft, SFT_LMetrics *metrics);
+int sft_lookup  (const SFT *sft, unsigned long codepoint, SFT_Glyph *glyph);
+int sft_hmetrics(const SFT *sft, SFT_Glyph glyph, SFT_HMetrics *metrics);
+int sft_kerning (const SFT *sft, SFT_Glyph leftGlyph, SFT_Glyph rightGlyph,
+                 SFT_Kerning *kerning);
+int sft_extents (const SFT *sft, SFT_Glyph glyph, SFT_Extents *extents);
+int sft_render  (const SFT *sft, SFT_Glyph glyph, SFT_Image image);
 
 #ifdef __cplusplus
 }

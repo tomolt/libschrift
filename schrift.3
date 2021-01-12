@@ -17,17 +17,17 @@
 .Ft void
 .Fn sft_freefont "SFT_Font *font"
 .Ft int
-.Fn sft_lmetrics "const struct SFT *sft" "struct SFT_LMetrics *metrics"
+.Fn sft_lmetrics "const SFT *sft" "SFT_LMetrics *metrics"
 .Ft int
-.Fn sft_lookup "const struct SFT *sft" "unsigned long codepoint" "SFT_Glyph *glyph"
+.Fn sft_lookup "const SFT *sft" "unsigned long codepoint" "SFT_Glyph *glyph"
 .Ft int
-.Fn sft_hmetrics "const struct SFT *sft" "SFT_Glyph glyph" "struct SFT_HMetrics *metrics"
+.Fn sft_hmetrics "const SFT *sft" "SFT_Glyph glyph" "SFT_HMetrics *metrics"
 .Ft int
-.Fn sft_kerning "const struct SFT *sft" "SFT_Glyph leftGlyph" "SFT_Glyph rightGlyph" "struct SFT_Kerning *kerning"
+.Fn sft_kerning "const SFT *sft" "SFT_Glyph leftGlyph" "SFT_Glyph rightGlyph" "SFT_Kerning *kerning"
 .Ft int
-.Fn sft_extents "const struct SFT *sft" "SFT_Glyph glyph" "struct SFT_Extents *extents"
+.Fn sft_extents "const SFT *sft" "SFT_Glyph glyph" "SFT_Extents *extents"
 .Ft int
-.Fn sft_render "const struct SFT *sft" "SFT_Glyph glyph" "struct SFT_Image image"
+.Fn sft_render "const SFT *sft" "SFT_Glyph glyph" "SFT_Image image"
 .Sh DESCRIPTION
 The function
 .Fn sft_version
@@ -51,7 +51,7 @@ If the font has been loaded with
 the underlying memory region will have to be freed separately.
 .Ss the SFT structure
 Most functions take a
-.Vt struct SFT
+.Vt SFT
 as their primary argument.
 This is a structure to be filled out by the caller.
 It bundles multiple commonly needed parameters.

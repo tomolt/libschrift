@@ -28,14 +28,14 @@ usage(void)
 int
 main(int argc, char *argv[])
 {
-	struct SFT sft;
+	SFT sft;
 	SFT_Font *font;
 	const char *filename;
 	double size;
 	unsigned long cp, gid;
-	struct SFT_HMetrics hmtx;
-	struct SFT_Extents  extents;
-	struct SFT_Image image;
+	SFT_HMetrics hmtx;
+	SFT_Extents  extents;
+	SFT_Image    image;
 	int i;
 
 	filename = "resources/Ubuntu-R.ttf";

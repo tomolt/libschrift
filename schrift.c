@@ -517,6 +517,8 @@ init_font(SFT_Font *font)
 {
 	uint_fast32_t scalerType, head, hhea;
 
+	if (!is_safe_offset(font, 0, 12))
+		return -1;
 	/* Check for a compatible scalerType (magic number). */
 	scalerType = getu32(font, 0);
 	if (scalerType != FILE_MAGIC_ONE && scalerType != FILE_MAGIC_TWO)
@@ -747,8 +749,7 @@ gettable(SFT_Font *font, char tag[4], uint_fast32_t *offset)
 {
 	void *match;
 	unsigned int numTables;
-	if (font->size < 12)
-		return -1;
+	/* No need to bounds-check access to the first 12 bytes - this gets already checked by init_font(). */
 	numTables = getu16(font, 4);
 	if (!is_safe_offset(font, 12, (uint_fast32_t) numTables * 16))
 		return -1;

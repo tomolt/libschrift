@@ -12,20 +12,20 @@
 
 
 
-static int sft_glyph( struct SFT *sft, Display *dpy, GlyphSet glyphset, unsigned long cp )
+static int sft_glyph( SFT *sft, Display *dpy, GlyphSet glyphset, unsigned long cp )
 {
 #define ABORT( cp, m )   { printf( "codepoint 0x%04lX %s\n", cp, m ); return -__LINE__; }
 
   SFT_Glyph gid;  //  unsigned long gid;
   if( sft_lookup( sft, cp, &gid ) < 0 ) ABORT( cp, "missing" )
 
-  struct SFT_HMetrics hmtx;
+  SFT_HMetrics hmtx;
   if( sft_hmetrics( sft, gid, &hmtx ) < 0 ) ABORT( cp, "no H metrics" )
 
-  struct SFT_Extents e;
+  SFT_Extents e;
   if( sft_extents( sft, gid, &e ) < 0 ) ABORT( cp, "no extents" )
 
-  struct SFT_Image i = {.width  = (e.minWidth + 3) & ~3, .height = e.minHeight };
+  SFT_Image i = {.width  = (e.minWidth + 3) & ~3, .height = e.minHeight };
   char pixels[ i.width * i.height ];
   i.pixels = pixels;
 
@@ -74,8 +74,8 @@ int main( int argc, char *argv[] )
   GlyphSet glyphset = XRenderCreateGlyphSet( dpy, f );
 
 
-  struct SFT sft = { .flags = SFT_DOWNWARD_Y, .xScale = 16*s, .yScale = sft.xScale };
-  if( !(sft.font = sft_loadfile( "../fonts/arial-unicode-ms.ttf" )) ) END("TTF load failed")
+  SFT sft = { .flags = SFT_DOWNWARD_Y, .xScale = 16*s, .yScale = sft.xScale };
+  if( !(sft.font = sft_loadfile( "resources/Ubuntu-R.ttf" )) ) END("TTF load failed")
 
   for( XEvent e; !XNextEvent( dpy, &e ); )
   {
@@ -86,7 +86,7 @@ int main( int argc, char *argv[] )
       FILE *f = fopen( "resources/glass.utf8", "r" );
       if( !f ) END( "Cannot open input text" )
 
-      struct SFT_LMetrics m;
+      SFT_LMetrics m;
       sft_lmetrics( &sft, &m );
       int y = 20 + m.ascender + m.lineGap;
 
@@ -105,9 +105,10 @@ int main( int argc, char *argv[] )
 
       fclose( f );
     }
-    else if( e.type == ClientMessage )
+    else if( e.type == ClientMessage ) {
       if( (Atom)e.xclient.data.l[0] == wmDeleteWindow )
         break;
+    }
   }
 
   sft_freefont( sft.font );

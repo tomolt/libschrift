@@ -1,5 +1,6 @@
 *.o
 libschrift.a
+/demo
 /sftdemo
 /stress
 

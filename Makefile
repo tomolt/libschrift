@@ -6,12 +6,17 @@ include config.mk
 
 .PHONY: all clean install uninstall
 
-all: libschrift.a sftdemo stress
+all: libschrift.a demo sftdemo stress
 
 libschrift.a: schrift.o
 	$(AR) rc $@ schrift.o
 	$(RANLIB) $@
 schrift.o: schrift.h
+
+demo: demo.o libschrift.a
+	$(LD) $(LDFLAGS) $@.o -o $@ -L$(X11LIB) -L. -lX11 -lXrender -lschrift -lm
+demo.o: demo.c schrift.h util/utf8_to_utf32.h
+	$(CC) -c $(CFLAGS) $(@:.o=.c) -o $@ $(CPPFLAGS) -I$(X11INC)
 
 sftdemo: sftdemo.o libschrift.a
 	$(LD) $(LDFLAGS) $@.o -o $@ -L$(X11LIB) -L. -lX11 -lXrender -lschrift -lm
@@ -27,6 +32,7 @@ clean:
 	rm -f *.o
 	rm -f util/*.o
 	rm -f libschrift.a
+	rm -f demo
 	rm -f sftdemo
 	rm -f stress
 

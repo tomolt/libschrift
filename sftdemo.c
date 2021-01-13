@@ -229,7 +229,7 @@ draw(unsigned int width, unsigned int height)
 	double y = lmtx.ascender + lmtx.lineGap;
 	for (int i = 0; i < numlines; ++i) {
 		drawtext(20, (int) round(y), lines[i]);
-		y += (lmtx.ascender + lmtx.descender + lmtx.lineGap) * 1.5;
+		y += (lmtx.ascender + lmtx.descender + lmtx.lineGap) * 2.0;
 	}
 }
 
@@ -297,7 +297,7 @@ main(int argc, char *argv[])
 	double size;
 
 	/* Initialize our parameters with some default values. */
-	filename = "resources/Ubuntu-R.ttf";
+	filename = "resources/FiraGO-Regular.ttf";
 	textfile = "resources/glass.utf8";
 	size = 16.0;
 	bgcolor = (XRenderColor) { 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF };

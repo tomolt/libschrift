@@ -10,7 +10,7 @@
 #include "util/utf8_to_utf32.h"
 #include "schrift.h"
 
-static int add_glyph(SFT *sft, Display *dpy, GlyphSet glyphset, unsigned long cp)
+static int add_glyph(Display *dpy, GlyphSet glyphset, SFT *sft, unsigned long cp)
 {
 #define ABORT(cp, m) do { fprintf(stderr, "codepoint 0x%04lX %s\n", cp, m); return -1; } while (0)
 
@@ -81,10 +81,10 @@ int main()
 
 	SFT sft = {
 		.xScale = 16*s,
-		.yScale = sft.xScale,
+		.yScale = 16*s,
 		.flags  = SFT_DOWNWARD_Y,
 	};
-	sft.font = sft_loadfile("resources/Ubuntu-R.ttf");
+	sft.font = sft_loadfile("resources/FiraGO-Regular.ttf");
 	if (sft.font == NULL)
 		END("TTF load failed");
 
@@ -110,7 +110,7 @@ int main()
 				n = utf8_to_utf32((unsigned char *) text, codepoints, sizeof(text));  // (const uint8_t *)
 
 				for (int i = 0; i < n; i++) {
-					add_glyph(&sft, dpy, glyphset, codepoints[i]);
+					add_glyph(dpy, glyphset, &sft, codepoints[i]);
 				}
 				XRenderCompositeString32(dpy, PictOpOver, fgpic, pic, NULL, glyphset, 0, 0, 20, y, codepoints, n);
 

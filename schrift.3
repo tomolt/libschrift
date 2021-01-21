@@ -21,11 +21,9 @@
 .Ft int
 .Fn sft_lookup "const SFT *sft" "unsigned long codepoint" "SFT_Glyph *glyph"
 .Ft int
-.Fn sft_hmetrics "const SFT *sft" "SFT_Glyph glyph" "SFT_HMetrics *metrics"
+.Fn sft_gmetrics "const SFT *sft" "SFT_Glyph glyph" "SFT_GMetrics *metrics"
 .Ft int
 .Fn sft_kerning "const SFT *sft" "SFT_Glyph leftGlyph" "SFT_Glyph rightGlyph" "SFT_Kerning *kerning"
-.Ft int
-.Fn sft_extents "const SFT *sft" "SFT_Glyph glyph" "SFT_Extents *extents"
 .Ft int
 .Fn sft_render "const SFT *sft" "SFT_Glyph glyph" "SFT_Image image"
 .Sh DESCRIPTION
@@ -105,7 +103,7 @@ The default amount of horizontal padding between consecutive lines
 .El
 .sp
 When displaying multiple glyphs in a line, you have to keep track of the pen position.
-.Fn sft_hmetrics
+.Fn sft_gmetrics
 tells you where to draw the next glyph with respect to the pen position,
 and how to update it after rendering the glyph.
 .sp
@@ -117,11 +115,18 @@ The fields are as follows:
 How much the pen position should advance to the right after rendering the glyph
 .It Va leftSideBearing
 The offset that should be applied along the X axis from the pen position to the edge of the glyph image
+.It Va yOffset
+An offset along the Y axis relative to the pen position that should be applied when
+displaying the glyph
+.It Va minWidth
+The minimum width that an image needs such that the glyph can be properly rendered into it
+.It Va minHeight
+The minimum height that an image needs such that the glyph can be properly rendered into it
 .El
 .sp
 Some sequences of glyphs may look awkward if they're layed out naively.
 For example, the gap between the two characters \(dqVA\(dq might look disproportionally large.
-Kerning is a way to combat this phenomenon, by slightly moving the second character closer or further
+Kerning is a way to combat this artifact, by slightly moving the second character closer or further
 away by a small amount.
 .Fn sft_kerning
 may be used to retrieve kerning information for a given pair of glyph ids.
@@ -136,22 +141,6 @@ An amount that should be added to the pen's X position in-between the two glyphs
 An amount that should be added to the pen's Y position in-between the two glyphs
 .El
 .Ss Rendering glyphs
-.Fn sft_extents
-computes bounding box information of a glyph without having to render it.
-.sp
-This function writes its output into the structure pointed to by
-.Va extents .
-The fields are as follows:
-.Bl -tag -width 8
-.It Va yOffset
-An offset along the Y axis relative to the pen position that should be applied when
-displaying the glyph
-.It Va minWidth
-The minimum width that an image needs such that the glyph can be properly rendered into it
-.It Va minHeight
-The minimum height that an image needs such that the glyph can be properly rendered into it
-.El
-.sp
 To actually render a glyph into a easily-displayable raster image, use
 .Fn sft_render .
 .sp

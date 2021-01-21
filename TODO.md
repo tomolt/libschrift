@@ -28,9 +28,8 @@ The following bullet points are listed in no particular order.
 - right-to-left text support.
 
 ## Demo Applications
-- The comments in `sftdemo` can still be improved.
-- Rename `sftdemo` to `x11demo`.
-- Supply a `gl3demo`.
+- A separate demo that works on Windows / non-X11 platforms.
+  SDL2 seems like a good idea.
 
 ## Documentation
 - Example snippets in the man page.

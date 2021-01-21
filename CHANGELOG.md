@@ -1,11 +1,12 @@
 # Changelog
 
 ## v0.10.0
-There has been a large overhaul of the public API.
-Most notably the function `sft_char` has been replaced by a set of more fine-grained functions,
-namely `sft_lookup`, `sft_hmetrics`, `sft_extents`, `sft_render`.
-Explanations of these new functions' semantics can be found in the man page.
-Also, struct types are now typedef'd, so you can now drop the `struct` keyword before libschrift's compound types.
+- There has been a large overhaul of the public API.
+  Most notably the function `sft_char` has been replaced by a set of more fine-grained functions,
+  namely `sft_lookup`, `sft_hmetrics`, `sft_extents`, `sft_render`.
+  Explanations of these new functions' semantics can be found in the man page.
+- struct types are now typedef'd, so you can now drop the `struct` keyword before libschrift's compound types.
+- The demo program received a complete rewrite courtesy of Andor Badi.
 
 ## v0.9.1
 For any user of the library, nothing should have changed at all since v0.9.0, except that

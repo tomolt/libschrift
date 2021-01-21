@@ -22,17 +22,13 @@ static int add_glyph(Display *dpy, GlyphSet glyphset, SFT *sft, unsigned long cp
 	if (sft_lookup(sft, cp, &gid) < 0)
 		ABORT(cp, "missing");
 
-	SFT_HMetrics hmtx;
-	if (sft_hmetrics(sft, gid, &hmtx) < 0)
-		ABORT(cp, "bad horizontal metrics");
-
-	SFT_Extents exts;
-	if (sft_extents(sft, gid, &exts) < 0)
-		ABORT(cp, "bad extents");
+	SFT_GMetrics mtx;
+	if (sft_gmetrics(sft, gid, &mtx) < 0)
+		ABORT(cp, "bad glyph metrics");
 
 	SFT_Image img = {
-		.width  = (exts.minWidth + 3) & ~3,
-		.height = exts.minHeight,
+		.width  = (mtx.minWidth + 3) & ~3,
+		.height = mtx.minHeight,
 	};
 	char pixels[img.width * img.height];
 	img.pixels = pixels;
@@ -40,11 +36,11 @@ static int add_glyph(Display *dpy, GlyphSet glyphset, SFT *sft, unsigned long cp
 		ABORT(cp, "not rendered");
 
 	XGlyphInfo info = {
-		.x      = (short) -hmtx.leftSideBearing,
-		.y      = (short) -exts.yOffset,
+		.x      = (short) -mtx.leftSideBearing,
+		.y      = (short) -mtx.yOffset,
 		.width  = (unsigned short) img.width,
 		.height = (unsigned short) img.height,
-		.xOff   = (short) hmtx.advanceWidth,
+		.xOff   = (short) mtx.advanceWidth,
 		.yOff   = 0
 	};
 	Glyph g = cp;

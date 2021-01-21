@@ -27,6 +27,7 @@ typedef struct SFT          SFT;
 typedef struct SFT_Font     SFT_Font;
 typedef unsigned long       SFT_Glyph;
 typedef struct SFT_LMetrics SFT_LMetrics;
+typedef struct SFT_GMetrics SFT_GMetrics;
 typedef struct SFT_HMetrics SFT_HMetrics;
 typedef struct SFT_Kerning  SFT_Kerning;
 typedef struct SFT_Extents  SFT_Extents;
@@ -47,6 +48,15 @@ struct SFT_LMetrics
 	double ascender;
 	double descender;
 	double lineGap;
+};
+
+struct SFT_GMetrics
+{
+	double advanceWidth;
+	double leftSideBearing;
+	int    yOffset;
+	int    minWidth;
+	int    minHeight;
 };
 
 struct SFT_HMetrics
@@ -83,6 +93,7 @@ void      sft_freefont(SFT_Font *font);
 
 int sft_lmetrics(const SFT *sft, SFT_LMetrics *metrics);
 int sft_lookup  (const SFT *sft, unsigned long codepoint, SFT_Glyph *glyph);
+int sft_gmetrics(const SFT *sft, SFT_Glyph glyph, SFT_GMetrics *metrics);
 int sft_hmetrics(const SFT *sft, SFT_Glyph glyph, SFT_HMetrics *metrics);
 int sft_kerning (const SFT *sft, SFT_Glyph leftGlyph, SFT_Glyph rightGlyph,
                  SFT_Kerning *kerning);

@@ -33,8 +33,7 @@ main(int argc, char *argv[])
 	const char *filename;
 	double size;
 	unsigned long cp, gid;
-	SFT_HMetrics hmtx;
-	SFT_Extents  extents;
+	SFT_GMetrics mtx;
 	SFT_Image    image;
 	int i;
 
@@ -68,12 +67,10 @@ main(int argc, char *argv[])
 		for (cp = 32; cp < 128; ++cp) {
 			if (sft_lookup(&sft, cp, &gid) < 0)
 				continue;
-			if (sft_hmetrics(&sft, gid, &hmtx) < 0)
+			if (sft_gmetrics(&sft, gid, &mtx) < 0)
 				continue;
-			if (sft_extents(&sft, gid, &extents) < 0)
-				continue;
-			image.width  = extents.minWidth;
-			image.height = extents.minHeight;
+			image.width  = mtx.minWidth;
+			image.height = mtx.minHeight;
 			image.pixels = malloc((size_t) image.width * (size_t) image.height);
 			sft_render(&sft, gid, image);
 			free(image.pixels);

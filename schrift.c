@@ -249,6 +249,24 @@ sft_lookup(const SFT *sft, unsigned long codepoint, SFT_Glyph *glyph)
 }
 
 int
+sft_gmetrics(const SFT *sft, SFT_Glyph glyph, SFT_GMetrics *metrics)
+{
+	SFT_HMetrics hmtx;
+	SFT_Extents  exts;
+	memset(metrics, 0, sizeof *metrics);
+	if (sft_hmetrics(sft, glyph, &hmtx) < 0)
+		return -1;
+	if (sft_extents(sft, glyph, &exts) < 0)
+		return -1;
+	metrics->advanceWidth = hmtx.advanceWidth;
+	metrics->leftSideBearing = hmtx.leftSideBearing;
+	metrics->yOffset = exts.yOffset;
+	metrics->minWidth = exts.minWidth;
+	metrics->minHeight = exts.minHeight;
+	return 0;
+}
+
+int
 sft_hmetrics(const SFT *sft, SFT_Glyph glyph, SFT_HMetrics *metrics)
 {
 	int adv, lsb;

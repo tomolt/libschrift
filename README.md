@@ -25,7 +25,7 @@ Documentation
 -------------
 For documentation on how to use *libschrift* in your own programs,
 refer to the *schrift(3)* man page,
-the source code of the bundled example program *sftdemo*,
+the source code of the bundled *demo*,
 as well as the header file *schrift.h*.
 
 You can also view the man page in your browser at
@@ -39,5 +39,5 @@ Also, you can probably expect a redesign of the public API before version 1.0.
 
 Visual Quality
 --------------
-A screenshot from the bundled example program `sftdemo`:
+A screenshot of the demo program:
 ![demo screenshot](resources/demo-screenshot.png)

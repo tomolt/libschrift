@@ -277,19 +277,6 @@ sft_gmetrics(const SFT *sft, SFT_Glyph glyph, SFT_GMetrics *metrics)
 }
 
 int
-sft_hmetrics(const SFT *sft, SFT_Glyph glyph, SFT_HMetrics *metrics)
-{
-	int adv, lsb;
-	double xScale = sft->xScale / sft->font->unitsPerEm;
-	memset(metrics, 0, sizeof *metrics);
-	if (hor_metrics(sft->font, glyph, &adv, &lsb) < 0)
-		return -1;
-	metrics->advanceWidth    = adv * xScale;
-	metrics->leftSideBearing = lsb * xScale + sft->xOffset;
-	return 0;
-}
-
-int
 sft_kerning(const SFT *sft, SFT_Glyph leftGlyph, SFT_Glyph rightGlyph,
             SFT_Kerning *kerning)
 {
@@ -352,24 +339,6 @@ sft_kerning(const SFT *sft, SFT_Glyph leftGlyph, SFT_Glyph rightGlyph,
 	kerning->xShift = kerning->xShift / sft->font->unitsPerEm * sft->xScale;
 	kerning->yShift = kerning->yShift / sft->font->unitsPerEm * sft->yScale;
 
-	return 0;
-}
-
-int
-sft_extents(const SFT *sft, SFT_Glyph glyph, SFT_Extents *extents)
-{
-	unsigned long outline;
-	int bbox[4];
-	memset(extents, 0, sizeof *extents);
-	if (outline_offset(sft->font, glyph, &outline) < 0)
-		return -1;
-	if (!outline)
-		return 0;
-	if (glyph_bbox(sft, outline, bbox) < 0)
-		return -1;
-	extents->minWidth  = bbox[2] - bbox[0] + 1;
-	extents->minHeight = bbox[3] - bbox[1] + 1;
-	extents->yOffset   = sft->flags & SFT_DOWNWARD_Y ? -bbox[3] : bbox[1];
 	return 0;
 }
 

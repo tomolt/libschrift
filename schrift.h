@@ -28,9 +28,7 @@ typedef struct SFT_Font     SFT_Font;
 typedef unsigned long       SFT_Glyph;
 typedef struct SFT_LMetrics SFT_LMetrics;
 typedef struct SFT_GMetrics SFT_GMetrics;
-typedef struct SFT_HMetrics SFT_HMetrics;
 typedef struct SFT_Kerning  SFT_Kerning;
-typedef struct SFT_Extents  SFT_Extents;
 typedef struct SFT_Image    SFT_Image;
 
 struct SFT
@@ -59,23 +57,10 @@ struct SFT_GMetrics
 	int    minHeight;
 };
 
-struct SFT_HMetrics
-{
-	double advanceWidth;
-	double leftSideBearing;
-};
-
 struct SFT_Kerning
 {
 	double xShift;
 	double yShift;
-};
-
-struct SFT_Extents
-{
-	int yOffset;
-	int minWidth;
-	int minHeight;
 };
 
 struct SFT_Image
@@ -94,10 +79,8 @@ void      sft_freefont(SFT_Font *font);
 int sft_lmetrics(const SFT *sft, SFT_LMetrics *metrics);
 int sft_lookup  (const SFT *sft, unsigned long codepoint, SFT_Glyph *glyph);
 int sft_gmetrics(const SFT *sft, SFT_Glyph glyph, SFT_GMetrics *metrics);
-int sft_hmetrics(const SFT *sft, SFT_Glyph glyph, SFT_HMetrics *metrics);
 int sft_kerning (const SFT *sft, SFT_Glyph leftGlyph, SFT_Glyph rightGlyph,
                  SFT_Kerning *kerning);
-int sft_extents (const SFT *sft, SFT_Glyph glyph, SFT_Extents *extents);
 int sft_render  (const SFT *sft, SFT_Glyph glyph, SFT_Image image);
 
 #ifdef __cplusplus

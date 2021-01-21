@@ -14,14 +14,14 @@ libschrift.a: schrift.o
 schrift.o: schrift.h
 
 demo: demo.o libschrift.a
-	$(LD) $(LDFLAGS) $@.o -o $@ -L$(X11LIB) -L. -lX11 -lXrender -lschrift -lm
+	$(LD) $(EXTRAS_LDFLAGS) $@.o -o $@ -L$(X11LIB) -L. -lX11 -lXrender -lschrift -lm
 demo.o: demo.c schrift.h util/utf8_to_utf32.h
-	$(CC) -c $(CFLAGS) $(@:.o=.c) -o $@ $(CPPFLAGS) -I$(X11INC)
+	$(CC) -c $(EXTRAS_CFLAGS) $(@:.o=.c) -o $@ $(EXTRAS_CPPFLAGS) -I$(X11INC)
 
 stress: stress.o libschrift.a
-	$(LD) $(LDFLAGS) $@.o -o $@ -L. -lschrift -lm
+	$(LD) $(EXTRAS_LDFLAGS) $@.o -o $@ -L. -lschrift -lm
 stress.o: stress.c schrift.h util/arg.h
-	$(CC) -c $(CFLAGS) $(@:.o=.c) -o $@ $(CPPFLAGS)
+	$(CC) -c $(EXTRAS_CFLAGS) $(@:.o=.c) -o $@ $(EXTRAS_CPPFLAGS)
 
 clean:
 	rm -f *.o

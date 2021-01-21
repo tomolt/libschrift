@@ -1,5 +1,9 @@
-
-// MINIMAL libschrift demo:  cc -Wall -lX11 -lXrender -lm -I. schrift.c demo.c -o t && ./t
+/*
+ * A simple command line application that shows how to
+ * use libschrift with X11 via XRender.
+ * See LICENSE file for copyright and license details.
+ * Contributed by Andor Badi.
+ */
 
 #include <stdio.h>
 #include <string.h>

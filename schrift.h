@@ -17,7 +17,7 @@
 #ifndef SCHRIFT_H
 #define SCHRIFT_H 1
 
-#include <stdint.h> /* uint_fast32_t */
+#include <stdint.h> /* uint_fast32_t, uint_least32_t */
 
 #ifdef __cplusplus
 extern "C" {
@@ -27,6 +27,7 @@ extern "C" {
 
 typedef struct SFT          SFT;
 typedef struct SFT_Font     SFT_Font;
+typedef uint_least32_t      SFT_UChar; /* Guaranteed to be compatible with char32_t. */
 typedef uint_fast32_t       SFT_Glyph;
 typedef struct SFT_LMetrics SFT_LMetrics;
 typedef struct SFT_GMetrics SFT_GMetrics;
@@ -79,7 +80,7 @@ SFT_Font *sft_loadfile(const char *filename);
 void      sft_freefont(SFT_Font *font);
 
 int sft_lmetrics(const SFT *sft, SFT_LMetrics *metrics);
-int sft_lookup  (const SFT *sft, unsigned long codepoint, SFT_Glyph *glyph);
+int sft_lookup  (const SFT *sft, SFT_UChar codepoint, SFT_Glyph *glyph);
 int sft_gmetrics(const SFT *sft, SFT_Glyph glyph, SFT_GMetrics *metrics);
 int sft_kerning (const SFT *sft, SFT_Glyph leftGlyph, SFT_Glyph rightGlyph,
                  SFT_Kerning *kerning);

@@ -145,7 +145,7 @@ static int  cmap_fmt6(SFT_Font *font, uint_fast32_t table, SFT_UChar charCode, u
 static int  glyph_id(SFT_Font *font, SFT_UChar charCode, uint_fast32_t *glyph);
 /* glyph metrics lookup */
 static int  hor_metrics(SFT_Font *font, uint_fast32_t glyph, int *advanceWidth, int *leftSideBearing);
-static int  glyph_bbox(const SFT *sft, unsigned long outline, int box[4]);
+static int  glyph_bbox(const SFT *sft, uint_fast32_t outline, int box[4]);
 /* decoding outlines */
 static int  outline_offset(SFT_Font *font, uint_fast32_t glyph, uint_fast32_t *offset);
 static int  simple_flags(SFT_Font *font, uint_fast32_t *offset, uint_fast16_t numPts, uint8_t *flags);
@@ -176,7 +176,7 @@ sft_version(void)
 
 /* Loads a font from a user-supplied memory range. */
 SFT_Font *
-sft_loadmem(const void *mem, unsigned long size)
+sft_loadmem(const void *mem, size_t size)
 {
 	SFT_Font *font;
 	if (size > UINT32_MAX) {
@@ -252,7 +252,7 @@ sft_gmetrics(const SFT *sft, SFT_Glyph glyph, SFT_GMetrics *metrics)
 {
 	int adv, lsb;
 	double xScale = sft->xScale / sft->font->unitsPerEm;
-	unsigned long outline;
+	uint_fast32_t outline;
 	int bbox[4];
 
 	memset(metrics, 0, sizeof *metrics);
@@ -344,7 +344,7 @@ sft_kerning(const SFT *sft, SFT_Glyph leftGlyph, SFT_Glyph rightGlyph,
 int
 sft_render(const SFT *sft, SFT_Glyph glyph, SFT_Image image)
 {
-	unsigned long outline;
+	uint_fast32_t outline;
 	double transform[6];
 	int bbox[4];
 	Outline outl;
@@ -903,7 +903,7 @@ hor_metrics(SFT_Font *font, SFT_Glyph glyph, int *advanceWidth, int *leftSideBea
 }
 
 static int
-glyph_bbox(const SFT *sft, unsigned long outline, int box[4])
+glyph_bbox(const SFT *sft, uint_fast32_t outline, int box[4])
 {
 	double xScale, yScale;
 	/* Read the bounding box from the font file verbatim. */

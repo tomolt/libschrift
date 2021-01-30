@@ -17,6 +17,7 @@
 #ifndef SCHRIFT_H
 #define SCHRIFT_H 1
 
+#include <stddef.h> /* size_t */
 #include <stdint.h> /* uint_fast32_t, uint_least32_t */
 
 #ifdef __cplusplus
@@ -75,7 +76,7 @@ struct SFT_Image
 
 const char *sft_version(void);
 
-SFT_Font *sft_loadmem (const void *mem, unsigned long size);
+SFT_Font *sft_loadmem (const void *mem, size_t size);
 SFT_Font *sft_loadfile(const char *filename);
 void      sft_freefont(SFT_Font *font);
 

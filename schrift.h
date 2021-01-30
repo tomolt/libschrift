@@ -17,6 +17,8 @@
 #ifndef SCHRIFT_H
 #define SCHRIFT_H 1
 
+#include <stdint.h> /* uint_fast32_t */
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -25,7 +27,7 @@ extern "C" {
 
 typedef struct SFT          SFT;
 typedef struct SFT_Font     SFT_Font;
-typedef unsigned long       SFT_Glyph;
+typedef uint_fast32_t       SFT_Glyph;
 typedef struct SFT_LMetrics SFT_LMetrics;
 typedef struct SFT_GMetrics SFT_GMetrics;
 typedef struct SFT_Kerning  SFT_Kerning;

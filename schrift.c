@@ -29,6 +29,7 @@
 # define WIN32_LEAN_AND_MEAN 1
 # include <windows.h>
 #else
+# define _POSIX_C_SOURCE 1
 # include <fcntl.h>
 # include <sys/mman.h>
 # include <sys/stat.h>

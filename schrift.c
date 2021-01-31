@@ -134,8 +134,8 @@ static void unmap_file(SFT_Font *font);
 static int  init_font (SFT_Font *font);
 /* simple mathematical operations */
 static Point midpoint(Point a, Point b);
-static void transform_points(uint_fast16_t numPts, Point *points, double trf[6]);
-static void clip_points(uint_fast16_t numPts, Point *points, int width, int height);
+static void transform_points(unsigned int numPts, Point *points, double trf[6]);
+static void clip_points(unsigned int numPts, Point *points, int width, int height);
 /* 'outline' data structure management */
 static int  init_outline(Outline *outl);
 static void free_outline(Outline *outl);
@@ -562,10 +562,10 @@ midpoint(Point a, Point b)
 
 /* Applies an affine linear transformation matrix to a set of points. */
 static void
-transform_points(uint_fast16_t numPts, Point *points, double trf[6])
+transform_points(unsigned int numPts, Point *points, double trf[6])
 {
 	Point pt;
-	uint_fast16_t i;
+	unsigned int i;
 	for (i = 0; i < numPts; ++i) {
 		pt = points[i];
 		points[i] = (Point) {
@@ -576,10 +576,10 @@ transform_points(uint_fast16_t numPts, Point *points, double trf[6])
 }
 
 static void
-clip_points(uint_fast16_t numPts, Point *points, int width, int height)
+clip_points(unsigned int numPts, Point *points, int width, int height)
 {
 	Point pt;
-	uint_fast16_t i;
+	unsigned int i;
 
 	for (i = 0; i < numPts; ++i) {
 		pt = points[i];
@@ -773,7 +773,8 @@ gettable(SFT_Font *font, char tag[4], uint_fast32_t *offset)
 static int
 cmap_fmt4(SFT_Font *font, uint_fast32_t table, SFT_UChar charCode, SFT_Glyph *glyph)
 {
-	uintptr_t segIdxX2;
+	const uint8_t *segPtr;
+	uint_fast32_t segIdxX2;
 	uint_fast32_t endCodes, startCodes, idDeltas, idRangeOffsets, idOffset;
 	uint_fast16_t segCountX2, idRangeOffset, startCode, shortCode, idDelta, id;
 	uint8_t key[2] = { (uint8_t) (charCode >> 8), (uint8_t) charCode };
@@ -797,8 +798,8 @@ cmap_fmt4(SFT_Font *font, uint_fast32_t table, SFT_UChar charCode, SFT_Glyph *gl
 		return -1;
 	/* Find the segment that contains shortCode by binary searching over
 	 * the highest codes in the segments. */
-	segIdxX2 = (uintptr_t) csearch(key, font->memory + endCodes,
-		segCountX2 / 2, 2, cmpu16) - (uintptr_t) (font->memory + endCodes);
+	segPtr = csearch(key, font->memory + endCodes, segCountX2 / 2, 2, cmpu16);
+	segIdxX2 = (uint_fast32_t) (segPtr - (font->memory + endCodes));
 	/* Look up segment info from the arrays & short circuit if the spec requires. */
 	if ((startCode = getu16(font, startCodes + segIdxX2)) > shortCode)
 		return 0;

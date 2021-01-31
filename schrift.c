@@ -105,8 +105,8 @@ struct Outline
 struct Raster
 {
 	Cell *cells;
-	int width;
-	int height;
+	int   width;
+	int   height;
 };
 
 struct SFT_Font
@@ -125,13 +125,13 @@ struct SFT_Font
 
 /* function declarations */
 /* generic utility functions */
-static void *sft_reallocarray(void *optr, size_t nmemb, size_t size);
+static void *reallocarray(void *optr, size_t nmemb, size_t size);
 static inline int fast_floor(double x);
-static inline int fast_ceil(double x);
+static inline int fast_ceil (double x);
 /* file loading */
-static int  map_file(SFT_Font *font, const char *filename);
+static int  map_file  (SFT_Font *font, const char *filename);
 static void unmap_file(SFT_Font *font);
-static int  init_font(SFT_Font *font);
+static int  init_font (SFT_Font *font);
 /* simple mathematical operations */
 static Point midpoint(Point a, Point b);
 static void transform_points(uint_fast16_t numPts, Point *points, double trf[6]);
@@ -139,9 +139,9 @@ static void clip_points(uint_fast16_t numPts, Point *points, int width, int heig
 /* 'outline' data structure management */
 static int  init_outline(Outline *outl);
 static void free_outline(Outline *outl);
-static int  grow_points(Outline *outl);
-static int  grow_curves(Outline *outl);
-static int  grow_lines(Outline *outl);
+static int  grow_points (Outline *outl);
+static int  grow_curves (Outline *outl);
+static int  grow_lines  (Outline *outl);
 /* TTF parsing utilities */
 static inline int is_safe_offset(SFT_Font *font, uint_fast32_t offset, uint_fast32_t margin);
 static void *csearch(const void *key, const void *base,
@@ -410,7 +410,7 @@ failure:
  * A wrapper for realloc() that takes two size args like calloc().
  * Useful because it eliminates common integer overflow bugs. */
 static void *
-sft_reallocarray(void *optr, size_t nmemb, size_t size)
+reallocarray(void *optr, size_t nmemb, size_t size)
 {
 	if ((nmemb >= MUL_NO_OVERFLOW || size >= MUL_NO_OVERFLOW) &&
 	    nmemb > 0 && SIZE_MAX / nmemb < size) {
@@ -636,7 +636,7 @@ grow_points(Outline *outl)
 	if (outl->capPoints > UINT16_MAX / 2)
 		return -1;
 	cap = (uint_fast16_t) (2U * outl->capPoints);
-	if (!(mem = sft_reallocarray(outl->points, cap, sizeof *outl->points)))
+	if (!(mem = reallocarray(outl->points, cap, sizeof *outl->points)))
 		return -1;
 	outl->capPoints = (uint_least16_t) cap;
 	outl->points    = mem;
@@ -652,7 +652,7 @@ grow_curves(Outline *outl)
 	if (outl->capCurves > UINT16_MAX / 2)
 		return -1;
 	cap = (uint_fast16_t) (2U * outl->capCurves);
-	if (!(mem = sft_reallocarray(outl->curves, cap, sizeof *outl->curves)))
+	if (!(mem = reallocarray(outl->curves, cap, sizeof *outl->curves)))
 		return -1;
 	outl->capCurves = (uint_least16_t) cap;
 	outl->curves    = mem;
@@ -668,7 +668,7 @@ grow_lines(Outline *outl)
 	if (outl->capLines > UINT16_MAX / 2)
 		return -1;
 	cap = (uint_fast16_t) (2U * outl->capLines);
-	if (!(mem = sft_reallocarray(outl->lines, cap, sizeof *outl->lines)))
+	if (!(mem = reallocarray(outl->lines, cap, sizeof *outl->lines)))
 		return -1;
 	outl->capLines = (uint_least16_t) cap;
 	outl->lines    = mem;

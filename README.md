@@ -2,9 +2,7 @@ libschrift
 ==========
 *libschrift* is a lightweight TrueType font rendering library.
 
-It can be seen as a much smaller, but more limited alternative to *FreeType2*.
-
-Specifically, *libschrift* aims to:
+*libschrift* aims to:
 - Be as simple and easy-to-use as possible.
   See: <https://www.suckless.org/philosophy/>
 - Make correct (as in artifact-free, Unicode-aware etc.)
@@ -12,6 +10,16 @@ Specifically, *libschrift* aims to:
 - Be reasonably secure, which especially means to not crash,
   leak memory / resources or expose major security
   vulnerabilities on corrupted / malicious / random inputs.
+
+Features
+--------
+- Unicode support
+- Very small (~1500 LoC)
+- No dependencies on anything other than the C standard library.
+  (POSIX / WINAPI are only used for memory mapping, which is not essential.)
+- Should work with any C99 compiler.
+- Highly portable. At least some versions have been tested on
+  Linux, OpenBSD, FreeBSD, Windows, iOS, and macOS.
 
 Limitations
 -----------

@@ -4,8 +4,13 @@ on:
   pull_request:
 
 jobs:
-  build:
-    runs-on: [ ubuntu-latest, macos-latest ]
+  linux-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - run: make
+  macos-build:
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v3
       - run: make

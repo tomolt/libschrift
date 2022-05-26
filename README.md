@@ -27,6 +27,7 @@ Limitations
 - Support for most TrueType (.ttf) and certain OpenType (.otf) fonts.
   No bitmap or PostScript fonts.
 - No hinting. Especially no auto-hinting like *FreeType2*.
+- No color emojis.
 
 Documentation
 -------------

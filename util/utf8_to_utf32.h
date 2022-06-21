@@ -33,12 +33,7 @@ utf8_to_utf32(const uint8_t *utf8, uint32_t *utf32, int max)
 			if ((*utf8 & 0xc0U) != 0x80U) return 0;
 			c += (*utf8++ & 0x3fU);
 			if ((c & 0xFFFFF800U) == 0xD800U) return 0;
-			if (c >= 0x10000U) {
-				c -= 0x10000U;
-				if (i + 2 > max) return 0;
-				utf32[i++] = 0xD800U | (0x3ffU & (c >> 10));
-				utf32[i++] = 0xDC00U | (0x3ffU & (c      ));
-			}
+            utf32[i++] = c;
 		} else return 0;
 	}
 	utf32[i] = 0;

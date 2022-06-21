@@ -851,7 +851,8 @@ cmap_fmt12_13(SFT_Font *font, uint_fast32_t table, SFT_UChar charCode, SFT_Glyph
 
 	*glyph = 0;
 
-	if (!is_safe_offset(font, table, 4))
+    /* check that the entire header is present */
+	if (!is_safe_offset(font, table, 16))
 		return -1;
 
 	len = getu32(font, table + 4);

@@ -1,5 +1,8 @@
 # Changelog
 
+## v0.11.0
+- Support for Unicode codepoints outside of the Basic Multilingual Plane
+
 ## v0.10.1
 - Fixed build on Mac OS (correct integer type usage)
 - Basic CI integration

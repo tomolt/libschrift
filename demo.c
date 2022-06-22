@@ -84,7 +84,7 @@ int main()
 		.yScale = 16*s,
 		.flags  = SFT_DOWNWARD_Y,
 	};
-	sft.font = sft_loadfile("resources/FiraGO-Regular.ttf");
+	sft.font = sft_loadfile("resources/FiraGO-Regular_extended_with_NotoSansEgyptianHieroglyphs-Regular.ttf");
 	if (sft.font == NULL)
 		END("TTF load failed");
 

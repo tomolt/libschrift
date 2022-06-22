@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.10.1
+- Fixed build on Mac OS (correct integer type usage)
+- Basic CI integration
+
 ## v0.10.0
 - There has been a large overhaul of the public API.
   Most notably the function `sft_char` has been replaced by a set of more fine-grained functions,

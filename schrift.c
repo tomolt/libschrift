@@ -925,6 +925,8 @@ glyph_id(SFT_Font *font, SFT_UChar charCode, SFT_Glyph *glyph)
 
 	/* If no 'full repertoire' cmap was found, try looking for a BMP map. */
 	for (idx = 0; idx < numEntries; ++idx) {
+		entry = cmap + 4 + idx * 8;
+		type = getu16(font, entry) * 0100 + getu16(font, entry + 2);
 		/* Unicode BMP */
 		if (type == 0003 || type == 0301) {
 			table = cmap + getu32(font, entry + 4);

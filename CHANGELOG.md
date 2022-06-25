@@ -1,7 +1,8 @@
 # Changelog
 
-## v0.11.0
-- Support for Unicode codepoints outside of the Basic Multilingual Plane
+## v0.10.2
+- Support for Unicode codepoints outside of the Basic Multilingual Plane.
+  Things like Hieroglyphs should work now! (Courtesy of `@flying-kestrel`!)
 
 ## v0.10.1
 - Fixed build on Mac OS (correct integer type usage)

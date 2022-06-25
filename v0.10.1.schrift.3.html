@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <link rel="stylesheet" href="style.css" type="text/css" media="all"/>
+  <title>SCHRIFT(3)</title>
+</head>
+<body>
+<table class="head">
+  <tr>
+    <td class="head-ltitle">SCHRIFT(3)</td>
+    <td class="head-vol">Library Functions Manual</td>
+    <td class="head-rtitle">SCHRIFT(3)</td>
+  </tr>
+</table>
+<div class="manual-text">
+<section class="Sh">
+<h1 class="Sh" id="NAME"><a class="permalink" href="#NAME">NAME</a></h1>
+<p class="Pp"><code class="Nm">schrift</code>,
+    <code class="Nm">libschrift</code> &#x2014; <span class="Nd">Lightweight
+    TrueType font rendering library</span></p>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="SYNOPSIS"><a class="permalink" href="#SYNOPSIS">SYNOPSIS</a></h1>
+<p class="Pp"><span class="Lb">library &#x201C;libschrift&#x201D;</span>
+  <br/>
+  <code class="In">#include &lt;<a class="In">schrift.h</a>&gt;</code></p>
+<p class="Pp"><var class="Ft">const char *</var>
+  <br/>
+  <code class="Fn">sft_version</code>(<var class="Fa" style="white-space: nowrap;">void</var>);</p>
+<p class="Pp"><var class="Ft">SFT_Font *</var>
+  <br/>
+  <code class="Fn">sft_loadmem</code>(<var class="Fa" style="white-space: nowrap;">const
+    void *mem</var>, <var class="Fa" style="white-space: nowrap;">unsigned long
+    size</var>);</p>
+<p class="Pp"><var class="Ft">SFT_Font *</var>
+  <br/>
+  <code class="Fn">sft_loadfile</code>(<var class="Fa" style="white-space: nowrap;">const
+    char *filename</var>);</p>
+<p class="Pp"><var class="Ft">void</var>
+  <br/>
+  <code class="Fn">sft_freefont</code>(<var class="Fa" style="white-space: nowrap;">SFT_Font
+    *font</var>);</p>
+<p class="Pp"><var class="Ft">int</var>
+  <br/>
+  <code class="Fn">sft_lmetrics</code>(<var class="Fa" style="white-space: nowrap;">const
+    SFT *sft</var>, <var class="Fa" style="white-space: nowrap;">SFT_LMetrics
+    *metrics</var>);</p>
+<p class="Pp"><var class="Ft">int</var>
+  <br/>
+  <code class="Fn">sft_lookup</code>(<var class="Fa" style="white-space: nowrap;">const
+    SFT *sft</var>, <var class="Fa" style="white-space: nowrap;">SFT_UChar
+    codepoint</var>, <var class="Fa" style="white-space: nowrap;">SFT_Glyph
+    *glyph</var>);</p>
+<p class="Pp"><var class="Ft">int</var>
+  <br/>
+  <code class="Fn">sft_gmetrics</code>(<var class="Fa" style="white-space: nowrap;">const
+    SFT *sft</var>, <var class="Fa" style="white-space: nowrap;">SFT_Glyph
+    glyph</var>, <var class="Fa" style="white-space: nowrap;">SFT_GMetrics
+    *metrics</var>);</p>
+<p class="Pp"><var class="Ft">int</var>
+  <br/>
+  <code class="Fn">sft_kerning</code>(<var class="Fa" style="white-space: nowrap;">const
+    SFT *sft</var>, <var class="Fa" style="white-space: nowrap;">SFT_Glyph
+    leftGlyph</var>, <var class="Fa" style="white-space: nowrap;">SFT_Glyph
+    rightGlyph</var>, <var class="Fa" style="white-space: nowrap;">SFT_Kerning
+    *kerning</var>);</p>
+<p class="Pp"><var class="Ft">int</var>
+  <br/>
+  <code class="Fn">sft_render</code>(<var class="Fa" style="white-space: nowrap;">const
+    SFT *sft</var>, <var class="Fa" style="white-space: nowrap;">SFT_Glyph
+    glyph</var>, <var class="Fa" style="white-space: nowrap;">SFT_Image
+    image</var>);</p>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="DESCRIPTION"><a class="permalink" href="#DESCRIPTION">DESCRIPTION</a></h1>
+<p class="Pp">The function
+    <a class="permalink" href="#sft_version"><code class="Fn" id="sft_version">sft_version</code></a>()
+    may be called to determine the version of <code class="Nm">schrift</code>.
+    Since <code class="Nm">schrift</code> uses semantic versioning, the returned
+    string is of the form &quot;MAJOR.MINOR.PATCH&quot;.</p>
+<section class="Ss">
+<h2 class="Ss" id="Loading_fonts"><a class="permalink" href="#Loading_fonts">Loading
+  fonts</a></h2>
+<p class="Pp"><a class="permalink" href="#sft_loadfile"><code class="Fn" id="sft_loadfile">sft_loadfile</code></a>()
+    will load a font from a given filename (by mapping it into memory), whereas
+    <a class="permalink" href="#sft_loadmem"><code class="Fn" id="sft_loadmem">sft_loadmem</code></a>()
+    can be given an arbitrary memory address and size (in bytes). This allows
+    loading fonts from ZIP file streams etc.</p>
+<p class="Pp">Once a particular font is no longer needed, its memory should be
+    freed again by calling
+    <a class="permalink" href="#sft_freefont"><code class="Fn" id="sft_freefont">sft_freefont</code></a>().
+    If the font has been loaded with <code class="Fn">sft_loadmem</code>(), the
+    underlying memory region will have to be freed separately.</p>
+</section>
+<section class="Ss">
+<h2 class="Ss" id="the_SFT_structure"><a class="permalink" href="#the_SFT_structure">the
+  SFT structure</a></h2>
+<p class="Pp">Most functions take a <var class="Vt">SFT</var> as their primary
+    argument. This is a structure to be filled out by the caller. It bundles
+    multiple commonly needed parameters. The fields are as follows:</p>
+<dl class="Bl-tag">
+  <dt id="font"><var class="Va">font</var></dt>
+  <dd>The font to render with</dd>
+  <dt id="xScale"><var class="Va">xScale</var></dt>
+  <dd>The width of one em-square in pixels</dd>
+  <dt id="yScale"><var class="Va">yScale</var></dt>
+  <dd>The height of one em-square in pixels</dd>
+  <dt id="xOffset"><var class="Va">xOffset</var></dt>
+  <dd>The horizontal offset to be applied before rendering to an image (Useful
+      for subpixel-accurate positioning)</dd>
+  <dt id="yOffset"><var class="Va">yOffset</var></dt>
+  <dd>The vertical offset to be applied before rendering to an image (Useful for
+      subpixel-accurate positioning)</dd>
+  <dt id="flags"><var class="Va">flags</var></dt>
+  <dd>A bitfield of binary flags</dd>
+</dl>
+<p class="Pp">If the <code class="Dv">SFT_DOWNWARD_Y</code> flag is set, the Y
+    axis is interpreted to point downwards. Per default, it points upwards.</p>
+</section>
+<section class="Ss">
+<h2 class="Ss" id="Glyph_ids"><a class="permalink" href="#Glyph_ids">Glyph
+  ids</a></h2>
+<p class="Pp"><code class="Nm">schrift</code> operates in terms of glyph ids (of
+    type <var class="Vt">SFT_Glyph</var>), which are font-specific identifiers
+    assigned to renderable symbols (glyphs). The way to obtain a glyph id is to
+    call
+    <a class="permalink" href="#sft_lookup"><code class="Fn" id="sft_lookup">sft_lookup</code></a>().
+    This function takes a Unicode codepoint in <var class="Va">codepoint</var>
+    and writes its corresponding glyph id into the variable pointed to by
+    <var class="Va">glyph</var>.</p>
+</section>
+<section class="Ss">
+<h2 class="Ss" id="Querying_metrics"><a class="permalink" href="#Querying_metrics">Querying
+  metrics</a></h2>
+<p class="Pp"><a class="permalink" href="#sft_lmetrics"><code class="Fn" id="sft_lmetrics">sft_lmetrics</code></a>()
+    calculates the typographic metrics neccessary for laying out multiple lines
+    of text.</p>
+<p class="Pp">This function writes its output into the structure pointed to by
+    <var class="Va">metrics</var>. The fields are as follows:</p>
+<dl class="Bl-tag">
+  <dt id="ascender"><var class="Va">ascender</var></dt>
+  <dd>The distance from the baseline to the visual top of the text</dd>
+  <dt id="descender"><var class="Va">descender</var></dt>
+  <dd>The distance from the baseline to the visual bottom of the text</dd>
+  <dt id="lineGap"><var class="Va">lineGap</var></dt>
+  <dd>The default amount of horizontal padding between consecutive lines</dd>
+</dl>
+<p class="Pp">When displaying multiple glyphs in a line, you have to keep track
+    of the pen position.
+    <a class="permalink" href="#sft_gmetrics"><code class="Fn" id="sft_gmetrics">sft_gmetrics</code></a>()
+    tells you where to draw the next glyph with respect to the pen position, and
+    how to update it after rendering the glyph.</p>
+<p class="Pp">This function writes its output into the structure pointed to by
+    <var class="Va">metrics</var>. The fields are as follows:</p>
+<dl class="Bl-tag">
+  <dt id="advanceWidth"><var class="Va">advanceWidth</var></dt>
+  <dd>How much the pen position should advance to the right after rendering the
+      glyph</dd>
+  <dt id="leftSideBearing"><var class="Va">leftSideBearing</var></dt>
+  <dd>The offset that should be applied along the X axis from the pen position
+      to the edge of the glyph image</dd>
+  <dt id="yOffset~2"><var class="Va">yOffset</var></dt>
+  <dd>An offset along the Y axis relative to the pen position that should be
+      applied when displaying the glyph</dd>
+  <dt id="minWidth"><var class="Va">minWidth</var></dt>
+  <dd>The minimum width that an image needs such that the glyph can be properly
+      rendered into it</dd>
+  <dt id="minHeight"><var class="Va">minHeight</var></dt>
+  <dd>The minimum height that an image needs such that the glyph can be properly
+      rendered into it</dd>
+</dl>
+<p class="Pp">Some sequences of glyphs may look awkward if they're layed out
+    naively. For example, the gap between the two characters &quot;VA&quot;
+    might look disproportionally large. Kerning is a way to combat this
+    artifact, by slightly moving the second character closer or further away by
+    a small amount.
+    <a class="permalink" href="#sft_kerning"><code class="Fn" id="sft_kerning">sft_kerning</code></a>()
+    may be used to retrieve kerning information for a given pair of glyph
+  ids.</p>
+<p class="Pp">This function writes its output into the structure pointed to by
+    <var class="Va">kerning</var>. The fields are as follows:</p>
+<dl class="Bl-tag">
+  <dt id="xShift"><var class="Va">xShift</var></dt>
+  <dd>An amount that should be added to the pen's X position in-between the two
+      glyphs</dd>
+  <dt id="yShift"><var class="Va">yShift</var></dt>
+  <dd>An amount that should be added to the pen's Y position in-between the two
+      glyphs</dd>
+</dl>
+</section>
+<section class="Ss">
+<h2 class="Ss" id="Rendering_glyphs"><a class="permalink" href="#Rendering_glyphs">Rendering
+  glyphs</a></h2>
+<p class="Pp">To actually render a glyph into a easily-displayable raster image,
+    use
+    <a class="permalink" href="#sft_render"><code class="Fn" id="sft_render">sft_render</code></a>().</p>
+<p class="Pp">Other than most functions, <code class="Fn">sft_render</code>()
+    takes a structure in <var class="Va">image</var> that is to be filled out by
+    the caller. The fields are as follows:</p>
+<dl class="Bl-tag">
+  <dt id="pixels"><var class="Va">pixels</var></dt>
+  <dd>A pointer to an array of bytes, width * height in size</dd>
+  <dt id="width"><var class="Va">width</var></dt>
+  <dd>The number of pixels in a row of the image</dd>
+  <dt id="height"><var class="Va">height</var></dt>
+  <dd>The number of pixels in a column of the image</dd>
+</dl>
+<p class="Pp">The image will be rendered into the memory provided in
+    <var class="Va">pixels</var>. Each byte corresponds to one pixel, with rows
+    of the image being directly adjacent in memory without padding between them.
+    Glyphs are rendered &quot;white on black&quot;, meaning the background has a
+    pixel value of 0, and the foreground goes up to a value of 255. Pixel values
+    follow a linear color ramp, unlike conventional computer screens. That is to
+    say, they are <a class="permalink" href="#not"><i class="Em" id="not">not
+    gamma-corrected</i></a>. These properties make it very easy to use images
+    rendered with <code class="Fn">sft_render</code>() as alpha masks.</p>
+</section>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="RETURN_VALUES"><a class="permalink" href="#RETURN_VALUES">RETURN
+  VALUES</a></h1>
+<p class="Pp"><code class="Fn">sft_loadmem</code>() and
+    <code class="Fn">sft_loadfile</code>() return <code class="Dv">NULL</code>
+    on error.</p>
+<p class="Pp"><code class="Fn">sft_lmetrics</code>(),
+    <code class="Fn">sft_lookup</code>(),
+    <code class="Fn">sft_hmetrics</code>(),
+    <code class="Fn">sft_kerning</code>(),
+    <code class="Fn">sft_extents</code>(), and
+    <code class="Fn">sft_render</code>() all return 0 on success and -1 on
+    error.</p>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="EXAMPLES"><a class="permalink" href="#EXAMPLES">EXAMPLES</a></h1>
+<p class="Pp">See the source code of the
+    <a class="permalink" href="#demo"><b class="Sy" id="demo">demo</b></a> for a
+    detailed example of real-world usage of <code class="Nm">schrift</code>.</p>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="AUTHORS"><a class="permalink" href="#AUTHORS">AUTHORS</a></h1>
+<p class="Pp"><span class="An">Thomas Oltmann</span>
+    &lt;<a class="Mt" href="mailto:thomas.oltmann.hhg@gmail.com">thomas.oltmann.hhg@gmail.com</a>&gt;</p>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="CAVEATS"><a class="permalink" href="#CAVEATS">CAVEATS</a></h1>
+<p class="Pp">The only text encoding that <code class="Nm">schrift</code>
+    understands is Unicode.</p>
+<p class="Pp">Similarly, the only kind of font file supported right now are
+    TrueType (.ttf) fonts (Some OpenType fonts might work too, as OpenType is
+    effectively a superset of TrueType).</p>
+<p class="Pp">As of v0.10.2, there is no support for right-to-left scripts
+    <a class="permalink" href="#yet"><i class="Em" id="yet">yet</i></a>.</p>
+<p class="Pp"><code class="Nm">schrift</code> currently does not implement font
+    hinting and probably never will.</p>
+</section>
+</div>
+<table class="foot">
+  <tr>
+    <td class="foot-date">January 30, 2021</td>
+    <td class="foot-os">Void Linux</td>
+  </tr>
+</table>
+</body>
+</html>

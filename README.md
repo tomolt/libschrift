@@ -29,6 +29,19 @@ Limitations
 - No hinting. Especially no auto-hinting like *FreeType2*.
 - No color emojis.
 
+Building
+--------
+On **Unix-like systems** including Mac OS, you can use `make` & `make install`
+to install *libschrift* as a system-wide library. Since it is linked statically,
+you only need the library files for development.
+Users of your projects do not need to install *libschrift*.
+
+On **Windows**, you can either use the provided MSVC project,
+or compile with make via MSYS, or simply compile manually.
+
+**Alternatively**, you can always copy-paste `schrift.c` and `schrift.h` into your
+own projects source folder.
+
 Documentation
 -------------
 For documentation on how to use *libschrift* in your own programs,

@@ -4,7 +4,9 @@
 
 include config.mk
 
-.PHONY: all clean install uninstall
+VERSION=0.10.2
+
+.PHONY: all clean install uninstall dist
 
 all: libschrift.a demo stress
 
@@ -48,4 +50,15 @@ uninstall:
 	rm -f "$(DESTDIR)$(PREFIX)/lib/libschrift.a"
 	rm -f "$(DESTDIR)$(PREFIX)/include/schrift.h"
 	rm -f "$(DESTDIR)$(MANPREFIX)/man3/schrift.3"
+
+dist:
+	rm -rf "schrift-$(VERSION)"
+	mkdir -p "schrift-$(VERSION)"
+	cp -R README.md LICENSE CHANGELOG.md TODO.md schrift.3 \
+		Makefile config.mk \
+		schrift.c schrift.h demo.c stress.c \
+		resources/ util/ \
+		"schrift-$(VERSION)"
+	tar -cf - "schrift-$(VERSION)" | gzip -c > "schrift-$(VERSION).tar.gz"
+	rm -rf "schrift-$(VERSION)"
 

@@ -2,8 +2,10 @@
 libschrift.a
 /demo
 /stress
+schrift-*.tar.gz
 
 .vs/
 *.vcxproj.user
 Debug/
 Release/
+*.obj

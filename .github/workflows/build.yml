@@ -14,3 +14,11 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - run: make
+  windows-build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ilammy/msvc-dev-cmd@v1
+      - run: |
+          cl /W4 /c /EHsc schrift.c
+          lib schrift.obj

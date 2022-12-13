@@ -32,7 +32,8 @@ main(int argc, char *argv[])
 	SFT_Font *font;
 	const char *filename;
 	double size;
-	unsigned long cp, gid;
+	unsigned long cp;
+	SFT_Glyph gid;
 	SFT_GMetrics mtx;
 	SFT_Image    image;
 	int i;

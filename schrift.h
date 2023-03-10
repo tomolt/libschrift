@@ -87,6 +87,8 @@ int sft_kerning (const SFT *sft, SFT_Glyph leftGlyph, SFT_Glyph rightGlyph,
                  SFT_Kerning *kerning);
 int sft_render  (const SFT *sft, SFT_Glyph glyph, SFT_Image image);
 
+int sft_explore_gsub(SFT_Font *font);
+
 #ifdef __cplusplus
 }
 #endif

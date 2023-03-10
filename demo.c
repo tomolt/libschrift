@@ -88,6 +88,8 @@ int main()
 	if (sft.font == NULL)
 		END("TTF load failed");
 
+	sft_explore_gsub(sft.font);
+
 	XEvent event;
 	while (!XNextEvent(dpy, &event)) {
 		if (event.type == Expose) {

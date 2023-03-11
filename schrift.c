@@ -166,6 +166,8 @@ static int  explore_script_table(SFT_Font *font, uint_fast32_t scriptTable);
 static int  explore_script_list(SFT_Font *font, uint_fast32_t scriptList);
 static int  explore_feature_table(SFT_Font *font, uint_fast32_t featureTable);
 static int  explore_feature_list(SFT_Font *font, uint_fast32_t featureList);
+static int  explore_lookup_table(SFT_Font *font, uint_fast32_t lookupTable);
+static int  explore_lookup_list(SFT_Font *font, uint_fast32_t lookupList);
 static int  explore_gsub(SFT_Font *font);
 /* decoding outlines */
 static int  outline_offset(SFT_Font *font, uint_fast32_t glyph, uint_fast32_t *offset);
@@ -1103,7 +1105,37 @@ explore_feature_list(SFT_Font *font, uint_fast32_t featureList)
 		printf("\t%.4s %u\n", tag, offset);
 		if (explore_feature_table(font, featureList + offset) < 0)
 			return -1;
+	}
+	return 0;
+}
 
+static int
+explore_lookup_table(SFT_Font *font, uint_fast32_t lookupTable)
+{
+	if (!is_safe_offset(font, lookupTable, 6))
+		return -1;
+	uint16_t lookupType = getu16(font, lookupTable + 0);
+	uint16_t lookupFlag = getu16(font, lookupTable + 2);
+	//uint16_t subTableCount = getu16(font, lookupTable + 4);
+	printf("\t\t(type: %u)\n", lookupType);
+	printf("\t\t(flag: 0x%x)\n", lookupFlag);
+	return 0;
+}
+
+static int
+explore_lookup_list(SFT_Font *font, uint_fast32_t lookupList)
+{
+	if (!is_safe_offset(font, lookupList, 2))
+		return -1;
+	uint16_t lookupCount = getu16(font, lookupList + 0);
+	if (!is_safe_offset(font, lookupList, 2 + 2 * lookupCount))
+		return -1;
+	printf("Lookups:\n");
+	for (uint16_t i = 0; i < lookupCount; i++) {
+		printf("\t#%u\n", i);
+		uint16_t lookupOffset = getu16(font, lookupList + 2 + 2 * i);
+		if (explore_lookup_table(font, lookupList + lookupOffset) < 0)
+			return -1;
 	}
 	return 0;
 }
@@ -1126,6 +1158,8 @@ explore_gsub(SFT_Font *font)
 	if (explore_script_list(font, gsub + scriptListOffset) < 0)
 		return -1;
 	if (explore_feature_list(font, gsub + featureListOffset) < 0)
+		return -1;
+	if (explore_lookup_list(font, gsub + lookupListOffset) < 0)
 		return -1;
 
 	return 0;

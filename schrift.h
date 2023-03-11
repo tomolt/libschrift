@@ -34,10 +34,12 @@ typedef struct SFT_LMetrics SFT_LMetrics;
 typedef struct SFT_GMetrics SFT_GMetrics;
 typedef struct SFT_Kerning  SFT_Kerning;
 typedef struct SFT_Image    SFT_Image;
+typedef uint_fast32_t       SFT_WritingSystem;
 
 struct SFT
 {
 	SFT_Font *font;
+	SFT_WritingSystem writingSystem;
 	double    xScale;
 	double    yScale;
 	double    xOffset;
@@ -86,6 +88,8 @@ int sft_gmetrics(const SFT *sft, SFT_Glyph glyph, SFT_GMetrics *metrics);
 int sft_kerning (const SFT *sft, SFT_Glyph leftGlyph, SFT_Glyph rightGlyph,
                  SFT_Kerning *kerning);
 int sft_render  (const SFT *sft, SFT_Glyph glyph, SFT_Image image);
+
+int sft_writingsystem(SFT_Font *font, const char *script, const char *language, SFT_WritingSystem *wsys);
 
 int sft_explore_gsub(SFT_Font *font);
 

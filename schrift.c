@@ -162,6 +162,7 @@ static int  glyph_id(SFT_Font *font, SFT_UChar charCode, uint_fast32_t *glyph);
 static int  hor_metrics(SFT_Font *font, uint_fast32_t glyph, int *advanceWidth, int *leftSideBearing);
 static int  glyph_bbox(const SFT *sft, uint_fast32_t outline, int box[4]);
 /* OpenType table parsing */
+static int  find_table_in_list(SFT_Font *font, uint_fast32_t list, const char tag[4], uint_fast32_t *table);
 static int  explore_script_table(SFT_Font *font, uint_fast32_t scriptTable);
 static int  explore_script_list(SFT_Font *font, uint_fast32_t scriptList);
 static int  explore_feature_table(SFT_Font *font, uint_fast32_t featureTable);
@@ -408,6 +409,30 @@ sft_render(const SFT *sft, SFT_Glyph glyph, SFT_Image image)
 failure:
 	free_outline(&outl);
 	return -1;
+}
+
+int
+sft_writingsystem(SFT_Font *font, const char *script, const char *language, SFT_WritingSystem *wsys)
+{
+	uint_fast32_t gsub;
+	if (gettable(font, "GSUB", &gsub) < 0)
+		return -1;
+	if (!is_safe_offset(font, gsub, 10))
+		return -1;
+	uint_fast32_t scriptList = gsub + getu16(font, gsub + 4);
+
+	uint_fast32_t scriptTable, langTable;
+	if (strlen(script) != 4)
+		return -1;
+	if (find_table_in_list(font, scriptList, script, &scriptTable) < 0)
+		return -1;
+	if (strlen(language) != 4)
+		return -1;
+	if (find_table_in_list(font, scriptTable + 2, language, &langTable) < 0)
+		return -1;
+
+	*wsys = langTable;
+	return 0;
 }
 
 int
@@ -1014,6 +1039,21 @@ glyph_bbox(const SFT *sft, uint_fast32_t outline, int box[4])
 	box[1] = (int) floor(box[1] * yScale + sft->yOffset);
 	box[2] = (int) ceil (box[2] * xScale + sft->xOffset);
 	box[3] = (int) ceil (box[3] * yScale + sft->yOffset);
+	return 0;
+}
+
+static int
+find_table_in_list(SFT_Font *font, uint_fast32_t list, const char tag[4], uint_fast32_t *table)
+{
+	if (!is_safe_offset(font, list, 2))
+		return -1;
+	uint16_t count = getu16(font, list);
+	if (!is_safe_offset(font, list, 2 + 6 * count))
+		return -1;
+	uint8_t *match;
+	if (!(match = bsearch(tag, font->memory + list + 2, count, 6, cmpu32)))
+		return -1;
+	*table = list + getu32(font, (uint_fast32_t)(match - font->memory + 4));
 	return 0;
 }
 

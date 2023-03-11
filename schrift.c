@@ -162,6 +162,9 @@ static int  glyph_id(SFT_Font *font, SFT_UChar charCode, uint_fast32_t *glyph);
 static int  hor_metrics(SFT_Font *font, uint_fast32_t glyph, int *advanceWidth, int *leftSideBearing);
 static int  glyph_bbox(const SFT *sft, uint_fast32_t outline, int box[4]);
 /* OpenType table parsing */
+static int  explore_langsys_list(SFT_Font *font, uint_fast32_t scriptTable);
+static int  explore_script_list(SFT_Font *font, uint_fast32_t scriptList);
+static int  explore_feature_list(SFT_Font *font, uint_fast32_t featureList);
 static int  explore_gsub(SFT_Font *font);
 /* decoding outlines */
 static int  outline_offset(SFT_Font *font, uint_fast32_t glyph, uint_fast32_t *offset);
@@ -1012,6 +1015,79 @@ glyph_bbox(const SFT *sft, uint_fast32_t outline, int box[4])
 }
 
 static int
+explore_langsys_list(SFT_Font *font, uint_fast32_t scriptTable)
+{
+	if (!is_safe_offset(font, scriptTable, 4))
+		return -1;
+	uint16_t langSysCount = getu16(font, scriptTable + 2);
+	if (!is_safe_offset(font, scriptTable, 4 + 6 * langSysCount))
+		return -1;
+	for (uint16_t j = 0; j < langSysCount; j++) {
+		uint_fast32_t langSysRecord = scriptTable + 4 + 6 * j;
+		char tag[4];
+		memcpy(tag, font->memory + langSysRecord, 4);
+		uint16_t offset = getu16(font, langSysRecord + 4);
+		printf("\t\t%.4s %u ", tag, offset);
+
+		uint_fast32_t table = scriptTable + offset;
+		if (!is_safe_offset(font, table, 6))
+			return -1;
+
+		uint16_t requiredFeatureIndex = getu16(font, table + 2);
+		uint16_t featureIndexCount = getu16(font, table + 4);
+		printf("0x%x\n", requiredFeatureIndex);
+
+		if (!is_safe_offset(font, table, 6 + 2 * featureIndexCount))
+			return -1;
+		for (uint16_t k = 0; k < featureIndexCount; k++) {
+			uint16_t featureIndex = getu16(font, table + 6 + 2 * k);
+			printf("\t\t\t%u\n", featureIndex);
+		}
+	}
+	return 0;
+}
+
+static int
+explore_script_list(SFT_Font *font, uint_fast32_t scriptList)
+{
+	if (!is_safe_offset(font, scriptList, 2))
+		return -1;
+	uint16_t scriptCount = getu16(font, scriptList + 0);
+	if (!is_safe_offset(font, scriptList, 2 + 6 * scriptCount))
+		return -1;
+	printf("Scripts:\n");
+	for (uint16_t i = 0; i < scriptCount; i++) {
+		uint_fast32_t scriptRecord = scriptList + 2 + 6 * i;
+		char tag[4];
+		memcpy(tag, font->memory + scriptRecord, 4);
+		uint16_t offset = getu16(font, scriptRecord + 4);
+		printf("\t%.4s %u\n", tag, offset);
+		if (explore_langsys_list(font, scriptList + offset) < 0)
+			return -1;
+	}
+	return 0;
+}
+
+static int
+explore_feature_list(SFT_Font *font, uint_fast32_t featureList)
+{
+	if (!is_safe_offset(font, featureList, 2))
+		return -1;
+	uint16_t featureCount = getu16(font, featureList + 0);
+	if (!is_safe_offset(font, featureList, 2 + 6 * featureCount))
+		return -1;
+	printf("Features:\n");
+	for (uint16_t i = 0; i < featureCount; i++) {
+		uint_fast32_t featureRecord = featureList + 2 + 6 * i;
+		char tag[4];
+		memcpy(tag, font->memory + featureRecord, 4);
+		uint16_t offset = getu16(font, featureRecord + 4);
+		printf("\t%.4s %u\n", tag, offset);
+	}
+	return 0;
+}
+
+static int
 explore_gsub(SFT_Font *font)
 {
 	uint_fast32_t gsub;
@@ -1026,36 +1102,10 @@ explore_gsub(SFT_Font *font)
 
 	printf("GSUB: %u %u %u\n", scriptListOffset, featureListOffset, lookupListOffset);
 
-	uint_fast32_t scriptList = gsub + scriptListOffset;
-	if (!is_safe_offset(font, scriptList, 2))
+	if (explore_script_list(font, gsub + scriptListOffset) < 0)
 		return -1;
-	uint16_t scriptCount = getu16(font, scriptList + 0);
-	if (!is_safe_offset(font, scriptList, 2 + 6 * scriptCount))
+	if (explore_feature_list(font, gsub + featureListOffset) < 0)
 		return -1;
-	printf("Scripts:\n");
-	for (uint16_t i = 0; i < scriptCount; i++) {
-		uint_fast32_t scriptRecord = scriptList + 2 + 6 * i;
-		char tag[4];
-		memcpy(tag, font->memory + scriptRecord, 4);
-		uint16_t offset = getu16(font, scriptRecord + 4);
-		printf("\t%.4s %u\n", tag, offset);
-
-		uint_fast32_t scriptTable = scriptList + offset;
-		if (!is_safe_offset(font, scriptTable, 4))
-			return -1;
-		uint16_t langSysCount = getu16(font, scriptTable + 2);
-		if (!is_safe_offset(font, scriptTable, 4 + 6 * langSysCount))
-			return -1;
-		for (uint16_t j = 0; j < langSysCount; j++) {
-			uint_fast32_t langSysRecord = scriptTable + 4 + 6 * j;
-			char tag[4];
-			memcpy(tag, font->memory + langSysRecord, 4);
-			uint16_t offset = getu16(font, langSysRecord + 4);
-			printf("\t\t%.4s %u\n", tag, offset);
-		}
-	}
-
-
 
 	return 0;
 }

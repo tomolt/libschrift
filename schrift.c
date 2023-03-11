@@ -162,8 +162,9 @@ static int  glyph_id(SFT_Font *font, SFT_UChar charCode, uint_fast32_t *glyph);
 static int  hor_metrics(SFT_Font *font, uint_fast32_t glyph, int *advanceWidth, int *leftSideBearing);
 static int  glyph_bbox(const SFT *sft, uint_fast32_t outline, int box[4]);
 /* OpenType table parsing */
-static int  explore_langsys_list(SFT_Font *font, uint_fast32_t scriptTable);
+static int  explore_script_table(SFT_Font *font, uint_fast32_t scriptTable);
 static int  explore_script_list(SFT_Font *font, uint_fast32_t scriptList);
+static int  explore_feature_table(SFT_Font *font, uint_fast32_t featureTable);
 static int  explore_feature_list(SFT_Font *font, uint_fast32_t featureList);
 static int  explore_gsub(SFT_Font *font);
 /* decoding outlines */
@@ -1015,7 +1016,7 @@ glyph_bbox(const SFT *sft, uint_fast32_t outline, int box[4])
 }
 
 static int
-explore_langsys_list(SFT_Font *font, uint_fast32_t scriptTable)
+explore_script_table(SFT_Font *font, uint_fast32_t scriptTable)
 {
 	if (!is_safe_offset(font, scriptTable, 4))
 		return -1;
@@ -1062,8 +1063,25 @@ explore_script_list(SFT_Font *font, uint_fast32_t scriptList)
 		memcpy(tag, font->memory + scriptRecord, 4);
 		uint16_t offset = getu16(font, scriptRecord + 4);
 		printf("\t%.4s %u\n", tag, offset);
-		if (explore_langsys_list(font, scriptList + offset) < 0)
+		if (explore_script_table(font, scriptList + offset) < 0)
 			return -1;
+	}
+	return 0;
+}
+
+static int
+explore_feature_table(SFT_Font *font, uint_fast32_t featureTable)
+{
+	if (!is_safe_offset(font, featureTable, 4))
+		return -1;
+	uint16_t featureParamsOffset = getu16(font, featureTable + 0);
+	printf("\t\t(fpo: %u)\n", featureParamsOffset);
+	uint16_t lookupIndexCount = getu16(font, featureTable + 2);
+	if (!is_safe_offset(font, featureTable, 4 + 2 * lookupIndexCount))
+		return -1;
+	for (uint16_t i = 0; i < lookupIndexCount; i++) {
+		uint16_t lookupListIndex = getu16(font, featureTable + 4 + 2 * i);
+		printf("\t\t%u\n", lookupListIndex);
 	}
 	return 0;
 }
@@ -1083,6 +1101,9 @@ explore_feature_list(SFT_Font *font, uint_fast32_t featureList)
 		memcpy(tag, font->memory + featureRecord, 4);
 		uint16_t offset = getu16(font, featureRecord + 4);
 		printf("\t%.4s %u\n", tag, offset);
+		if (explore_feature_table(font, featureList + offset) < 0)
+			return -1;
+
 	}
 	return 0;
 }

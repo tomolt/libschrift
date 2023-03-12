@@ -176,6 +176,7 @@ static int  explore_feature_list(SFT_Font *font, uint_fast32_t featureList);
 static int  explore_lookup_table(SFT_Font *font, uint_fast32_t lookupTable);
 static int  explore_lookup_list(SFT_Font *font, uint_fast32_t lookupList);
 static int  explore_gsub(SFT_Font *font);
+static int  coverage_table_find(SFT_Font *font, uint_fast32_t coverageTable, SFT_Glyph glyph, uint16_t *coverageIndex);
 static int  gsub_feature_func(SFT_Font *font, uint16_t type, uint16_t flag, uint_fast32_t subtable, void *extra);
 /* decoding outlines */
 static int  outline_offset(SFT_Font *font, uint_fast32_t glyph, uint_fast32_t *offset);
@@ -1301,6 +1302,42 @@ explore_gsub(SFT_Font *font)
 		return -1;*/
 
 	return 0;
+}
+
+static int
+coverage_table_find(SFT_Font *font, uint_fast32_t coverageTable, SFT_Glyph glyph, uint16_t *coverageIndex)
+{
+	*coverageIndex = 0xFFFF;
+	uint16_t glyph16 = (uint16_t)glyph;
+	if (!is_safe_offset(font, coverageTable, 4))
+		return -1;
+	uint16_t format = getu16(font, coverageTable + 0);
+	uint16_t count = getu16(font, coverageTable + 2);
+	uint8_t *match;
+	uint_fast32_t record;
+	switch (format) {
+	case 1:
+		if (!is_safe_offset(font, coverageTable, 4 + 2 * count))
+			return -1;
+		match = bsearch(&glyph16, font->memory + coverageTable + 4, count, 2, cmpu16);
+		if (!match) return 0;
+		record = (uint_fast32_t)(match - font->memory);
+		*coverageIndex = (record - (coverageTable + 4)) / 2;
+		return 0;
+	case 2:
+		if (!is_safe_offset(font, coverageTable, 4 + 6 * count))
+			return -1;
+		match = csearch(&glyph16, font->memory + coverageTable + 4 + 2, count, 6, cmpu16);
+		if (!match) return 0;
+		record = (uint_fast32_t)(match - font->memory);
+		uint16_t startGlyph = getu16(font, record + 0);
+		if (startGlyph > glyph) return 0;
+		uint16_t startCoverageIndex = getu16(font, record + 4);
+		*coverageIndex = startCoverageIndex + glyph - startGlyph;
+		return 0;
+	default:
+		return -1;
+	}
 }
 
 static int

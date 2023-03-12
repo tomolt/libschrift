@@ -21,6 +21,8 @@ static int add_glyph(Display *dpy, GlyphSet glyphset, SFT *sft, unsigned long cp
 	SFT_Glyph gid;  //  unsigned long gid;
 	if (sft_lookup(sft, cp, &gid) < 0)
 		ABORT(cp, "missing");
+	if (sft_substitute(sft, "medi", &gid) < 0)
+		ABORT(cp, "Can't apply GSUB features");
 
 	SFT_GMetrics mtx;
 	if (sft_gmetrics(sft, gid, &mtx) < 0)
@@ -91,8 +93,6 @@ int main()
 	sft_explore_gsub(sft.font);
 	if (sft_writingsystem(sft.font, "arab", "URD ", &sft.writingSystem) < 0)
 		END("Can't select writing system!");
-	if (sft_substitute(&sft, "medi") < 0)
-		END("Can't apply GSUB features");
 
 	XEvent event;
 	while (!XNextEvent(dpy, &event)) {

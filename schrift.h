@@ -96,7 +96,7 @@ int sft_render  (const SFT *sft, SFT_Glyph glyph, SFT_Image image);
 
 int sft_writingsystem(SFT_Font *font, const char *script, const char *language, SFT_WritingSystem *wsys);
 
-int sft_substitute(const SFT *sft, const char *feature);
+int sft_substitute(const SFT *sft, const char *feature, SFT_Glyph *glyph);
 
 int sft_explore_gsub(SFT_Font *font);
 

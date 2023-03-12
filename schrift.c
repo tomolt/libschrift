@@ -436,7 +436,7 @@ sft_explore_gsub(SFT_Font *font)
 }
 
 int
-sft_substitute(const SFT *sft, const char *feature)
+sft_substitute(const SFT *sft, const char *feature, SFT_Glyph *glyph)
 {
 	if (!sft->writingSystem.subTable)
 		return -1;
@@ -456,7 +456,6 @@ sft_substitute(const SFT *sft, const char *feature)
 		return -1;
 	// TODO required feature index
 	uint16_t featureIndexCount = getu16(sft->font, langTable + 4);
-	printf("featureIndexCount = %u\n", featureIndexCount);
 	if (!is_safe_offset(sft->font, langTable, 6 + 2 * featureIndexCount))
 		return -1;
 	for (uint16_t i = 0; i < featureIndexCount; i++) {
@@ -465,12 +464,11 @@ sft_substitute(const SFT *sft, const char *feature)
 		uint_fast32_t featureRecord = featureList + 2 + 6 * featureIndex;
 		if (!is_safe_offset(sft->font, featureRecord, 6))
 			return -1;
-		printf("Trying %.4s\n", sft->font->memory + featureRecord);
 		if (cmpu32(sft->font->memory + featureRecord, feature))
 			continue;
 
 		uint_fast32_t featureTable = featureList + getu16(sft->font, featureRecord + 4);
-		if (apply_feature(sft->font, featureTable, lookupList, gsub_feature_func, NULL) < 0)
+		if (apply_feature(sft->font, featureTable, lookupList, gsub_feature_func, glyph) < 0)
 			return -1;
 	}
 
@@ -1114,7 +1112,6 @@ select_lang_table(SFT_Font *font, const char script[4], const char lang[4], uint
 static int
 apply_lookup(SFT_Font *font, uint_fast32_t lookupTable, FeatureFunc func, void *extra)
 {
-	printf("apply_lookup()\n");
 	if (!is_safe_offset(font, lookupTable, 6))
 		return -1;
 	uint16_t lookupType = getu16(font, lookupTable + 0);
@@ -1135,7 +1132,6 @@ apply_lookup(SFT_Font *font, uint_fast32_t lookupTable, FeatureFunc func, void *
 static int
 apply_feature(SFT_Font *font, uint_fast32_t featureTable, uint_fast32_t lookupList, FeatureFunc func, void *extra)
 {
-	printf("apply_feature()\n");
 	if (!is_safe_offset(font, featureTable, 4))
 		return -1;
 	uint16_t lookupIndexCount = getu16(font, featureTable + 2);
@@ -1308,7 +1304,7 @@ static int
 coverage_table_find(SFT_Font *font, uint_fast32_t coverageTable, SFT_Glyph glyph, uint16_t *coverageIndex)
 {
 	*coverageIndex = 0xFFFF;
-	uint16_t glyph16 = (uint16_t)glyph;
+	uint8_t key[2] = { (uint8_t)(glyph >> 8), (uint8_t)glyph };
 	if (!is_safe_offset(font, coverageTable, 4))
 		return -1;
 	uint16_t format = getu16(font, coverageTable + 0);
@@ -1319,7 +1315,7 @@ coverage_table_find(SFT_Font *font, uint_fast32_t coverageTable, SFT_Glyph glyph
 	case 1:
 		if (!is_safe_offset(font, coverageTable, 4 + 2 * count))
 			return -1;
-		match = bsearch(&glyph16, font->memory + coverageTable + 4, count, 2, cmpu16);
+		match = bsearch(key, font->memory + coverageTable + 4, count, 2, cmpu16);
 		if (!match) return 0;
 		record = (uint_fast32_t)(match - font->memory);
 		*coverageIndex = (record - (coverageTable + 4)) / 2;
@@ -1327,11 +1323,15 @@ coverage_table_find(SFT_Font *font, uint_fast32_t coverageTable, SFT_Glyph glyph
 	case 2:
 		if (!is_safe_offset(font, coverageTable, 4 + 6 * count))
 			return -1;
-		match = csearch(&glyph16, font->memory + coverageTable + 4 + 2, count, 6, cmpu16);
+		match = csearch(key, font->memory + coverageTable + 4 + 2, count, 6, cmpu16);
 		if (!match) return 0;
-		record = (uint_fast32_t)(match - font->memory);
+		record = (uint_fast32_t)(match - font->memory) - 2;
+		//printf("num records = %u, end of records = %lu, current record = %lu\n", count, coverageTable + 4 + 6 * count, record);
 		uint16_t startGlyph = getu16(font, record + 0);
+		uint16_t endGlyph = getu16(font, record + 2);
+		//printf("%u < %lu < %u?\n", startGlyph, glyph, endGlyph);
 		if (startGlyph > glyph) return 0;
+		if (endGlyph < glyph) return 0;
 		uint16_t startCoverageIndex = getu16(font, record + 4);
 		*coverageIndex = startCoverageIndex + glyph - startGlyph;
 		return 0;
@@ -1343,10 +1343,25 @@ coverage_table_find(SFT_Font *font, uint_fast32_t coverageTable, SFT_Glyph glyph
 static int
 gsub_feature_func(SFT_Font *font, uint16_t type, uint16_t flag, uint_fast32_t subtable, void *extra)
 {
-	(void)font;
-	(void)subtable;
-	(void)extra;
-	printf("LOOKUP SUBTABLE: %u, 0x%x\n", type, flag);
+	(void)flag;
+	SFT_Glyph *glyphPtr = extra;
+	switch (type) {
+	case 1:
+		if (!is_safe_offset(font, subtable, 6))
+			return -1;
+		uint_fast32_t coverageTable = subtable + getu16(font, subtable + 2);
+		uint16_t deltaGlyph = getu16(font, subtable + 4);
+		uint16_t coverageIndex;
+		if (coverage_table_find(font, coverageTable, *glyphPtr, &coverageIndex) < 0)
+			return -1;
+		if (coverageIndex != 0xFFFF) {
+			printf("Applying delta %u to glyph %lu!\n", deltaGlyph, *glyphPtr);
+			*glyphPtr += deltaGlyph;
+		}
+		return 0;
+	default:
+		return -1;
+	}
 	return 0;
 }
 

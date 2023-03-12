@@ -76,6 +76,9 @@
 
 enum { SrcMapping, SrcUser };
 
+typedef int (*FeatureFunc)(SFT_Font *font, uint16_t type, uint16_t flag,
+	uint_fast32_t subtable, void *extra);
+
 /* structs */
 typedef struct Point   Point;
 typedef struct Line    Line;
@@ -162,7 +165,10 @@ static int  glyph_id(SFT_Font *font, SFT_UChar charCode, uint_fast32_t *glyph);
 static int  hor_metrics(SFT_Font *font, uint_fast32_t glyph, int *advanceWidth, int *leftSideBearing);
 static int  glyph_bbox(const SFT *sft, uint_fast32_t outline, int box[4]);
 /* OpenType table parsing */
-static int  find_table_in_list(SFT_Font *font, uint_fast32_t list, const char tag[4], uint_fast32_t *table);
+static int  find_table_in_list(SFT_Font *font, uint_fast32_t list, uint16_t headerSize, const char tag[4], uint_fast32_t *table);
+static int  select_lang_table(SFT_Font *font, const char script[4], const char lang[4], uint_fast32_t *langTable);
+static int  apply_lookup(SFT_Font *font, uint_fast32_t lookupTable, FeatureFunc func, void *extra);
+static int  apply_feature(SFT_Font *font, uint_fast32_t featureTable, uint_fast32_t lookupList, FeatureFunc func, void *extra);
 static int  explore_script_table(SFT_Font *font, uint_fast32_t scriptTable);
 static int  explore_script_list(SFT_Font *font, uint_fast32_t scriptList);
 static int  explore_feature_table(SFT_Font *font, uint_fast32_t featureTable);
@@ -170,6 +176,7 @@ static int  explore_feature_list(SFT_Font *font, uint_fast32_t featureList);
 static int  explore_lookup_table(SFT_Font *font, uint_fast32_t lookupTable);
 static int  explore_lookup_list(SFT_Font *font, uint_fast32_t lookupList);
 static int  explore_gsub(SFT_Font *font);
+static int  gsub_feature_func(SFT_Font *font, uint16_t type, uint16_t flag, uint_fast32_t subtable, void *extra);
 /* decoding outlines */
 static int  outline_offset(SFT_Font *font, uint_fast32_t glyph, uint_fast32_t *offset);
 static int  simple_flags(SFT_Font *font, uint_fast32_t *offset, uint_fast16_t numPts, uint8_t *flags);
@@ -414,31 +421,59 @@ failure:
 int
 sft_writingsystem(SFT_Font *font, const char *script, const char *language, SFT_WritingSystem *wsys)
 {
-	uint_fast32_t gsub;
-	if (gettable(font, "GSUB", &gsub) < 0)
-		return -1;
-	if (!is_safe_offset(font, gsub, 10))
-		return -1;
-	uint_fast32_t scriptList = gsub + getu16(font, gsub + 4);
-
-	uint_fast32_t scriptTable, langTable;
 	if (strlen(script) != 4)
-		return -1;
-	if (find_table_in_list(font, scriptList, script, &scriptTable) < 0)
 		return -1;
 	if (strlen(language) != 4)
 		return -1;
-	if (find_table_in_list(font, scriptTable + 2, language, &langTable) < 0)
-		return -1;
-
-	*wsys = langTable;
-	return 0;
+	return select_lang_table(font, script, language, &wsys->subTable);
 }
 
 int
 sft_explore_gsub(SFT_Font *font)
 {
 	return explore_gsub(font);
+}
+
+int
+sft_substitute(const SFT *sft, const char *feature)
+{
+	if (!sft->writingSystem.subTable)
+		return -1;
+	if (strlen(feature) != 4)
+		return -1;
+	
+	uint_fast32_t gsub;
+	if (gettable(sft->font, "GSUB", &gsub) < 0)
+		return -1;
+	if (!is_safe_offset(sft->font, gsub, 10))
+		return -1;
+	uint_fast32_t featureList = gsub + getu16(sft->font, gsub + 6);
+	uint_fast32_t lookupList = gsub + getu16(sft->font, gsub + 8);
+
+	uint_fast32_t langTable = sft->writingSystem.subTable;
+	if (!is_safe_offset(sft->font, langTable, 6))
+		return -1;
+	// TODO required feature index
+	uint16_t featureIndexCount = getu16(sft->font, langTable + 4);
+	printf("featureIndexCount = %u\n", featureIndexCount);
+	if (!is_safe_offset(sft->font, langTable, 6 + 2 * featureIndexCount))
+		return -1;
+	for (uint16_t i = 0; i < featureIndexCount; i++) {
+		uint16_t featureIndex = getu16(sft->font, langTable + 6 + 2 * i);
+
+		uint_fast32_t featureRecord = featureList + 2 + 6 * featureIndex;
+		if (!is_safe_offset(sft->font, featureRecord, 6))
+			return -1;
+		printf("Trying %.4s\n", sft->font->memory + featureRecord);
+		if (cmpu32(sft->font->memory + featureRecord, feature))
+			continue;
+
+		uint_fast32_t featureTable = featureList + getu16(sft->font, featureRecord + 4);
+		if (apply_feature(sft->font, featureTable, lookupList, gsub_feature_func, NULL) < 0)
+			return -1;
+	}
+
+	return 0;
 }
 
 /* This is sqrt(SIZE_MAX+1), as s1*s2 <= SIZE_MAX
@@ -1043,17 +1078,78 @@ glyph_bbox(const SFT *sft, uint_fast32_t outline, int box[4])
 }
 
 static int
-find_table_in_list(SFT_Font *font, uint_fast32_t list, const char tag[4], uint_fast32_t *table)
+find_table_in_list(SFT_Font *font, uint_fast32_t list, uint16_t headerSize, const char tag[4], uint_fast32_t *table)
 {
-	if (!is_safe_offset(font, list, 2))
+	if (!is_safe_offset(font, list, headerSize))
 		return -1;
-	uint16_t count = getu16(font, list);
-	if (!is_safe_offset(font, list, 2 + 6 * count))
+	uint16_t count = getu16(font, list + headerSize - 2);
+	if (!is_safe_offset(font, list, headerSize + 6 * count))
 		return -1;
 	uint8_t *match;
-	if (!(match = bsearch(tag, font->memory + list + 2, count, 6, cmpu32)))
+	if (!(match = bsearch(tag, font->memory + list + headerSize, count, 6, cmpu32)))
 		return -1;
-	*table = list + getu32(font, (uint_fast32_t)(match - font->memory + 4));
+	*table = list + getu16(font, (uint_fast32_t)(match - font->memory) + 4);
+	return 0;
+}
+
+static int
+select_lang_table(SFT_Font *font, const char script[4], const char lang[4], uint_fast32_t *langTable)
+{
+	uint_fast32_t gsub;
+	if (gettable(font, "GSUB", &gsub) < 0)
+		return -1;
+	if (!is_safe_offset(font, gsub, 10))
+		return -1;
+	uint_fast32_t scriptList = gsub + getu16(font, gsub + 4);
+
+	uint_fast32_t scriptTable;
+	if (find_table_in_list(font, scriptList, 2, script, &scriptTable) < 0)
+		return -1;
+	if (find_table_in_list(font, scriptTable, 4, lang, langTable) < 0)
+		return -1;
+	return 0;
+}
+
+static int
+apply_lookup(SFT_Font *font, uint_fast32_t lookupTable, FeatureFunc func, void *extra)
+{
+	printf("apply_lookup()\n");
+	if (!is_safe_offset(font, lookupTable, 6))
+		return -1;
+	uint16_t lookupType = getu16(font, lookupTable + 0);
+	uint16_t lookupFlag = getu16(font, lookupTable + 2);
+	uint16_t subtableCount = getu16(font, lookupTable + 4);
+	
+	if (!is_safe_offset(font, lookupTable, 6 + 2 * subtableCount))
+		return -1;
+	for (uint16_t i = 0; i < subtableCount; i++) {
+		uint_fast32_t subtable = lookupTable + getu16(font, lookupTable + 6 + 2 * i);
+		if (func(font, lookupType, lookupFlag, subtable, extra) < 0)
+			return -1;
+	}
+
+	return 0;
+}
+
+static int
+apply_feature(SFT_Font *font, uint_fast32_t featureTable, uint_fast32_t lookupList, FeatureFunc func, void *extra)
+{
+	printf("apply_feature()\n");
+	if (!is_safe_offset(font, featureTable, 4))
+		return -1;
+	uint16_t lookupIndexCount = getu16(font, featureTable + 2);
+	if (!is_safe_offset(font, featureTable, 4 + 2 * lookupIndexCount))
+		return -1;
+	for (uint16_t i = 0; i < lookupIndexCount; i++) {
+		uint16_t lookupListIndex = getu16(font, featureTable + 4 + 2 * i);
+
+		if (!is_safe_offset(font, lookupList, 2 + 2 * lookupListIndex + 2))
+			return -1;
+		uint_fast32_t lookupTable = lookupList + getu16(font, lookupList + 2 + 2 * lookupListIndex);
+
+		if (apply_lookup(font, lookupTable, func, extra) < 0)
+			return -1;
+	}
 	return 0;
 }
 
@@ -1078,7 +1174,7 @@ explore_script_table(SFT_Font *font, uint_fast32_t scriptTable)
 
 		uint16_t requiredFeatureIndex = getu16(font, table + 2);
 		uint16_t featureIndexCount = getu16(font, table + 4);
-		printf("0x%x\n", requiredFeatureIndex);
+		printf("0x%x count=%u\n", requiredFeatureIndex, featureIndexCount);
 
 		if (!is_safe_offset(font, table, 6 + 2 * featureIndexCount))
 			return -1;
@@ -1124,6 +1220,8 @@ explore_feature_table(SFT_Font *font, uint_fast32_t featureTable)
 	for (uint16_t i = 0; i < lookupIndexCount; i++) {
 		uint16_t lookupListIndex = getu16(font, featureTable + 4 + 2 * i);
 		printf("\t\t%u\n", lookupListIndex);
+
+
 	}
 	return 0;
 }
@@ -1199,9 +1297,19 @@ explore_gsub(SFT_Font *font)
 		return -1;
 	if (explore_feature_list(font, gsub + featureListOffset) < 0)
 		return -1;
-	if (explore_lookup_list(font, gsub + lookupListOffset) < 0)
-		return -1;
+	/*if (explore_lookup_list(font, gsub + lookupListOffset) < 0)
+		return -1;*/
 
+	return 0;
+}
+
+static int
+gsub_feature_func(SFT_Font *font, uint16_t type, uint16_t flag, uint_fast32_t subtable, void *extra)
+{
+	(void)font;
+	(void)subtable;
+	(void)extra;
+	printf("LOOKUP SUBTABLE: %u, 0x%x\n", type, flag);
 	return 0;
 }
 

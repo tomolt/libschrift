@@ -169,13 +169,6 @@ static int  find_table_in_list(SFT_Font *font, uint_fast32_t list, uint16_t head
 static int  select_lang_table(SFT_Font *font, const char script[4], const char lang[4], uint_fast32_t *langTable);
 static int  apply_lookup(SFT_Font *font, uint_fast32_t lookupTable, FeatureFunc func, void *extra);
 static int  apply_feature(SFT_Font *font, uint_fast32_t featureTable, uint_fast32_t lookupList, FeatureFunc func, void *extra);
-static int  explore_script_table(SFT_Font *font, uint_fast32_t scriptTable);
-static int  explore_script_list(SFT_Font *font, uint_fast32_t scriptList);
-static int  explore_feature_table(SFT_Font *font, uint_fast32_t featureTable);
-static int  explore_feature_list(SFT_Font *font, uint_fast32_t featureList);
-static int  explore_lookup_table(SFT_Font *font, uint_fast32_t lookupTable);
-static int  explore_lookup_list(SFT_Font *font, uint_fast32_t lookupList);
-static int  explore_gsub(SFT_Font *font);
 static int  coverage_table_find(SFT_Font *font, uint_fast32_t coverageTable, SFT_Glyph glyph, uint16_t *coverageIndex);
 static int  gsub_feature_func(SFT_Font *font, uint16_t type, uint16_t flag, uint_fast32_t subtable, void *extra);
 /* decoding outlines */
@@ -427,12 +420,6 @@ sft_writingsystem(SFT_Font *font, const char *script, const char *language, SFT_
 	if (strlen(language) != 4)
 		return -1;
 	return select_lang_table(font, script, language, &wsys->subTable);
-}
-
-int
-sft_explore_gsub(SFT_Font *font)
-{
-	return explore_gsub(font);
 }
 
 int
@@ -1147,156 +1134,6 @@ apply_feature(SFT_Font *font, uint_fast32_t featureTable, uint_fast32_t lookupLi
 		if (apply_lookup(font, lookupTable, func, extra) < 0)
 			return -1;
 	}
-	return 0;
-}
-
-static int
-explore_script_table(SFT_Font *font, uint_fast32_t scriptTable)
-{
-	if (!is_safe_offset(font, scriptTable, 4))
-		return -1;
-	uint16_t langSysCount = getu16(font, scriptTable + 2);
-	if (!is_safe_offset(font, scriptTable, 4 + 6 * langSysCount))
-		return -1;
-	for (uint16_t j = 0; j < langSysCount; j++) {
-		uint_fast32_t langSysRecord = scriptTable + 4 + 6 * j;
-		char tag[4];
-		memcpy(tag, font->memory + langSysRecord, 4);
-		uint16_t offset = getu16(font, langSysRecord + 4);
-		printf("\t\t%.4s %u ", tag, offset);
-
-		uint_fast32_t table = scriptTable + offset;
-		if (!is_safe_offset(font, table, 6))
-			return -1;
-
-		uint16_t requiredFeatureIndex = getu16(font, table + 2);
-		uint16_t featureIndexCount = getu16(font, table + 4);
-		printf("0x%x count=%u\n", requiredFeatureIndex, featureIndexCount);
-
-		if (!is_safe_offset(font, table, 6 + 2 * featureIndexCount))
-			return -1;
-		for (uint16_t k = 0; k < featureIndexCount; k++) {
-			uint16_t featureIndex = getu16(font, table + 6 + 2 * k);
-			printf("\t\t\t%u\n", featureIndex);
-		}
-	}
-	return 0;
-}
-
-static int
-explore_script_list(SFT_Font *font, uint_fast32_t scriptList)
-{
-	if (!is_safe_offset(font, scriptList, 2))
-		return -1;
-	uint16_t scriptCount = getu16(font, scriptList + 0);
-	if (!is_safe_offset(font, scriptList, 2 + 6 * scriptCount))
-		return -1;
-	printf("Scripts:\n");
-	for (uint16_t i = 0; i < scriptCount; i++) {
-		uint_fast32_t scriptRecord = scriptList + 2 + 6 * i;
-		char tag[4];
-		memcpy(tag, font->memory + scriptRecord, 4);
-		uint16_t offset = getu16(font, scriptRecord + 4);
-		printf("\t%.4s %u\n", tag, offset);
-		if (explore_script_table(font, scriptList + offset) < 0)
-			return -1;
-	}
-	return 0;
-}
-
-static int
-explore_feature_table(SFT_Font *font, uint_fast32_t featureTable)
-{
-	if (!is_safe_offset(font, featureTable, 4))
-		return -1;
-	uint16_t featureParamsOffset = getu16(font, featureTable + 0);
-	printf("\t\t(fpo: %u)\n", featureParamsOffset);
-	uint16_t lookupIndexCount = getu16(font, featureTable + 2);
-	if (!is_safe_offset(font, featureTable, 4 + 2 * lookupIndexCount))
-		return -1;
-	for (uint16_t i = 0; i < lookupIndexCount; i++) {
-		uint16_t lookupListIndex = getu16(font, featureTable + 4 + 2 * i);
-		printf("\t\t%u\n", lookupListIndex);
-
-
-	}
-	return 0;
-}
-
-static int
-explore_feature_list(SFT_Font *font, uint_fast32_t featureList)
-{
-	if (!is_safe_offset(font, featureList, 2))
-		return -1;
-	uint16_t featureCount = getu16(font, featureList + 0);
-	if (!is_safe_offset(font, featureList, 2 + 6 * featureCount))
-		return -1;
-	printf("Features:\n");
-	for (uint16_t i = 0; i < featureCount; i++) {
-		uint_fast32_t featureRecord = featureList + 2 + 6 * i;
-		char tag[4];
-		memcpy(tag, font->memory + featureRecord, 4);
-		uint16_t offset = getu16(font, featureRecord + 4);
-		printf("\t%.4s %u\n", tag, offset);
-		if (explore_feature_table(font, featureList + offset) < 0)
-			return -1;
-	}
-	return 0;
-}
-
-static int
-explore_lookup_table(SFT_Font *font, uint_fast32_t lookupTable)
-{
-	if (!is_safe_offset(font, lookupTable, 6))
-		return -1;
-	uint16_t lookupType = getu16(font, lookupTable + 0);
-	uint16_t lookupFlag = getu16(font, lookupTable + 2);
-	//uint16_t subTableCount = getu16(font, lookupTable + 4);
-	printf("\t\t(type: %u)\n", lookupType);
-	printf("\t\t(flag: 0x%x)\n", lookupFlag);
-	return 0;
-}
-
-static int
-explore_lookup_list(SFT_Font *font, uint_fast32_t lookupList)
-{
-	if (!is_safe_offset(font, lookupList, 2))
-		return -1;
-	uint16_t lookupCount = getu16(font, lookupList + 0);
-	if (!is_safe_offset(font, lookupList, 2 + 2 * lookupCount))
-		return -1;
-	printf("Lookups:\n");
-	for (uint16_t i = 0; i < lookupCount; i++) {
-		printf("\t#%u\n", i);
-		uint16_t lookupOffset = getu16(font, lookupList + 2 + 2 * i);
-		if (explore_lookup_table(font, lookupList + lookupOffset) < 0)
-			return -1;
-	}
-	return 0;
-}
-
-static int
-explore_gsub(SFT_Font *font)
-{
-	uint_fast32_t gsub;
-
-	if (gettable(font, "GSUB", &gsub) < 0)
-		return -1;
-	if (!is_safe_offset(font, gsub, 10))
-		return -1;
-	uint16_t scriptListOffset = getu16(font, gsub + 4);
-	uint16_t featureListOffset = getu16(font, gsub + 6);
-	uint16_t lookupListOffset = getu16(font, gsub + 8);
-
-	printf("GSUB: %u %u %u\n", scriptListOffset, featureListOffset, lookupListOffset);
-
-	if (explore_script_list(font, gsub + scriptListOffset) < 0)
-		return -1;
-	if (explore_feature_list(font, gsub + featureListOffset) < 0)
-		return -1;
-	/*if (explore_lookup_list(font, gsub + lookupListOffset) < 0)
-		return -1;*/
-
 	return 0;
 }
 

@@ -98,8 +98,6 @@ int sft_writingsystem(SFT_Font *font, const char *script, const char *language, 
 
 int sft_substitute(const SFT *sft, const char *feature, SFT_Glyph *glyph);
 
-int sft_explore_gsub(SFT_Font *font);
-
 #ifdef __cplusplus
 }
 #endif

@@ -1073,26 +1073,52 @@ find_table_in_list(SFT_Font *font, uint_fast32_t list, uint16_t headerSize, cons
 		return -1;
 	uint8_t *match;
 	if (!(match = bsearch(tag, font->memory + list + headerSize, count, 6, cmpu32)))
-		return -1;
+		return 0;
 	*table = list + getu16(font, (uint_fast32_t)(match - font->memory) + 4);
-	return 0;
+	return 1;
 }
 
 static int
 select_lang_table(SFT_Font *font, const char script[4], const char lang[4], uint_fast32_t *langTable)
 {
+	*langTable = 0;
+
 	uint_fast32_t gsub;
 	if (gettable(font, "GSUB", &gsub) < 0)
-		return -1;
+		return 0;
 	if (!is_safe_offset(font, gsub, 10))
 		return -1;
 	uint_fast32_t scriptList = gsub + getu16(font, gsub + 4);
 
 	uint_fast32_t scriptTable;
-	if (find_table_in_list(font, scriptList, 2, script, &scriptTable) < 0)
+	int found;
+	found = find_table_in_list(font, scriptList, 2, script, &scriptTable);
+	if (found < 0) {
 		return -1;
-	if (find_table_in_list(font, scriptTable, 4, lang, langTable) < 0)
+	} else if (!found) {
+		found = find_table_in_list(font, scriptList, 2, "DFLT", &scriptTable);
+		if (found < 0) {
+			return -1;
+		} else if (!found) {
+			return 0;
+		}
+	}
+
+	found = find_table_in_list(font, scriptTable, 4, lang, langTable);
+	if (found < 0) {
 		return -1;
+	} else (!found) {
+		/* Since we already looked into the ScriptTable by this point,
+		 * we don't have to check it's offset again */
+		uint16_t langOffset = getu16(font, scriptTable + 0);
+		if (!langOffset) {
+			return 0;
+		} else {
+			*langTable = scriptTable + langOffset;
+			return 0;
+		}
+	}
+
 	return 0;
 }
 

@@ -1,9 +1,6 @@
 *.o
 libschrift.a
-/demo
-/stress
 schrift-*.tar.gz
-unicode/mkjoinlist
 libschrift.pc
 
 .vs/

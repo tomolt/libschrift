@@ -8,10 +8,10 @@ include ../config.mk
 
 all: stress
 
-stress: stress.o libschrift.a
-	$(LD) $(EXTRAS_LDFLAGS) $@.o -o $@ -L../.. -lschrift -lm
+stress: stress.o ../libschrift.a
+	$(LD) $(EXTRAS_LDFLAGS) $@.o -o $@ -L.. -lschrift -lm
 stress.o: stress.c ../schrift.h arg.h
-	$(CC) -c $(EXTRAS_CFLAGS) $(@:.o=.c) -o $@ $(EXTRAS_CPPFLAGS)
+	$(CC) -c $(EXTRAS_CFLAGS) $(@:.o=.c) -o $@ $(EXTRAS_CPPFLAGS) -I..
 
 clean:
 	rm -f stress.o stress

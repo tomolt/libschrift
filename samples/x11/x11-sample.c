@@ -11,7 +11,7 @@
 #include <X11/extensions/Xrender.h>
 
 #include <stdint.h>
-#include "../util/utf8_to_utf32.h"
+#include "../include/utf8_to_utf32.h"
 #include <schrift.h>
 
 static int add_glyph(Display *dpy, GlyphSet glyphset, SFT *sft, unsigned long cp)

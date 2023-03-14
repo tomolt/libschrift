@@ -7,7 +7,7 @@
 
 #include <schrift.h>
 
-#include "util/arg.h"
+#include "arg.h"
 
 char *argv0;
 

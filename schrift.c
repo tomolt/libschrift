@@ -1107,7 +1107,7 @@ select_lang_table(SFT_Font *font, const char script[4], const char lang[4], uint
 	found = find_table_in_list(font, scriptTable, 4, lang, langTable);
 	if (found < 0) {
 		return -1;
-	} else (!found) {
+	} else if (!found) {
 		/* Since we already looked into the ScriptTable by this point,
 		 * we don't have to check it's offset again */
 		uint16_t langOffset = getu16(font, scriptTable + 0);

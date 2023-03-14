@@ -15,10 +15,10 @@ CPPFLAGS =
 CFLAGS   = -Os -std=c99 -pedantic -Wall -Wextra -Wconversion
 LDFLAGS  = -Os
 
-# compiler flags for the demo & stress test applications
+# compiler flags for the samples & tools
 EXTRAS_CPPFLAGS = -I./
-EXTRAS_CFLAGS   = -g -Os -std=c99 -pedantic -Wall -Wextra
-EXTRAS_LDFLAGS  = -g -Os
+EXTRAS_CFLAGS   = -g -std=c99 -pedantic -Wall -Wextra
+EXTRAS_LDFLAGS  = -g
 
 # X11 API installation paths (needed by the demo)
 X11INC = /usr/include/X11

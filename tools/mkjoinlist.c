@@ -19,7 +19,7 @@ main()
 	size_t capac = 256;
 	struct range *list = malloc(capac * sizeof *list);
 
-	FILE *file = fopen("DerivedJoiningType.txt", "r");
+	FILE *file = fopen("../resources/unicode/DerivedJoiningType.txt", "r");
 	if (!file) return 1;
 
 	char line[1000];

@@ -8,7 +8,7 @@ VERSION=0.10.2
 
 .PHONY: all clean install uninstall dist
 
-all: libschrift.a libschrift.pc demo stress
+all: libschrift.a libschrift.pc
 
 libschrift.a: schrift.o
 	$(AR) rc $@ schrift.o
@@ -18,22 +18,10 @@ schrift.o: schrift.h
 libschrift.pc: libschrift.pc.in
 	@sed 's,@prefix@,$(PREFIX),;s,@version@,$(VERSION),' libschrift.pc.in > $@
 
-demo: demo.o libschrift.a
-	$(LD) $(EXTRAS_LDFLAGS) $@.o -o $@ -L$(X11LIB) -L. -lX11 -lXrender -lschrift -lm
-demo.o: demo.c schrift.h util/utf8_to_utf32.h
-	$(CC) -c $(EXTRAS_CFLAGS) $(@:.o=.c) -o $@ $(EXTRAS_CPPFLAGS) -I$(X11INC)
-
-stress: stress.o libschrift.a
-	$(LD) $(EXTRAS_LDFLAGS) $@.o -o $@ -L. -lschrift -lm
-stress.o: stress.c schrift.h util/arg.h
-	$(CC) -c $(EXTRAS_CFLAGS) $(@:.o=.c) -o $@ $(EXTRAS_CPPFLAGS)
-
 clean:
-	rm -f *.o
-	rm -f util/*.o
+	rm -f schrift.o
 	rm -f libschrift.a
-	rm -f demo
-	rm -f stress
+	rm -f libschrift.pc
 
 install: libschrift.a libschrift.pc schrift.h schrift.3
 	# libschrift.a
@@ -65,7 +53,7 @@ dist:
 	cp -R README.md LICENSE CHANGELOG.md TODO.md schrift.3 \
 		Makefile config.mk libschrift.pc.in \
 		schrift.c schrift.h demo.c stress.c \
-		resources/ util/ \
+		resources/ samples/ tools/ \
 		"schrift-$(VERSION)"
 	tar -cf - "schrift-$(VERSION)" | gzip -c > "schrift-$(VERSION).tar.gz"
 	rm -rf "schrift-$(VERSION)"

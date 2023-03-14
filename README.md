@@ -60,7 +60,7 @@ However, it is still missing some important features, like right-to-left text su
 Visual Quality
 --------------
 A screenshot of the demo program:
-![demo screenshot](resources/demo-screenshot.png)
+![demo screenshot](resources/images/demo-screenshot.png)
 
 Contributing
 ------------

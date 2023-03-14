@@ -1,5 +1,5 @@
 /*
- * A simple command line application that shows how to
+ * A simple application that shows how to
  * use libschrift with X11 via XRender.
  * See LICENSE file for copyright and license details.
  * Contributed by Andor Badi.
@@ -11,8 +11,8 @@
 #include <X11/extensions/Xrender.h>
 
 #include <stdint.h>
-#include "util/utf8_to_utf32.h"
-#include "schrift.h"
+#include "../util/utf8_to_utf32.h"
+#include <schrift.h>
 
 static int add_glyph(Display *dpy, GlyphSet glyphset, SFT *sft, unsigned long cp)
 {
@@ -21,8 +21,6 @@ static int add_glyph(Display *dpy, GlyphSet glyphset, SFT *sft, unsigned long cp
 	SFT_Glyph gid;  //  unsigned long gid;
 	if (sft_lookup(sft, cp, &gid) < 0)
 		ABORT(cp, "missing");
-	if (sft_substitute(sft, "medi", &gid) < 0)
-		ABORT(cp, "Can't apply GSUB features");
 
 	SFT_GMetrics mtx;
 	if (sft_gmetrics(sft, gid, &mtx) < 0)
@@ -86,19 +84,16 @@ int main()
 		.yScale = 16*s,
 		.flags  = SFT_DOWNWARD_Y,
 	};
-	sft.font = sft_loadfile("resources/FiraGO-Regular_extended_with_NotoSansEgyptianHieroglyphs-Regular.ttf");
+	sft.font = sft_loadfile("../../resources/fonts/FiraGO-Regular_extended_with_NotoSansEgyptianHieroglyphs-Regular.ttf");
 	if (sft.font == NULL)
 		END("TTF load failed");
-
-	if (sft_writingsystem(sft.font, "arab", "URD ", &sft.writingSystem) < 0)
-		END("Can't select writing system!");
 
 	XEvent event;
 	while (!XNextEvent(dpy, &event)) {
 		if (event.type == Expose) {
 			XRenderFillRectangle(dpy, PictOpOver, pic, &bg, 0, 0, event.xexpose.width, event.xexpose.height);
 
-			FILE *file = fopen("resources/glass.utf8", "r");
+			FILE *file = fopen("../../resources/text/glass.txt", "r");
 			if (file == NULL)
 				END("Cannot open input text");
 

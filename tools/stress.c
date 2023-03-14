@@ -38,7 +38,7 @@ main(int argc, char *argv[])
 	SFT_Image    image;
 	int i;
 
-	filename = "resources/Ubuntu-Regular.ttf";
+	filename = "../resources/fonts/Ubuntu-Regular.ttf";
 	size = 20.0;
 
 	ARGBEGIN {

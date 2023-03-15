@@ -18,17 +18,23 @@
 static const char *vertex_shader_source[] = {
 	"#version 330 core\n",
 	//"uniform mat4 transform;",
-	"in vec2 vert_pos;",
+	"layout(location=0) in vec2 vert_pos;",
+	"layout(location=1) in vec2 vert_texcoords;",
+	"out vec2 frag_texcoords;",
 	"void main() {",
 	"	gl_Position = vec4(vert_pos, 0.0f, 1.0f);",
+	"	frag_texcoords = vert_texcoords;",
 	"}"
 };
 
 static const char *fragment_shader_source[] = {
 	"#version 330 core\n",
+	"uniform sampler2D atlas;",
+	"in vec2 frag_texcoords;",
 	"out vec4 frag_color;",
 	"void main() {",
-	"	frag_color = vec4(1.0f, 0.0f, 0.0f, 1.0f);",
+	"	float value = 1.0f - texture2D(atlas, frag_texcoords).r;",
+	"	frag_color = vec4(value, value, value, 1.0f);",
 	"}"
 };
 
@@ -98,7 +104,9 @@ void init_gl(void)
 	glGenVertexArrays(1, &vao);
 	glBindVertexArray(vao);
 	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, NULL);
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)0);
+	glEnableVertexAttribArray(1);
+	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void *)(2 * sizeof(float)));
 	
 	// Create font atlas texture
 	void *zeros = calloc(ATLAS_SIZE * ATLAS_SIZE, 1);
@@ -166,22 +174,27 @@ void draw_text(const char *text)
 	float penX = 0.0f;
 
 	for (i = 0; text[i]; i++) {
+		const Cutout *cutout = &cutouts[(int)text[i]];
 
-		SFT_Glyph glyph;
-		if (sft_lookup(&sft, text[i], &glyph) < 0)
-			die("Can't look up glyph id");
-		SFT_GMetrics gmtx;
-		if (sft_gmetrics(&sft, glyph, &gmtx) < 0)
-			die("Can't look up glyph metrics");
+		float x1 = penX + cutout->x / 320.f;
+		float y1 = cutout->y / 240.f;
+		float x2 = x1 + cutout->width / 320.f;
+		float y2 = y1 + cutout->height / 240.f;
 
-		float x1 = penX + gmtx.leftSideBearing / 320.f;
-		float y1 = gmtx.yOffset / 240.f;
-		float x2 = x1 + gmtx.minWidth / 320.f;
-		float y2 = y1 + gmtx.minHeight / 240.f;
+		float s1 = cutout->s / (float)ATLAS_SIZE;
+		float t1 = cutout->t / (float)ATLAS_SIZE;
+		float s2 = s1 + cutout->width / (float)ATLAS_SIZE;
+		float t2 = t1 + cutout->height / (float)ATLAS_SIZE;
 
-		penX += gmtx.advanceWidth / 320.f;
+		penX += cutout->advanceWidth / 320.f;
 
-		float glyph_pos[] = {x1, y1, x1, y1, x2, y1, x1, y2, x2, y2, x2, y2};
+		float glyph_pos[] = {
+			x1, y1, s1, t1,
+			x1, y1, s1, t1,
+			x2, y1, s2, t1,
+			x1, y2, s1, t2,
+			x2, y2, s2, t2,
+			x2, y2, s2, t2 };
 		memcpy(pointer, glyph_pos, sizeof glyph_pos);
 		pointer += LENGTH(glyph_pos);
 	}
@@ -189,6 +202,7 @@ void draw_text(const char *text)
 	glUnmapBuffer(GL_ARRAY_BUFFER);
 
 	glBindVertexArray(vao);
+	glBindTexture(GL_TEXTURE_2D, atlas);
 	glDrawArrays(GL_TRIANGLE_STRIP, 1, 6 * i - 2);
 }
 

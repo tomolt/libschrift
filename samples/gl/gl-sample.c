@@ -135,11 +135,15 @@ void fill_atlas(void)
 			die("Can't look up glyph metrics");
 		int width = (gmtx.minWidth + 3) & ~3;
 		int height = gmtx.minHeight;
+		if ((size_t)width * (size_t)height > sizeof(pixels))
+			die("Glyph image too big for buffer");
 
 		if (s + width + 2 > ATLAS_SIZE - 1) {
 			s = 1;
 			t = nextRow;
 		}
+		if (t + height > ATLAS_SIZE - 1)
+			die("Atlas texture is too small");
 
 		SFT_Image image;
 		image.pixels = pixels;
@@ -174,7 +178,10 @@ void draw_text(const char *text)
 	float penX = 0.0f;
 
 	for (i = 0; text[i]; i++) {
-		const Cutout *cutout = &cutouts[(int)text[i]];
+		unsigned index = (unsigned char)text[i];
+		if (!(index < 128))
+			die("Character is out of supported scope");
+		const Cutout *cutout = &cutouts[index];
 
 		float x1 = roundf(penX + cutout->x) / 320.f;
 		float y1 = roundf(cutout->y) / 240.f;
@@ -183,7 +190,7 @@ void draw_text(const char *text)
 
 		float s1 = cutout->s / (float)ATLAS_SIZE;
 		float t1 = cutout->t / (float)ATLAS_SIZE;
-		float s2 = s1 + cutout->width / (float)ATLAS_SIZE;
+		float s2 = s1 + cutout->width /  (float)ATLAS_SIZE;
 		float t2 = t1 + cutout->height / (float)ATLAS_SIZE;
 
 		penX += cutout->advanceWidth;
@@ -195,6 +202,8 @@ void draw_text(const char *text)
 			x1, y2, s1, t2,
 			x2, y2, s2, t2,
 			x2, y2, s2, t2 };
+		if (pointer + LENGTH(glyph_pos) > coords + VBO_SIZE)
+			die("VBO overrun");
 		memcpy(pointer, glyph_pos, sizeof glyph_pos);
 		pointer += LENGTH(glyph_pos);
 	}

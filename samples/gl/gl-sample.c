@@ -39,11 +39,11 @@ static const char *fragment_shader_source[] = {
 };
 
 typedef struct {
-	int advanceWidth;
+	float advanceWidth;
 	int width;
 	int height;
-	int x;
-	int y;
+	float x;
+	float y;
 	int s;
 	int t;
 } Cutout;
@@ -148,10 +148,10 @@ void fill_atlas(void)
 		if (sft_render(&sft, glyph, image) < 0)
 			die("Can't render glyph");
 
-		cutouts[c].advanceWidth = round(gmtx.advanceWidth);
+		cutouts[c].advanceWidth = gmtx.advanceWidth;
 		cutouts[c].width = width;
 		cutouts[c].height = height;
-		cutouts[c].x = round(gmtx.leftSideBearing);
+		cutouts[c].x = gmtx.leftSideBearing;
 		cutouts[c].y = gmtx.yOffset;
 		cutouts[c].s = s;
 		cutouts[c].t = t;
@@ -176,8 +176,8 @@ void draw_text(const char *text)
 	for (i = 0; text[i]; i++) {
 		const Cutout *cutout = &cutouts[(int)text[i]];
 
-		float x1 = penX + cutout->x / 320.f;
-		float y1 = cutout->y / 240.f;
+		float x1 = roundf(penX + cutout->x) / 320.f;
+		float y1 = roundf(cutout->y) / 240.f;
 		float x2 = x1 + cutout->width / 320.f;
 		float y2 = y1 + cutout->height / 240.f;
 
@@ -186,7 +186,7 @@ void draw_text(const char *text)
 		float s2 = s1 + cutout->width / (float)ATLAS_SIZE;
 		float t2 = t1 + cutout->height / (float)ATLAS_SIZE;
 
-		penX += cutout->advanceWidth / 320.f;
+		penX += cutout->advanceWidth;
 
 		float glyph_pos[] = {
 			x1, y1, s1, t1,

@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #include <epoxy/gl.h>
 #include <GLFW/glfw3.h>
@@ -9,6 +10,7 @@
 #include "../include/utf8_to_utf32.h"
 
 #define LENGTH(array) (sizeof(array)/sizeof*(array))
+#define MAX(a,b) ((a)>(b)?(a):(b))
 
 #define ATLAS_SIZE 512
 #define VBO_SIZE 4096
@@ -30,12 +32,23 @@ static const char *fragment_shader_source[] = {
 	"}"
 };
 
+typedef struct {
+	int advanceWidth;
+	int width;
+	int height;
+	int x;
+	int y;
+	int s;
+	int t;
+} Cutout;
+
 static GLFWwindow *window;
 static GLuint shader;
 static GLuint vao;
 static GLuint vbo;
 static GLuint atlas;
 static SFT sft;
+static Cutout cutouts[128];
 
 void die(const char *msg)
 {
@@ -88,13 +101,58 @@ void init_gl(void)
 	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, NULL);
 	
 	// Create font atlas texture
+	void *zeros = calloc(ATLAS_SIZE * ATLAS_SIZE, 1);
 	glGenTextures(1, &atlas);
 	glBindTexture(GL_TEXTURE_2D, atlas);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, ATLAS_SIZE, ATLAS_SIZE, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, ATLAS_SIZE, ATLAS_SIZE, 0, GL_RED, GL_UNSIGNED_BYTE, zeros);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	free(zeros);
+}
+
+void fill_atlas(void)
+{
+	unsigned char pixels[128*128];
+	glBindTexture(GL_TEXTURE_2D, atlas);
+	int s = 1, t = 1, nextRow = t;
+	for (int c = 0; c < 128; c++) {
+		SFT_Glyph glyph;
+		if (sft_lookup(&sft, c, &glyph) < 0)
+			die("Can't look up glyph id");
+
+		SFT_GMetrics gmtx;
+		if (sft_gmetrics(&sft, glyph, &gmtx) < 0)
+			die("Can't look up glyph metrics");
+		int width = (gmtx.minWidth + 3) & ~3;
+		int height = gmtx.minHeight;
+
+		if (s + width + 2 > ATLAS_SIZE - 1) {
+			s = 1;
+			t = nextRow;
+		}
+
+		SFT_Image image;
+		image.pixels = pixels;
+		image.width  = width;
+		image.height = height;
+		if (sft_render(&sft, glyph, image) < 0)
+			die("Can't render glyph");
+
+		cutouts[c].advanceWidth = round(gmtx.advanceWidth);
+		cutouts[c].width = width;
+		cutouts[c].height = height;
+		cutouts[c].x = round(gmtx.leftSideBearing);
+		cutouts[c].y = gmtx.yOffset;
+		cutouts[c].s = s;
+		cutouts[c].t = t;
+
+		glTexSubImage2D(GL_TEXTURE_2D, 0, s, t, width, height, GL_RED, GL_UNSIGNED_BYTE, pixels);
+
+		s += width + 2;
+		nextRow = MAX(nextRow, t + height + 2);
+	}
 }
 
 void draw_text(const char *text)
@@ -147,6 +205,8 @@ int main()
 	SFT_LMetrics lmtx;
 	if (sft_lmetrics(&sft, &lmtx) < 0)
 		die("Can't query line metrics");
+
+	fill_atlas();
 
 	while (!glfwWindowShouldClose(window)) {
 		glClear(GL_COLOR_BUFFER_BIT);

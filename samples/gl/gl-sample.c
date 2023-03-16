@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <string.h>
 #include <math.h>
 
@@ -56,17 +57,26 @@ static GLuint atlas;
 static SFT sft;
 static Cutout cutouts[128];
 
-void die(const char *msg)
+void die(const char *format, ...)
 {
-	fprintf(stderr, "%s\n", msg);
+	va_list va;
+	va_start(va, format);
+	vfprintf(stderr, format, va);
+	fputc('\n', stderr);
+	va_end(va);
 	exit(1);
 }
 
 void init_gl(void)
 {
+	GLchar error[1024];
+
 	// Open a window & GL context
 	if (!glfwInit())
 		die("Can't init GLFW");
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 	window = glfwCreateWindow(640, 480, "libschrift GL demo", NULL, NULL);
 	if (!window)
 		die("Can't open window");
@@ -83,15 +93,24 @@ void init_gl(void)
 	glCompileShader(vert);
 	glCompileShader(frag);
 	glGetShaderiv(vert, GL_COMPILE_STATUS, &status);
-	if (status != GL_TRUE) die("Could not compile vertex shader");
+	if (status != GL_TRUE) {
+		glGetShaderInfoLog(vert, sizeof error, NULL, error);
+		die("Could not compile vertex shader: %s", error);
+	}
 	glGetShaderiv(frag, GL_COMPILE_STATUS, &status);
-	if (status != GL_TRUE) die("Could not compile fragment shader");
+	if (status != GL_TRUE) {
+		glGetShaderInfoLog(frag, sizeof error, NULL, error);
+		die("Could not compile fragment shader: %s", error);
+	}
 	shader = glCreateProgram();
 	glAttachShader(shader, vert);
 	glAttachShader(shader, frag);
 	glLinkProgram(shader);
 	glGetProgramiv(shader, GL_LINK_STATUS, &status);
-	if (status != GL_TRUE) die("Could not link shader program");
+	if (status != GL_TRUE) {
+		glGetProgramInfoLog(shader, sizeof error, NULL, error);
+		die("Could not link shader program: %s", error);
+	}
 	glDetachShader(shader, vert);
 	glDetachShader(shader, frag);
 	glDeleteShader(vert);

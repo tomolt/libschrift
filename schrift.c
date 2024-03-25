@@ -16,7 +16,6 @@
 
 #include <assert.h>
 #include <errno.h>
-#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -65,6 +64,7 @@
 #define GOT_A_SCALE_MATRIX         0x080
 
 /* macros */
+#define ABS(x)    ((x) >= 0 ? (x) : -(x))
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define SIGN(x)   (((x) > 0) - ((x) < 0))
 /* Allocate values on the stack if they are small enough, else spill to heap. */
@@ -588,13 +588,13 @@ clip_points(unsigned int numPts, Point *points, int width, int height)
 			points[i].x = 0.0;
 		}
 		if (pt.x >= width) {
-			points[i].x = nextafter(width, 0.0);
+			points[i].x = width;
 		}
 		if (pt.y < 0.0) {
 			points[i].y = 0.0;
 		}
 		if (pt.y >= height) {
-			points[i].y = nextafter(height, 0.0);
+			points[i].y = height;
 		}
 	}
 }
@@ -996,10 +996,10 @@ glyph_bbox(const SFT *sft, uint_fast32_t outline, int box[4])
 	/* Transform the bounding box into SFT coordinate space. */
 	xScale = sft->xScale / sft->font->unitsPerEm;
 	yScale = sft->yScale / sft->font->unitsPerEm;
-	box[0] = (int) floor(box[0] * xScale + sft->xOffset);
-	box[1] = (int) floor(box[1] * yScale + sft->yOffset);
-	box[2] = (int) ceil (box[2] * xScale + sft->xOffset);
-	box[3] = (int) ceil (box[3] * yScale + sft->yOffset);
+	box[0] = (int) fast_floor(box[0] * xScale + sft->xOffset);
+	box[1] = (int) fast_floor(box[1] * yScale + sft->yOffset);
+	box[2] = (int) fast_ceil (box[2] * xScale + sft->xOffset);
+	box[3] = (int) fast_ceil (box[3] * yScale + sft->yOffset);
 	return 0;
 }
 
@@ -1358,7 +1358,7 @@ is_flat(Outline *outl, Curve curve)
 	Point c = outl->points[curve.end];
 	Point g = { b.x-a.x, b.y-a.y };
 	Point h = { c.x-a.x, c.y-a.y };
-	double area2 = fabs(g.x*h.y-h.x*g.y);
+	double area2 = ABS(g.x*h.y-h.x*g.y);
 	return area2 <= maxArea2;
 }
 
@@ -1441,8 +1441,8 @@ draw_line(Raster buf, Point origin, Point goal)
 		return;
 	}
 	
-	crossingIncr.x = dir.x ? fabs(1.0 / delta.x) : 1.0;
-	crossingIncr.y = fabs(1.0 / delta.y);
+	crossingIncr.x = dir.x ? ABS(1.0 / delta.x) : 1.0;
+	crossingIncr.y = ABS(1.0 / delta.y);
 
 	if (!dir.x) {
 		pixel.x = fast_floor(origin.x);
@@ -1524,7 +1524,7 @@ post_process(Raster buf, uint8_t *image)
 	num = (unsigned int) buf.width * (unsigned int) buf.height;
 	for (i = 0; i < num; ++i) {
 		cell     = buf.cells[i];
-		value    = fabs(accum + cell.area);
+		value    = ABS(accum + cell.area);
 		value    = MIN(value, 1.0);
 		value    = value * 255.0 + 0.5;
 		image[i] = (uint8_t) value;

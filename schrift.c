@@ -328,6 +328,8 @@ sft_kerning(const SFT *sft, SFT_Glyph leftGlyph, SFT_Glyph rightGlyph,
 				return -1;
 			numPairs = getu16(sft->font, offset);
 			offset += 8;
+			if (!is_safe_offset(sft->font, offset, (uint_fast32_t) numPairs * 6))
+				return -1;
 			/* Look up character code pair via binary search. */
 			key[0] = (leftGlyph  >> 8) & 0xFF;
 			key[1] =  leftGlyph  & 0xFF;
@@ -865,6 +867,10 @@ cmap_fmt12_13(SFT_Font *font, uint_fast32_t table, SFT_UChar charCode, SFT_Glyph
 		return -1;
 
 	numEntries = getu32(font, table + 12);
+
+	/* Ensure the declared number of groups fits within the subtable. */
+	if (numEntries > (len - 16) / 12)
+		return -1;
 
 	for (i = 0; i < numEntries; ++i) {
 		uint32_t firstCode, lastCode, glyphOffset;

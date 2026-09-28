@@ -6,5 +6,4 @@ Name: libschrift
 Description: A lightweight TrueType font rendering library
 Version: @version@
 Libs: -L${libdir} -lschrift
-Libs.private: -lm
 Cflags: -I${includedir}

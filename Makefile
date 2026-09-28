@@ -19,12 +19,12 @@ libschrift.pc: libschrift.pc.in
 	@sed 's,@prefix@,$(PREFIX),;s,@version@,$(VERSION),' libschrift.pc.in > $@
 
 demo: demo.o libschrift.a
-	$(LD) $(EXTRAS_LDFLAGS) $@.o -o $@ -L$(X11LIB) -L. -lX11 -lXrender -lschrift -lm
+	$(LD) $(EXTRAS_LDFLAGS) $@.o -o $@ -L$(X11LIB) -L. -lX11 -lXrender -lschrift
 demo.o: demo.c schrift.h util/utf8_to_utf32.h
 	$(CC) -c $(EXTRAS_CFLAGS) $(@:.o=.c) -o $@ $(EXTRAS_CPPFLAGS) -I$(X11INC)
 
 stress: stress.o libschrift.a
-	$(LD) $(EXTRAS_LDFLAGS) $@.o -o $@ -L. -lschrift -lm
+	$(LD) $(EXTRAS_LDFLAGS) $@.o -o $@ -L. -lschrift
 stress.o: stress.c schrift.h util/arg.h
 	$(CC) -c $(EXTRAS_CFLAGS) $(@:.o=.c) -o $@ $(EXTRAS_CPPFLAGS)
 

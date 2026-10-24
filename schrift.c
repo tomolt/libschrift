@@ -16,6 +16,7 @@
 
 #include <assert.h>
 #include <errno.h>
+#include <limits.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -542,6 +543,8 @@ init_font(SFT_Font *font)
 	if (!is_safe_offset(font, head, 54))
 		return -1;
 	font->unitsPerEm = getu16(font, head + 18);
+	if (font->unitsPerEm == 0)
+		return -1;
 	font->locaFormat = geti16(font, head + 50);
 	
 	if (gettable(font, "hhea", &hhea) < 0)
@@ -986,10 +989,23 @@ hor_metrics(SFT_Font *font, SFT_Glyph glyph, int *advanceWidth, int *leftSideBea
 	}
 }
 
+/* Converts a double to int, clamping values outside the int range instead of
+ * casting them, which would be undefined behaviour. */
+static int
+clamp_to_int(double v)
+{
+	if (v <= (double) INT_MIN)
+		return INT_MIN;
+	if (v >= (double) INT_MAX)
+		return INT_MAX;
+	return (int) v;
+}
+
 static int
 glyph_bbox(const SFT *sft, uint_fast32_t outline, int box[4])
 {
 	double xScale, yScale;
+	double x0, y0, x1, y1;
 	/* Read the bounding box from the font file verbatim. */
 	if (!is_safe_offset(sft->font, outline, 10))
 		return -1;
@@ -1002,10 +1018,16 @@ glyph_bbox(const SFT *sft, uint_fast32_t outline, int box[4])
 	/* Transform the bounding box into SFT coordinate space. */
 	xScale = sft->xScale / sft->font->unitsPerEm;
 	yScale = sft->yScale / sft->font->unitsPerEm;
-	box[0] = (int) floor(box[0] * xScale + sft->xOffset);
-	box[1] = (int) floor(box[1] * yScale + sft->yOffset);
-	box[2] = (int) ceil (box[2] * xScale + sft->xOffset);
-	box[3] = (int) ceil (box[3] * yScale + sft->yOffset);
+	x0 = floor(box[0] * xScale + sft->xOffset);
+	y0 = floor(box[1] * yScale + sft->yOffset);
+	x1 = ceil (box[2] * xScale + sft->xOffset);
+	y1 = ceil (box[3] * yScale + sft->yOffset);
+	if (!isfinite(x0) || !isfinite(y0) || !isfinite(x1) || !isfinite(y1))
+		return -1;
+	box[0] = clamp_to_int(x0);
+	box[1] = clamp_to_int(y0);
+	box[2] = clamp_to_int(x1);
+	box[3] = clamp_to_int(y1);
 	return 0;
 }
 

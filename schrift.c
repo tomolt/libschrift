@@ -285,7 +285,8 @@ sft_gmetrics(const SFT *sft, SFT_Glyph glyph, SFT_GMetrics *metrics)
 		return -1;
 	metrics->minWidth  = bbox[2] - bbox[0] + 1;
 	metrics->minHeight = bbox[3] - bbox[1] + 1;
-	metrics->yOffset   = sft->flags & SFT_DOWNWARD_Y ? -bbox[3] : bbox[1];
+	/* Negate in unsigned arithmetic: -INT_MIN is not representable in int. */
+	metrics->yOffset   = sft->flags & SFT_DOWNWARD_Y ? (int) -(unsigned) bbox[3] : bbox[1];
 
 	return 0;
 }

@@ -23,7 +23,7 @@ The following bullet points are listed in no particular order.
   For the longest time, I thought this could be done by a text shaping library sitting on top of schrift.
   Now I'm starting to see that it would be much more beneficial to implement this directly within libschrift.
 - Consider internally switching to Q16.16 (or Q12.20) fixnums for most rational number representations.
-  This is practically neccessary to get good performance on CPUs without FPU, but on any system that has one
+  This is practically necessary to get good performance on CPUs without FPU, but on any system that has one
   it will probably incur a big speed hit ...
 - right-to-left text support.
 
